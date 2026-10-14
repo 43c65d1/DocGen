@@ -185,6 +185,57 @@ heading_numbering = false   # 关闭：标题不再自动编号
 >
 > 关闭编号**不影响** `outlineLvl`：目录域与导航窗格照常工作。
 
+### 标题缩进（可配）
+
+自动编号**自带缩进**（Word 多级列表默认行为）：编号定义与 `HeadingN` 样式里都写了
+`w:ind left=720 hanging=360`，所以一级标题并不贴左。要改由 `[document] heading_indent` 控制：
+
+```toml
+[document]
+# 不写        → 默认 left=720 twips + hanging=360（每级递增）
+heading_indent = false                       # 取消缩进，标题齐头
+heading_indent.left = "1cm"                  # 自定义距离（支持 cm/mm/in/pt/px/twips）
+heading_indent.leftChars = 200               # 按“字符”缩进（中文排版更直观）
+heading_indent.firstLineChars = 200          # 首行缩进（与 hanging 互斥）
+
+[styles.heading1]                            # 只改某一级
+indent = false
+```
+
+| 写法 | 结果 |
+|---|---|
+| 不写 | `left=720 twips` + `hanging=360`（原行为，向后兼容） |
+| `heading_indent = false` | 无 `w:ind`，标题贴左 |
+| `heading_indent.left = 0` | 同上（等价写法） |
+| `left = "1cm"` / `leftChars = 200` | 按给定值缩进 |
+| `[styles.headingN] indent = ...` | 覆盖该级的 `[document]` 设置 |
+
+> 缩进**同时**写在编号定义与样式上：样式级 `w:ind` 优先于编号的 `w:pPr`，
+> 这样「取消缩进」不依赖 Word 是否采纳编号定义。
+> `firstLine` 与 `hanging` 在 schema 里互斥，同时给出时自动丢弃 `hanging`。
+
+### 脚注（自动编号）
+
+`[[fn:文字]]` 生成 **Word 原生脚注**（不是上标文字）：正文处是
+`w:footnoteReference`，页脚处是 `w:footnoteRef` —— 两者都由 **Word 自动编号**，
+插入/删除/重排脚注时编号会自己更新。
+
+> ⚠️ 两个容易踩的坑（都已修，有回归测试）：
+> 1. 条目里缺 `w:footnoteRef` → 页脚**不编号**，只显示文本；
+> 2. `vertAlign=superscript` 加在**整条脚注文本**上 → 脚注正文整体变上标。
+>    正确做法是只加在**编号 run** 上（`FootnoteReference` 字符样式）。
+
+脚注行距**默认单倍**（`w:line=240`），不跟随正文的 `line_spacing`——
+否则正文设 1.4 倍时脚注区会显得很松。要改：
+
+```toml
+[styles.footnote]
+line_spacing = 1.5    # 倍数；不写则 1.0
+```
+
+分隔符条目用 `w:separator` / `w:continuationSeparator` **元素**
+（不是 `w:br w:type="separator"`——那个取值非法，会被 schema 判错）。
+
 ### `---` 分隔线是段落底边框
 
 渲染成「空段落 + `w:pBdr/w:bottom`」，线段样式可配：

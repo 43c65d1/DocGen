@@ -120,7 +120,7 @@ def render_docx_bytes(
     from .footnotes import inject_footnotes
     from .template import _strip_effects_part
 
-    document, footnotes = _build_document(blocks, config, template, base_dir)
+    document, footnotes, state = _build_document(blocks, config, template, base_dir)
     buffer = io.BytesIO()
     document.save(buffer)
     data = buffer.getvalue()
@@ -128,7 +128,12 @@ def render_docx_bytes(
     if drop_part:
         data = _strip_effects_part(data, drop_part)
     data = _rewrite_zips_part(data, "word/document.xml", clean_document_xml)
-    return inject_footnotes(data, footnotes) if footnotes else data
+    if not footnotes:
+        return data
+    footnote_style = state.styles.get("footnote")
+    return inject_footnotes(
+        data, footnotes, style=footnote_style if isinstance(footnote_style, dict) else None
+    )
 
 
 def _rewrite_zips_part(data: bytes, name: str, transform: Any) -> bytes:
@@ -152,7 +157,7 @@ def _build_document(
     config: Config,
     template: Path | None,
     base_dir: Path | None,
-) -> tuple[Any, list[str]]:
+) -> tuple[Any, list[str], _RenderState]:
     document = create_document(config, template)
     _apply_sections(document, config)
     state = _RenderState(
@@ -164,7 +169,7 @@ def _build_document(
     _render_blocks(state, blocks)
     _ensure_update_fields(document)
     _normalise_root(document)
-    return document, state.footnotes
+    return document, state.footnotes, state
 
 
 def _apply_sections(document: Any, config: Config) -> list[Any]:

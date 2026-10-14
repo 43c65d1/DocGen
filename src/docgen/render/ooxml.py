@@ -38,6 +38,7 @@ __all__ = [
     "make_caption_field",
     "make_field",
     "make_footnote_reference",
+    "make_indent",
     "make_math_paragraph",
     "make_page_break",
     "make_reference_field",
@@ -120,6 +121,40 @@ CHILD_ORDER: dict[str, tuple[str, ...]] = {
     "w:tcBorders": _qnames("top start left bottom end right insideH insideV"),
     "w:pBdr": _qnames("top left bottom right between bar"),
 }
+
+#: ``w:ind`` 的**属性**顺序（属性顺序对 XML 不敏感，这里表驱动只为输出确定性）
+IND_ATTRS: tuple[str, ...] = (
+    "w:start",
+    "w:startChars",
+    "w:end",
+    "w:endChars",
+    "w:left",
+    "w:leftChars",
+    "w:right",
+    "w:rightChars",
+    "w:hanging",
+    "w:hangingChars",
+    "w:firstLine",
+    "w:firstLineChars",
+)
+
+
+def make_indent(**attributes: str) -> Any:
+    """构造 ``w:ind``。
+
+    ``firstLine`` 与 ``hanging`` 在 schema 里是 **choice（互斥）**：
+    同时给出会被判非法，所以有 ``firstLine*`` 时自动丢弃 ``hanging*``。
+    """
+    element = OxmlElement("w:ind")
+    has_first_line = "w:firstLine" in attributes or "w:firstLineChars" in attributes
+    for name in IND_ATTRS:
+        value = attributes.get(name)
+        if value is None or value == "":
+            continue
+        if has_first_line and name in ("w:hanging", "w:hangingChars"):
+            continue
+        element.set(qn(name), str(value))
+    return element
 
 
 def insert_child(parent: Any, name: str, **attributes: str) -> Any:

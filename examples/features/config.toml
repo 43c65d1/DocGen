@@ -104,6 +104,14 @@ line_height = "1.4"
 # 关掉后 outlineLvl 仍在，目录与导航窗格照常工作。
 heading_numbering = true
 
+# 标题缩进：编号自带缩进（默认 left=720 twips + hanging=360），所以一级标题不贴左。
+#   heading_indent = false         → 取消缩进，标题齐头
+#   heading_indent.left = "1cm"    → 自定义（支持 cm/mm/in/pt/px/twips）
+#   heading_indent.leftChars = 200 → 按字符（中文排版更直观）
+#   也可在 [styles.headingN] 里写 indent = false 只改某一级。
+# 本示例保持默认（不写该项），便于与其他特性对照。
+# heading_indent = false
+
 # 分隔线（---）的线段样式：single / double / dashed / dotted / wave …
 hr.style = "single"
 hr.color = "808080"

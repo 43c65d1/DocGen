@@ -31,6 +31,7 @@ __all__ = [
     "TEMPLATE_VERSION",
     "create_document",
     "ensure_font_table",
+    "heading_indent",
     "heading_numbering_enabled",
     "iter_styles",
 ]
@@ -81,6 +82,42 @@ def heading_numbering_enabled(config: Config) -> bool:
     return bool(value)
 
 
+def heading_indent(config: Config) -> dict[str, Any] | None:
+    """``[document] heading_indent``：标题缩进（传给编号定义）。
+
+    三态语义：
+
+    - **不写** → ``None``（默认 ``left=720/hanging=360``，Word 常见观感）
+    - ``heading_indent = false`` 或 ``left = 0`` → ``{}``（**取消缩进**，标题齐头）
+    - ``[document.heading_indent] left = "1cm"`` 或点号键
+      ``heading_indent.left = "1cm"`` → 自定义距离
+
+    支持子表、点号键、标量三种写法（``Config.setting`` 只管单点路径，
+    所以这里自己收拢 ``heading_indent.*`` 前缀的键）。
+    """
+    direct = config.document.get("heading_indent")
+    nested = config.setting("heading_indent")
+    spec: dict[str, Any] = {}
+    if isinstance(direct, dict):
+        spec.update(direct)
+    if isinstance(nested, dict):
+        spec.update(nested)
+    for key, value in config.document.items():
+        prefix = "heading_indent."
+        if key.startswith(prefix):
+            spec[key[len(prefix) :]] = value
+
+    if not spec:
+        if direct is None:
+            return None
+        if direct is False:
+            return {}
+        if isinstance(direct, (str, int, float)):
+            return {"left": direct}
+        return None
+    return spec
+
+
 def _extend_default_template(document: Any, config: Config | None = None) -> None:
     """补齐 §14.1 槽位（幂等）：目录样式、题注样式、字体表、多级编号、updateFields。"""
     from .template_build import add_heading_numbering, add_toc_styles, ensure_update_fields
@@ -91,7 +128,8 @@ def _extend_default_template(document: Any, config: Config | None = None) -> Non
     _ensure_caption_styles(document)
     ensure_font_table(document)
     enabled = heading_numbering_enabled(config) if config is not None else True
-    add_heading_numbering(document, enabled=enabled)
+    indent = heading_indent(config) if config is not None else None
+    add_heading_numbering(document, enabled=enabled, indent=indent)
     ensure_update_fields(document)
 
 
@@ -258,6 +296,37 @@ def apply_document_defaults(document: Any, config: Config) -> None:
     for level in range(1, 10):
         style = _style_by_id(document, f"Heading{level}")
         set_style_outline_level(style, level - 1)
+        _apply_style_indent(style, config, level)
+
+
+def _apply_style_indent(style: Any, config: Config, level: int) -> None:
+    """标题样式的缩进：``[document] heading_indent`` 打底，``[styles.headingN.indent]` 覆盖。
+
+    写在**样式**上（而非只写编号定义）的原因：样式级 ``w:ind`` 优先于编号的 ``w:pPr``，
+    这样「取消缩进」不依赖编号定义是否被 Word 采纳。
+    """
+    from docx.oxml.ns import qn
+
+    from .ooxml import insert_child
+    from .template_build import _indent_element
+
+    indent = heading_indent(config)
+    style_spec = config.styles.get(f"heading{level}")
+    if style_spec is not None:
+        own = style_spec.properties.get("indent")
+        if isinstance(own, dict):
+            indent = dict(own)
+        elif own is False:
+            indent = {}
+    element = _indent_element(indent)
+    ppr = style.element.get_or_add_pPr()
+    for existing in ppr.findall(qn("w:ind")):
+        ppr.remove(existing)
+    if element is None:
+        return
+    # lxml 的属性键是完整 URI（``{uri}left``），insert_child 需要 ``w:left`` 形式
+    attributes = {f"w:{name.split('}')[-1]}": value for name, value in element.attrib.items()}
+    insert_child(ppr, "w:ind", **attributes)
 
 
 def _style_by_id(document: Any, style_id: str) -> Any:

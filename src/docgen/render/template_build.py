@@ -51,13 +51,17 @@ def build_template(config: Config | None = None, output: Path | None = None) -> 
 
     返回 python-docx ``Document``；给了 ``output`` 就同时落盘为 ``.docx``。
     """
-    from .template import apply_document_defaults, heading_numbering_enabled
+    from .template import apply_document_defaults, heading_indent, heading_numbering_enabled
 
     document = _Document()
     if config is not None:
         apply_document_defaults(document, config)
     add_toc_styles(document)
-    add_heading_numbering(document, enabled=heading_numbering_enabled(config) if config else True)
+    add_heading_numbering(
+        document,
+        enabled=heading_numbering_enabled(config) if config else True,
+        indent=heading_indent(config) if config else None,
+    )
     ensure_update_fields(document)
     if output is not None:
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -93,11 +97,18 @@ def add_heading_numbering(
     num_id: int = HEADING_NUMBER_ID,
     levels: int = 9,
     enabled: bool = True,
+    indent: dict[str, Any] | None = None,
 ) -> int:
     """给标题加多级编号：``Heading1`` -> ``1``、``Heading2`` -> ``1.1``……
 
     返回新写入的 ``abstractNumId``；若已存在则直接返回现值（幂等）。
-    ``enabled=False`` 时不建立编号、也不把 ``HeadingN`` 绑上去（``[document] heading_numbering = false``）。
+    ``enabled=False`` 时不建立编号、也不把 ``HeadingN`` 绑上去。
+    ``indent`` 控制编号带来的缩进（``[document] heading_indent``）：
+
+    - ``None``：默认 ``left=720*hanging=360``（每级递增，Word 常见观感）
+    - ``{}`` 或显式 ``left=0``：**取消缩进**，标题齐头
+    - ``{"left": "1cm"}`` / ``{"leftChars": 100}``：自定义距离（见 ``_indent_element``）
+
     注意：**``outlineLvl`` 与编号无关**，关闭编号后目录/导航窗格照常工作。
     """
     if not enabled:
@@ -107,7 +118,7 @@ def add_heading_numbering(
     if _has_abstract_num(numbering, num_id):
         return num_id
 
-    abstract = _build_heading_abstract_num(num_id, levels)
+    abstract = _build_heading_abstract_num(num_id, levels, indent)
     numbering.insert(0, abstract)
     numbering.append(_build_num(num_id, num_id))
     _link_headings_to_numbering(document, num_id, levels)
@@ -125,7 +136,9 @@ def _has_style(document: Any, name: str) -> bool:
     return any(style.name == name for style in document.styles)
 
 
-def _build_heading_abstract_num(num_id: int, levels: int) -> Any:
+def _build_heading_abstract_num(
+    num_id: int, levels: int, indent: dict[str, Any] | None = None
+) -> Any:
     abstract = OxmlElement("w:abstractNum")
     abstract.set(qn("w:abstractNumId"), str(num_id))
     multi = OxmlElement("w:multiLevelType")
@@ -133,11 +146,16 @@ def _build_heading_abstract_num(num_id: int, levels: int) -> Any:
     abstract.append(multi)
 
     for level in range(levels):
-        abstract.append(_level_element(level))
+        abstract.append(_level_element(level, indent))
     return abstract
 
 
-def _level_element(level: int) -> Any:
+def _level_element(level: int, indent: dict[str, Any] | None = None) -> Any:
+    """一个编号层级。
+
+    ``indent`` 的三态语义见 :func:`add_heading_numbering`；
+    默认每级递增 720 twips（Word 多级编号的常见观感）。
+    """
     element = OxmlElement("w:lvl")
     element.set(qn("w:ilvl"), str(level))
 
@@ -153,22 +171,91 @@ def _level_element(level: int) -> Any:
     text.set(qn("w:val"), _level_text(level))
     element.append(text)
 
-    # 统一左对齐；缩进按层级递增（渲染期由 config 覆盖样式属性）
     justify = OxmlElement("w:lvlJc")
     justify.set(qn("w:val"), "left")
     element.append(justify)
 
-    ppr = OxmlElement("w:pPr")
-    indent = OxmlElement("w:ind")
-    indent.set(qn("w:left"), str(720 * (level + 1)))
-    indent.set(qn("w:hanging"), "360")
-    ppr.append(indent)
-    element.append(ppr)
+    indent_element = _indent_element(indent)
+    if indent_element is not None:
+        ppr = OxmlElement("w:pPr")
+        ppr.append(indent_element)
+        element.append(ppr)
 
     style_link = OxmlElement("w:pStyle")
     style_link.set(qn("w:val"), f"Heading{level + 1}")
     element.append(style_link)
     return element
+
+
+def _indent_element(indent: dict[str, Any] | None) -> Any:
+    """把 ``[document] heading_indent`` 变成 ``w:ind``；返回 ``None`` 表示不加缩进。
+
+    * ``None``（未配置）→ 默认 ``left=720 twips`` + ``hanging=360``
+    * ``{}`` 或 ``left=0`` → 返回 ``None``（**取消缩进**）
+    * ``{"left": "1cm"}`` / ``{"leftChars": 100}`` / ``{"firstLineChars": 200}``
+      → 按给定值（带单位的长度或字符数）
+    """
+    from .ooxml import make_indent
+
+    if indent is None:
+        return make_indent(**{"w:left": "720", "w:hanging": "360"})
+    if not indent:
+        return None
+
+    attributes: dict[str, str] = {}
+    for key, value in indent.items():
+        if key == "leftChars":
+            attributes["w:leftChars"] = str(int(float(value)))
+            continue
+        if key == "firstLineChars":
+            attributes["w:firstLineChars"] = str(int(float(value)))
+            continue
+        if not isinstance(value, (int, float, str)):
+            continue
+        twips = _to_twips(value)
+        if key == "left":
+            attributes["w:left"] = str(twips)
+        elif key == "first_line":
+            attributes["w:firstLine"] = str(twips)
+        elif key == "hanging":
+            attributes["w:hanging"] = str(twips)
+
+    if attributes.get("w:left") == "0" and len(attributes) == 1:
+        return None  # 显式 left=0 = 取消缩进
+    return make_indent(**attributes) if attributes else None
+
+
+def _to_twips(value: Any) -> int:
+    """长度 -> twips：``1cm`` / ``10mm`` / ``0.5in`` / ``24pt`` / ``16px``；纯数字按 twips。
+
+    单位换算用 ``docx.shared`` 的长度类（EMU），1 twip = 635 EMU；
+    不认的单位抛 ``ValueError``（由调用方决定是否忽略）。
+    """
+    from docx.shared import Cm, Emu, Inches, Mm, Pt
+
+    if isinstance(value, (int, float)):
+        return int(value)
+    text = str(value).strip().lower()
+    if not text:
+        return 0
+    if text.isdigit():
+        return int(text)
+
+    length: Any
+    if text.endswith("cm"):
+        length = Cm(float(text[:-2]))
+    elif text.endswith("mm"):
+        length = Mm(float(text[:-2]))
+    elif text.endswith("in"):
+        length = Inches(float(text[:-2]))
+    elif text.endswith("pt"):
+        length = Pt(float(text[:-2]))
+    elif text.endswith("px"):
+        length = Emu(int(float(text[:-2]) * 9525))  # 96 DPI
+    else:
+        return int(float(text))
+    # 长度类都是 int 子类（EMU），1 twip = 635 EMU
+    return round(int(length) / 635)
 
 
 def _level_text(level: int) -> str:

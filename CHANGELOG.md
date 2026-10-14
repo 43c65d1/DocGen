@@ -6,6 +6,26 @@
 
 ## [Unreleased]
 
+### 新增（标题缩进可配）
+
+- 自动编号自带缩进（`w:ind left=720 hanging=360`，写在编号定义与 `HeadingN` 样式上），
+  现在由 `[document] heading_indent` 控制：`false` 取消缩进、`left = "1cm"` 自定义、
+  `leftChars`/`firstLineChars` 按字符、`[styles.headingN] indent` 按级覆盖
+- 长度支持 `cm`/`mm`/`in`/`pt`/`px` 与纯 twips；`firstLine` 与 `hanging` 互斥（按 schema 丢弃 hanging）
+- 样式级 `w:ind` 优先于编号的 `w:pPr`，所以「取消缩进」不依赖 Word 是否采纳编号定义
+
+### 修复（脚注：不编号 + 整条上标）
+
+- **脚注不自动编号**：条目里缺 `w:footnoteRef`（Word 的编号占位），页脚只显示文本。
+  现在正文用 `w:footnoteReference`、页脚用 `w:footnoteRef`，**编号完全交给 Word**
+  （插入/删除/重排会自动更新）
+- **脚注正文整条变上标**：`vertAlign=superscript` 原本加在整条文本 run 上，
+  现已只加在**编号 run**（`FootnoteReference` 字符样式）
+- **脚注行距偏大**：默认单倍（`w:line=240`），不再跟随正文 `line_spacing`；
+  可用 `[styles.footnote] line_spacing` 覆盖
+- 分隔符条目改用 `w:separator` / `w:continuationSeparator` **元素**——
+  原先的 `w:br w:type="separator"` 取值非法，被官方 schema 抓到
+
 ### 新增（Output 系统）
 
 - 新增 [`output.py`](src/docgen/output.py)：日志级别是**阈值**（`log` < `warn`(默认) < `err`），

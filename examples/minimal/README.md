@@ -1,6 +1,8 @@
 # DocGen 示例
 
-这个示例覆盖 **W0~W3 的全部特性**，演示「DFM + config → HTML / Word」的完整链路：
+这个示例演示「DFM + config → HTML / Word」的**完整链路**：从解析、校验到两个后端产出，
+覆盖大部分特性类别（想看"每个特性独立一行、失效即可见"的对照表，用
+[../features/](../features/README.md)）：
 
 ```bash
 docgen check examples/minimal/content.md -c examples/minimal/config.toml --strict
@@ -27,4 +29,11 @@ docgen build examples/minimal/content.md -c examples/minimal/config.toml -o exam
 | 公式 | `m:oMath`（OMML，Word 里可编辑）；编号公式用无边框三列表格 |
 | 上下标 | `w:vertAlign`（superscript / subscript） |
 | 代码块 | config 的 `background`/`border` → `w:shd` / `w:pBdr` |
-| 图片 | 写入 `word/media/` |
+| 图片 | 写入 `word/media/`（`w:drawing`） |
+| 分节 | `[[sections]]` → 两个 `w:sectPr`（不同纸张/页边距） |
+| 分页 | `[[pagebreak]]` → `w:br w:type="page"` |
+| 超链接 | 真正的 `w:hyperlink` + 关系项（不是样式化的文字） |
+
+> 本示例**不含**脚注与 `[output]`/`[inline]` 配置；那几项见
+> [../features/](../features/README.md)（特性矩阵）与
+> [docs/config.md](../../docs/config.md)。

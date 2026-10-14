@@ -31,7 +31,7 @@ trap 'rm -rf "$staging"' EXIT
 mkdir -p "$staging/$name"
 
 for item in src tests docs examples scripts \
-            README.md CHANGELOG.md QUICKSTART.md LIMITATIONS.md FEEDBACK.md \
+            README.md CHANGELOG.md QUICKSTART.md LIMITATIONS.md FEEDBACK.md BRANCHING.md \
             pyproject.toml uv.lock .gitignore; do
   [ -e "$item" ] && cp -r "$item" "$staging/$name/"
 done

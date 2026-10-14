@@ -65,17 +65,18 @@
 
 | # | 限制 | 说明 |
 |---|---|---|
-| B1 | **无目录（TOC）生成** | 母版有 TOC 样式与 `updateFields`，但正文里的目录域还没接 |
-| B2 | **公式没有图片回退** | 需要 Word 的 `MML2OMML.XSL`（Word 自带）把 MathML 转 OMML；没装 Word 的环境里公式可能不显示 |
-| B3 | **不生成修订/批注** | 只输出最终排版 |
-| B4 | **无 `docgen init --preset`** | 没有一键生成 config 脚手架的预设库；请复制 `examples/minimal/config.toml` 改 |
-| B5 | **无 `docgen format`** | 不提供源码格式化 |
+| B1 | **公式没有图片回退** | 需要 Word 的 `MML2OMML.XSL`（Word 自带）把 MathML 转 OMML；没装 Word 的环境里公式可能不显示 |
+| B2 | **不生成修订/批注** | 只输出最终排版 |
+| B3 | **无 `docgen init --preset`** | 没有一键生成 config 脚手架的预设库；请复制 `examples/minimal/config.toml` 改 |
+| B4 | **无 `docgen format`** | 不提供源码格式化 |
+| B5 | **无视觉回归测试** | 没有 LibreOffice headless 渲染对比；视觉问题靠人工看（见 C1） |
 | B6 | **脚注只支持纯文本** | `[[fn:...]]` 里不能嵌样式/链接/公式 |
 | B7 | **单元格内不支持块级内容** | 表格单元格只支持行内内容（段落/列表/公式块进不去） |
 | B8 | **上标/下标字号靠 Word** | `w:vertAlign` 自带缩放；`[styles.sup]` 的字号只在显式 `[文字]{.sup}` 写法上完全可控 |
 | B9 | **图片只读本地文件** | 支持 png/jpg/jpeg/gif/svg/webp/bmp；不支持远程 URL 下载 |
 | B10 | **无多列排版、无文本框、无艺术字** | 明确不做 |
 | B11 | **无 PDF 直接输出** | 只能出 `.docx` / `.html`；要 PDF 请用 Word「另存为」或 LibreOffice 转换 |
+| B12 | **HTML 后端的目录只是占位** | `[[toc]]` 在 Word 侧是真正的 TOC 域（会自动填充）；HTML 侧只输出一个 `<nav>` 占位，不生成条目 |
 
 ---
 

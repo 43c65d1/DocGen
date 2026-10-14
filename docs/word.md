@@ -145,14 +145,20 @@ $$
 
 **W4 已实现**：表格（三线表/网格/无框、重复表头、固定列宽、GFM 列对齐、合并）、
 图片尺寸与对齐（`[[img:path width=2cm align=center]]` + `[image]` 默认值）、
-脚注（`[[fn:文字]]` → 手写 `word/footnotes.xml`）。
+脚注（`[[fn:文字]]` → 注入 `word/footnotes.xml`，正文 `w:footnoteReference` +
+页脚 `w:footnoteRef`，**编号由 Word 自动生成**）。
 
 **W5 已实现**：分节（`[[sections]]` → 纸张/页边距/分节符）、页码体系
 （`w:pgNumType` 格式 + 重启 + 页脚 `PAGE` 域）、页眉页脚（每节独立、`is_linked_to_previous=False`）、
 页面垂直对齐（每节**显式** `w:vAlign`：封面 `center`、正文 `top`）。
 
-**后续阶段**：`docgen init --preset` 预设库、视觉回归（LibreOffice headless）、
-打包发布、公式图片降级（matplotlib）、`docgen format`。
+**W6 部分的实现**：`[output]` 输出与日志系统、`docgen bug-report`、
+`scripts/setup.sh`（自动选可用软件源）与 `scripts/package.sh`（打源码测试版）、
+四份面向使用者的文档（QUICKSTART / LIMITATIONS / FEEDBACK / BRANCHING）。
+
+**仍未实现**：`docgen init --preset` 预设库、`docgen format`、
+视觉回归（LibreOffice headless 对比）、公式图片降级（matplotlib）。
+完整清单见 [LIMITATIONS.md](../LIMITATIONS.md)。
 
 ## 三个容易被误判为缺陷的行为
 

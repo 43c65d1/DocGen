@@ -44,9 +44,26 @@ EXIT_OK = 0
 EXIT_CONTENT_ERROR = 1
 EXIT_CONFIG_ERROR = 2
 
+#: 回退版本号（包未安装时用）。改版本请改 pyproject.toml——这里是兜底，
+#: 两者一致性由 tests/test_release.py::test_version_matches_pyproject 守住。
 VERSION = "0.1.0"
 
-__all__ = ["main"]
+
+def version_string() -> str:
+    """版本号：**以已安装包的元数据为准**（``pyproject.toml`` 是唯一真源）。
+
+    直接跑源码时包可能没安装，此时回退到模块常量——
+    两处漂移的风险由测试 ``test_version_matches_pyproject`` 兜住。
+    """
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("docgen")
+    except PackageNotFoundError:  # pragma: no cover - 仅未安装时走到
+        return VERSION
+
+
+__all__ = ["main", "version_string"]
 
 #: 当前运行的输出对象。命令函数共用它，避免把 output 一路传参。
 _OUTPUT = Output()
@@ -207,7 +224,7 @@ def _bug_report(output_path: Path, config_path: Path | None = None) -> int:
     """
     lines = [
         "=== docgen bug report ===",
-        f"docgen     : {VERSION}",
+        f"docgen     : {version_string()}",
         f"python     : {sys.version.split()[0]} ({platform.python_implementation()})",
         f"platform   : {platform.system()} {platform.release()} ({platform.machine()})",
         f"executable : {sys.executable}",
@@ -355,7 +372,7 @@ def main(argv: list[str] | None = None) -> int:
             _OUTPUT.open_logfile(
                 config_path=str(config_path) if config_path else None,
                 input_path=_input_path(args),
-                version=VERSION,
+                version=version_string(),
             )
         if args.cmd == "dump-ir":
             _dump_ir(args.input)

@@ -6,6 +6,36 @@
 
 ## [Unreleased]
 
+### 测试版发布准备（0.1.0b1）
+
+- **工作区整理**：清掉缓存/构建产物（193MB → 19MB）；`.github/workflows/ci.yml` 此前
+  **从未提交**，现已纳入仓库；临时草稿 `.tmp/` 删除，其中唯一一份《开发手册》
+  转正为 [docs/development-manual.md](docs/development-manual.md)
+  （源码与 README 里大量「手册 §N」引用它，不能再放临时目录）
+- **CI 首次本地复刻**：修掉两处会让 CI 必红的问题——`ruff format --check .` 会重排
+  `docs/development-manual.md` 里的**契约代码**（现已排除该文件）
+- **版本单一真源**：新增 `docgen.version_string()`，优先读已安装包元数据
+  （`pyproject.toml` 是唯一真源），模块常量仅作未安装时的兜底，一致性由测试守住
+- **新增发布物**：[scripts/package.sh](scripts/package.sh) 打源码测试版（tar.gz / zip）
+- **新增文档**：[QUICKSTART.md](QUICKSTART.md) 上手、
+  [LIMITATIONS.md](LIMITATIONS.md) 已知限制清单（含「看着像 bug 其实不是」）、
+  [FEEDBACK.md](FEEDBACK.md) 反馈模板、[BRANCHING.md](BRANCHING.md) 分支约定
+- **同步一律 `--frozen`**：不带它的话，**换个软件源同步就会把 `uv.lock` 里
+  500+ 处 URL 改写成那个源**（实测踩到）。`--frozen` 仍然按 `--index` 去镜像下载，
+  只是不改锁文件。已加测试守住（`scripts/setup.sh` 的每条同步命令都要带 `--frozen`）
+- **网络来源不再写死**：内外网状态会随时间变化（现实因素），所以新增
+  [scripts/setup.sh](scripts/setup.sh)——依次尝试「镜像直连 → PyPI 直连 → 代理 + PyPI →
+  代理 + 镜像」，**用真实同步判断可用性**，哪个成功用哪个，并支持 `--index` / `--proxy`
+  手动指定。文档里不再出现「直连一定超时」这类会过期的断言
+  （本机实测：直连 PyPI 与 files.pythonhosted.org 超时、代理下 pypi.org 通但
+  files.pythonhosted.org 仍不通、镜像直连通——但这些都可能变）
+  - 注：第一版脚本用「先探测再同步」两段式，结果探测本身依赖环境而**假失败**
+    （`uv pip install --dry-run` 需要已存在的 venv），已改为直接同步 + 短超时换源
+- **踩坑记录（对维护者）**：本机直连 PyPI 不通，只能用镜像同步依赖；
+  但**绝不能用镜像跑 `uv lock`** —— 它会把 `uv.lock` 里 500+ 处 URL 全换成镜像地址
+  （已回滚）。改版本时手工改锁文件里 docgen 那一行即可，`uv sync` 认它。
+  已加两条测试守住：锁文件版本与 `pyproject.toml` 一致、锁文件不含镜像域名
+
 ### 新增（标题缩进可配）
 
 - 自动编号自带缩进（`w:ind left=720 hanging=360`，写在编号定义与 `HeadingN` 样式上），
@@ -259,7 +289,8 @@
 
 ## [0.1.0] - 2026-10-10
 
-首个可交付版本：`DFM + TOML → HTML` 全链路可用，182 项测试、覆盖率 89%。
+首个可交付版本：`DFM + TOML → HTML` 全链路可用（那时只有 HTML 后端，Word 后端随后加入）。
+当时的测试条数与覆盖率以当时的提交为准；当前值见 `main` 的 tip。
 
 ### 新增
 

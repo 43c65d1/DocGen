@@ -45,6 +45,9 @@ bash scripts/setup.sh --dev        # 只跑不开发的话去掉 --dev
 > bash scripts/setup.sh --dev --index https://pypi.tuna.tsinghua.edu.cn/simple
 > bash scripts/setup.sh --dev --proxy http://127.0.0.1:7897
 > ```
+>
+> 脚本用的是 `uv sync --frozen`，**不会改动 `uv.lock`**——否则换个源同步就会把
+> 锁文件里所有 URL 换成那个源（已踩过）。手动跑 `uv sync` 时也建议加 `--frozen`。
 
 ### 方式 B：用标准 venv + pip
 

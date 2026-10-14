@@ -1,19 +1,37 @@
-# DocGen（剪枝版 + Word 后端）
+# DocGen
 
 **DFM + TOML → HTML / Word**：一个 config 驱动的纯文本排版编译器。
-剪枝版（第 1~5 周）做 `DFM → IR → HTML`；完整版（Hard Version，12~19 周）在同一个 IR 上
-新增 Word 渲染后端。
+写两个纯文本文件（正文 + 样式表），产出样式完全由 config 决定的 `.html` 或 `.docx`。
 
 - 输入：`.md`（DFM 子集）+ `.toml`（样式表）
-- 输出：`.html`（剪枝版）或 `.docx`（完整版）
-- 每个块级节点都带源行号，`docgen check --json` 用结构化错误报告问题
-- 渲染层只认 IR：HTML 是参照实现，Word 是第二个消费方
+- 输出：`.html`（参照后端，纯 Python）或 `.docx`（Word 后端，直接产出 OOXML）
+- 两个后端共享同一个 IR：HTML 是参照实现，Word 是第二个消费方
+- 每个块级节点都带源行号；`docgen check --json` 输出结构化错误
+- 产出过**官方 ECMA-376 XSD** 校验，专抓「Word 静默忽略」的错误
 
-> 当前进度：剪枝版第 1~5 周完成（tag `v0.1`）；完整版 **W0 完成**
-> （`--format=docx` 端到端跑通、OOXML 探针 + 不变量测试、`docs/word.md`），
-> 后续按 W1~W6 推进（数学、编号/题注、表格/图片/脚注、分节/页眉页脚/目录、预设库）。
+**已实现**：块级/行内语法、样式继承与 `@ref`、诊断与结构化错误、真超链接、
+数学（LaTeX→MathML→OMML）、标题多级编号（可关、缩进可配）、题注与交叉引用（REF 域）、
+表格（三线表/网格/无框 + 列宽/对齐/合并/重复表头）、图片尺寸与对齐、脚注（Word 原生自动编号）、
+分节/页码/页眉页脚/封面、`[output]` 输出与日志系统、`[inline]` 语义名映射、
+`docgen bug-report` 报错出口。
+
+> **当前状态：测试版 `0.1.0b1`**（熟人小范围试用）。测试全绿、覆盖率 ≈89%，
+> 产出用官方 ECMA-376 XSD 校验。
+> **未实现**的见 [LIMITATIONS.md](LIMITATIONS.md)（例如目录 TOC 生成、预设库）。
+>
+> 👉 **新手上手**：[QUICKSTART.md](QUICKSTART.md)
+> **先看这个**：[LIMITATIONS.md](LIMITATIONS.md)（已知限制，含「看着像 bug 其实不是」）
+> **提反馈**：[FEEDBACK.md](FEEDBACK.md)
+> **分支约定**：[BRANCHING.md](BRANCHING.md)（`main` 发布线 / `dev` 协作线）
 
 ## 安装
+
+```bash
+# 推荐：自动挑一个当前可用的软件源（内外网状态会变，脚本运行期自己试）
+bash scripts/setup.sh --dev
+```
+
+或者手动（用标准 venv + pip）：
 
 ```bash
 python -m venv .venv
@@ -120,19 +138,33 @@ Table(source_line=17, rows=[['列 A', '列 B'], ['a1', 'b1']])
 |---|---|
 | [examples/minimal](examples/minimal/README.md) | 最小完整链路（含图片、数学、分页） |
 | [examples/inherit](examples/inherit/README.md) | `include` / `based_on` / `@ref` / `for = false` |
+| [examples/features](examples/features/README.md) | **特性矩阵**：每个特性独立一行 + 独立信号值，一眼看出哪个失效 |
 
 ## 架构与数据流
 
+一个 IR、两个后端。解析与校验完全不知道后端是谁；渲染层只读 IR 与 config 展开值。
+
 ```
 config.toml ─┐
-             ├─► config 解析 ─► 符号表（最终值）        ← 第 2 周（已完成）
+             ├─► config 解析 ─► 符号表（include 合并 / based_on 继承 / @ref 全部展开）
 content.md  ─┘        │
                       ▼
-      DFM 解析（markdown-it-py + 自定义行内规则）─► raw IR   ← 第 1、3 周（已完成）
+      DFM 解析（markdown-it-py + 自定义行内规则）─► raw IR（每块带 source_line）
                       ▼
-              语义校验（样式引用、图片路径）─► valid IR        ← 第 2 周（已完成）
+              语义校验（样式引用、图片路径）─► valid IR
                       ▼
-                HTML 渲染（纯 Python + 内联样式）─► output.html   ← 第 4 周（已完成）
+        ┌─────────────┴─────────────┐
+        ▼                           ▼
+  HTML 渲染                    Word 渲染（OOXML）
+  （纯 Python + 内联样式）      ├─ 母版/样式槽位（template, template_build）
+        │                       ├─ 数学 LaTeX→MathML→OMML（math）
+        ▼                       ├─ 编号/题注/交叉引用（numbering）
+   output.html                  ├─ 表格/图片/脚注（docx, footnotes, ooxml）
+                                ├─ 分节/页码/页眉页脚/封面（sections）
+                                └─ 产出用官方 ECMA-376 XSD 自校验（ooxml_check）
+                                        │
+                                        ▼
+                                   output.docx
 ```
 
 **三条铁律**：解析 / IR / 渲染彻底分离；唯一真源是 config；输出中每个样式属性都等于 config 声明值。
@@ -143,76 +175,107 @@ content.md  ─┘        │
 cli ──► parser ──► ir
  │        │         ▲
  │        └──► config ──► validate
+ ├──► output（日志/分流/logfile，不依赖渲染）
  └──► normalize
 render ──► ir + config（内联样式来自 config 展开值）
+           render/docx ──► ir + config + template + ooxml + numbering + math + sections + footnotes
 ```
 
 ## 目录结构
 
 ```
 src/docgen/
-  cli.py            # 命令行入口、退出码
+  cli.py            # 命令行入口（5 个子命令）、退出码、全局输出开关
+  output.py         # 输出系统：级别阈值、stdout/stderr 分流、logfile
   errors.py         # 错误码常量 + DocGenError
   normalize.py      # 输入规范化（去 BOM、统一 LF）
   ir.py             # IR：frozen dataclass，块级节点都带 source_line
-  config.py         # TOML 加载 / include 合并 / based_on 继承 / @ref 展开
+  canonical.py      # 金标准解析器（交叉验证用，独立实现）
+  numbering.py      # 标题/公式编号、题注与交叉引用的映射
+  units.py          # 长度/字号单位换算（cm/mm/in/pt/px ↔ twips/EMU）
+  config.py         # TOML 加载 / include 合并 / based_on 继承 / @ref 展开 / [inline] 映射
   validate.py       # 语义校验：样式引用、图片路径 -> 内容错误列表
-  diagnostics.py    # 诊断：未闭合标记 E3001、未知语言 E2001、围栏未配对 E4001
-  canonical.py      # 金标准交叉验证：IR 与 token 流归约成同一规范结构再比较
-  units.py          # 单位换算：12pt / 16px / 1.5em -> 磅
+  diagnostics.py    # 诊断：未闭合标记、未知语言、围栏未配对
   parser/
-    dfm.py          # DFM -> IR
-    rules.py        # 自研行内标记：[[img:]] [[pagebreak]] [x]{.s} $math$
+    dfm.py          # DFM 子集 -> IR（块级）
+    rules.py        # 行内规则与 wiki 白名单（img: / ref: / fn: / pagebreak / toc）
+    begin_block.py  # \begin{...} 双语法与命名块
   render/
-    html.py         # IR -> HTML（内联样式取 config 展开值）
-    css.py          # 样式表 -> CSS 选择器规则
-    docx.py         # IR -> Word（完整版）
-    ooxml.py        # 所有 OxmlElement 构造与 OOXML 陷阱
-    template.py     # 母版加载、样式槽位、outlineLvl、updateFields
+    html.py  css.py # HTML 后端（参照实现）
+    docx.py         # Word 后端主渲染器
+    ooxml.py        # 所有 OxmlElement 构造与 OOXML 陷阱（schema 顺序插入）
+    ooxml_check.py  # 官方 ECMA-376 XSD 硬校验 + 结构不变量
+    template.py     # 母版加载、样式槽位、outlineLvl、updateFields、字体表
+    template_build.py # 从零构建母版（编号定义、目录/题注样式）
+    sections.py     # 分节 / 页面设置 / 页码 / 页眉页脚 / 封面
+    math.py         # LaTeX -> MathML -> OMML
+    footnotes.py    # 脚注部件生成与注入
+    templates/default/  # 母版资源
 tests/
   fixtures/         # minimal.md full.md minimal.toml pics/photo.png
-  test_ir_snapshot.py test_ir_dataclass.py test_parser_errors.py
-  test_normalize.py test_errors.py test_config.py test_validate.py
-  test_diagnostics.py test_crosscheck.py test_html_probe.py test_cli.py
+  schemas/          # 官方 ECMA-376 XSD（校验产出合法性）
+  test_ir_snapshot.py test_parser_errors.py test_normalize.py test_errors.py
+  test_config.py test_validate.py test_diagnostics.py test_crosscheck.py
+  test_html_probe.py test_cli.py test_output.py test_output_and_inline.py
+  test_feature_matrix.py test_ooxml_schema.py test_ooxml_validity.py
+  test_template.py test_math.py test_numbering.py test_formula_numbering.py
+  test_table_enhancements.py test_w4_media.py test_w5_sections.py
+  test_renderer_anomalies.py test_heading_and_footnotes.py test_release.py …
+scripts/
+  setup.sh          # 装依赖：自动挑一个当前可用的软件源（内外网状态会变）
+  package.sh        # 打「源码测试版」压缩包（tar.gz / zip）
 docs/
-  dfm.md config.md ir.md crosscheck.md
+  dfm.md config.md ir.md crosscheck.md word.md development-manual.md
 examples/
-  minimal/ inherit/
-CHANGELOG.md
+  minimal/ inherit/ features/
+BRANCHING.md QUICKSTART.md LIMITATIONS.md FEEDBACK.md CHANGELOG.md
 ```
 
 ## 开发
 
 ```bash
-pytest                              # 204 项测试 + 覆盖率门槛 70%（当前 86%）
-ruff check .                        # lint
-ruff format .                       # 格式化（line-length=100）
+pytest                              # 全部测试 + 覆盖率门槛 70%（当前 ≈89%）
+ruff check .                        # lint（CI 用 . 扫全仓）
+ruff format --check .               # 格式检查（docs/development-manual.md 已排除，理由见 pyproject）
 mypy src tests                      # 严格模式
 ```
 
 CI（[.github/workflows/ci.yml](.github/workflows/ci.yml)）在 Python 3.11 / 3.12 上依次跑
 `ruff check` → `ruff format --check` → `mypy` → `pytest`（含覆盖率门槛）。
 
-### 受限沙箱下的已知差异
+### 本地环境注意
 
-本机在某些受限沙箱中运行时有两点差异（不影响 CI）：
-
-- 工作区内的 `.venv`、`.tmp`、`.pytest_cache`、`.pytest-tmp` 等缓存路径不可写，
-  因此本地验证改用 `.venv-dev`（`uv sync --extra dev`，并把 `UV_CACHE_DIR` 指向工作区内目录），
-  ruff 用 `RUFF_CACHE_DIR=.ruff-cache`，并跳过不可读目录（见 `pyproject.toml` 的 `exclude`）。
-- 加上上一条后，`ruff format --check .` 在扫描工作区根目录时会 panic；
-  本地请用 `ruff format --check src tests`，CI 不受影响。
+- **装依赖用 `bash scripts/setup.sh --dev`**：本机内外网状态会变化，脚本会依次尝试
+  镜像 / 直连 / 代理并选出当前可用的那个（见 [BRANCHING.md](BRANCHING.md) 与
+  [QUICKSTART.md](QUICKSTART.md)）。
+- 同步一律带 `--frozen`：否则换个源会把 `uv.lock` 里所有 URL 改写成那个源。
+- ruff 缓存要用工作区内目录：`RUFF_CACHE_DIR=.ruff-cache`。
 
 ## 契约
 
 - DFM 子集与冲突规则：[docs/dfm.md](docs/dfm.md)
-- config schema（include / based_on / @ref / for=false）：[docs/config.md](docs/config.md)
+- config schema（include / based_on / @ref / for=false / `[output]` / `[inline]`）：
+  [docs/config.md](docs/config.md)
 - IR 节点与不变量：[docs/ir.md](docs/ir.md)
 - 解析器金标准交叉验证：[docs/crosscheck.md](docs/crosscheck.md)
 - Word 后端与 OOXML 陷阱：[docs/word.md](docs/word.md)
+- 完整开发手册（原始规格）：[docs/development-manual.md](docs/development-manual.md)
+- 分支与发布流程：[BRANCHING.md](BRANCHING.md)
 - 错误码：手册 §11 与 [src/docgen/errors.py](src/docgen/errors.py)
 - 版本变化：[CHANGELOG.md](CHANGELOG.md)
 - 可测试不变量：输出里的每个内联样式声明都等于 config 的展开值
   （[test_html_probe.py](tests/test_html_probe.py) 的 `test_every_inline_style_value_comes_from_config` 自动验证）
 - 解析器正确性：IR 与 markdown-it token 流的一次性归约结构等价
   （[test_crosscheck.py](tests/test_crosscheck.py) 全量覆盖 `full.md`）
+- **OOXML 合法性**：产出的 document.xml / footnotes.xml 过官方 ECMA-376 XSD
+  （[tests/schemas/](tests/schemas/README.md)，[test_ooxml_schema.py](tests/test_ooxml_schema.py)）——
+  这条抓出过「Word 静默忽略」的属性/元素顺序错误
+
+## 相关文档
+
+| 文档 | 用途 |
+|---|---|
+| [QUICKSTART.md](QUICKSTART.md) | 15 分钟上手 |
+| [LIMITATIONS.md](LIMITATIONS.md) | **已知限制**（含「看着像 bug 其实不是」） |
+| [FEEDBACK.md](FEEDBACK.md) | 反馈模板 |
+| [BRANCHING.md](BRANCHING.md) | `main` / `dev` 分支约定与发布流程 |

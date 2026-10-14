@@ -12,6 +12,10 @@
 #
 # 说明：不用 "先探测再同步" 那种两段式——探测（如 uv pip install --dry-run）本身
 # 就依赖环境，容易假失败（实测踩到）。这里直接同步，靠短超时快速失败、换下一个来源。
+#
+# 同步一律带 `--frozen`：**不改写 uv.lock**。否则一旦用镜像同步，uv 会把锁文件里
+# 500+ 处 URL 全部换成镜像地址（实测踩到），谁再提交一次就把镜像带到仓库里了。
+# `--frozen` 仍然会按 --index 去镜像下载，只是不动锁文件。
 set -uo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -43,10 +47,10 @@ if [ -n "$index" ] || [ -n "$proxy" ]; then
   echo "按指定来源同步（index=${index:-默认} proxy=${proxy:-无}）"
   if [ -n "$proxy" ]; then
     UV_HTTP_TIMEOUT=60 UV_DEFAULT_INDEX="${index:-https://pypi.org/simple}" \
-      http_proxy="$proxy" https_proxy="$proxy" "$UV" sync $extra
+      http_proxy="$proxy" https_proxy="$proxy" "$UV" sync --frozen $extra
   else
     UV_HTTP_TIMEOUT=60 UV_DEFAULT_INDEX="${index:-https://pypi.org/simple}" \
-      "$UV" sync $extra
+      "$UV" sync --frozen $extra
   fi
   rc=$?
   [ $rc -eq 0 ] && echo "✅ 完成" && exit 0
@@ -61,10 +65,10 @@ try() {
   local rc=0
   if [ -n "$px" ]; then
     UV_HTTP_TIMEOUT=20 UV_CONCURRENT_DOWNLOADS=8 UV_DEFAULT_INDEX="$idx" \
-      http_proxy="$px" https_proxy="$px" "$UV" sync $extra >/tmp/docgen-setup.log 2>&1 || rc=$?
+      http_proxy="$px" https_proxy="$px" "$UV" sync --frozen $extra >/tmp/docgen-setup.log 2>&1 || rc=$?
   else
     UV_HTTP_TIMEOUT=20 UV_CONCURRENT_DOWNLOADS=8 UV_DEFAULT_INDEX="$idx" \
-      "$UV" sync $extra >/tmp/docgen-setup.log 2>&1 || rc=$?
+      "$UV" sync --frozen $extra >/tmp/docgen-setup.log 2>&1 || rc=$?
   fi
   if [ $rc -eq 0 ]; then
     echo "成功"

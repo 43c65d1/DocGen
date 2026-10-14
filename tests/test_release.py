@@ -60,7 +60,8 @@ def test_lockfile_has_no_vendor_mirror_urls() -> None:
 
 
 @pytest.mark.parametrize(
-    "name", ["QUICKSTART.md", "LIMITATIONS.md", "FEEDBACK.md", "CHANGELOG.md", "README.md"]
+    "name",
+    ["QUICKSTART.md", "LIMITATIONS.md", "FEEDBACK.md", "BRANCHING.md", "CHANGELOG.md", "README.md"],
 )
 def test_release_documents_exist(name: str) -> None:
     """发布测试版必须带的三份文档（外加 README/CHANGELOG）不能缺。"""
@@ -83,7 +84,8 @@ def test_package_script_exists_and_mentions_archive() -> None:
 
 
 @pytest.mark.parametrize(
-    "name", ["QUICKSTART.md", "LIMITATIONS.md", "FEEDBACK.md", "CHANGELOG.md", "README.md"]
+    "name",
+    ["QUICKSTART.md", "LIMITATIONS.md", "FEEDBACK.md", "BRANCHING.md", "CHANGELOG.md", "README.md"],
 )
 def test_package_script_ships_every_release_document(name: str) -> None:
     """打包脚本的清单必须覆盖全部发布文档。
@@ -100,6 +102,26 @@ def test_package_script_excludes_build_artifacts() -> None:
     text = (ROOT / "scripts" / "package.sh").read_text(encoding="utf-8")
     assert "output.html" in text and "output.docx" in text
     assert "__pycache__" in text
+
+
+def test_setup_script_does_not_mutate_lockfile() -> None:
+    """同步必须带 ``--frozen``，否则换个源就会把 ``uv.lock`` 里的 URL 全改掉。
+
+    实测：用镜像跑一次不带 ``--frozen`` 的 ``uv sync``，锁文件里 500+ 处 URL
+    会变成镜像地址；谁再提交一次就把镜像带进仓库了。
+    ``--frozen`` 仍然按 ``--index`` 去镜像下载，只是不改锁文件。
+    """
+    text = (ROOT / "scripts" / "setup.sh").read_text(encoding="utf-8")
+    sync_lines = [line for line in text.splitlines() if '"$UV" sync' in line]
+    assert sync_lines, "找不到同步命令"
+    for line in sync_lines:
+        assert "--frozen" in line, f"这条同步没带 --frozen: {line.strip()}"
+
+
+def test_quickstart_mentions_frozen() -> None:
+    """文档要提醒手动同步时也加 ``--frozen``（否则锁文件会被源改写）。"""
+    text = (ROOT / "QUICKSTART.md").read_text(encoding="utf-8")
+    assert "--frozen" in text
 
 
 def test_setup_script_tries_multiple_sources() -> None:
@@ -127,9 +149,12 @@ def test_setup_script_tries_multiple_sources() -> None:
 def test_setup_script_has_a_no_proxy_path() -> None:
     """必须存在「不带代理、不带自定义索引」的尝试路径——否则等于把源写死。"""
     lines = (ROOT / "scripts" / "setup.sh").read_text(encoding="utf-8").splitlines()
-    bare = [line for line in lines if '"$UV" sync $extra' in line and "http_proxy" not in line]
+    bare = [line for line in lines if '"$UV" sync' in line and "http_proxy" not in line]
     assert bare, "找不到任何不带代理的同步调用（等于强制走代理）"
-    # 该调用所在的 try 分支必须能传空 proxy（看调用点是否被 if 包着，靠候选表保证）
+    assert any("http_proxy=" in line and '"$UV" sync' in line for line in lines), (
+        "也应该有带代理的同步调用（否则代理这条候选等于没实现）"
+    )
+    # 候选表里要有不带代理的条目
     assert any("|https://" in line for line in lines), "候选表里应含不带代理的条目"
 
 
@@ -138,6 +163,57 @@ def test_setup_script_does_not_hardcode_one_conclusion() -> None:
     text = (ROOT / "scripts" / "setup.sh").read_text(encoding="utf-8")
     for absolute in ("一定超时", "必然失败", "永远不可用"):
         assert absolute not in text, absolute
+
+
+def test_readme_directory_map_matches_source_tree() -> None:
+    """README 的目录结构里点名的每个模块都必须真实存在。
+
+    这条是**实际踩到后补的**：README 的目录树一度还停在早期版本，
+    只列了部分模块、完全没提 Word 后端与后来新增的文件。
+    """
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    block = re.search(r"## 目录结构.*?```\n(.*?)```", readme, re.DOTALL)
+    assert block is not None, "README 里找不到目录结构代码块"
+    tree = block.group(1)
+    # 只取 src/docgen/ 那一段（到 tests/ 之前），避免把 tests 文件名与注释里的名字算进来
+    source_section = tree.split("tests/")[0].split("src/docgen/")[-1]
+    listed = set(re.findall(r"^\s*([a-z_]+\.py)\s", source_section, re.MULTILINE))
+    assert listed, "目录结构里没列出任何 .py 模块"
+    actual = {path.name for path in (ROOT / "src" / "docgen").rglob("*.py")}
+    missing = {name for name in listed if name not in actual}
+    assert not missing, f"README 列了不存在的模块: {sorted(missing)}"
+    # 反向：核心模块不能漏（漏了就说明目录树过期了）
+    for core in ("cli.py", "output.py", "config.py", "ir.py", "validate.py", "docx.py", "ooxml.py"):
+        assert core in listed, f"README 目录结构漏了核心模块 {core}"
+
+
+def test_readme_mentions_shipped_documents() -> None:
+    """面向使用者的四份文档必须能从 README 找到入口。"""
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    for name in ("QUICKSTART.md", "LIMITATIONS.md", "FEEDBACK.md", "BRANCHING.md"):
+        assert name in readme, f"README 没有链接 {name}"
+
+
+def test_readme_describes_current_backends() -> None:
+    """README 必须同时描述两个后端——不能退回只讲 HTML 的旧版本。"""
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert ".docx" in readme and ".html" in readme
+    assert "ECMA-376" in readme, "应说明产出过官方 schema 校验"
+    # 不该再把"剪枝版"当成项目现状的主标题
+    assert not readme.startswith("# DocGen（剪枝版"), "标题还在用剪枝版的旧定位"
+
+
+def test_limitations_does_not_claim_unimplemented_for_shipped_feature() -> None:
+    """限制清单不能把**已实现**的功能写成"无/不支持"。
+
+    实测踩到：`[[toc]]` 早就能渲染成 Word 的 TOC 域（`_render_toc` + TOC 样式 +
+    updateFields），但限制清单里还写着「无目录（TOC）生成」。
+    """
+    from docgen.render.docx import _render_toc  # noqa: F401  （存在即已实现）
+
+    text = (ROOT / "LIMITATIONS.md").read_text(encoding="utf-8")
+    for pattern in ("无目录（TOC）生成", "无目录生成", "不支持目录"):
+        assert pattern not in text, f"限制清单把已实现的功能写成了限制: {pattern}"
 
 
 def _git_bash() -> str | None:
@@ -173,6 +249,88 @@ def test_shell_scripts_are_valid_bash() -> None:
             check=False,
         )
         assert result.returncode == 0, f"{name} 语法错误: {result.stderr}"
+
+
+# --------------------------------------------------------------------------
+# 仓库结构（只在有 .git 的检出里跑；打好的源码包里没有 .git）
+# --------------------------------------------------------------------------
+def _git(*args: str) -> str:
+    import subprocess
+
+    result = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, check=False)
+    return result.stdout.strip()
+
+
+def _git_available() -> bool:
+    return (ROOT / ".git").exists() and bool(_git("rev-parse", "--git-dir"))
+
+
+needs_git = pytest.mark.skipif(not _git_available(), reason="不是在 git 检出里运行")
+
+
+@needs_git
+def test_main_is_the_curated_release_line() -> None:
+    """发布线 `main` 是 8 个线性提交（squash 后的里程碑）。"""
+    assert _git("rev-list", "--count", "main") == "8"
+    assert _git("rev-list", "--merges", "--count", "main") == "0"
+
+
+@needs_git
+def test_dev_shares_history_with_main() -> None:
+    """`dev` 必须**从 `main` 展开**，否则 `git merge main` 会失败。
+
+    实测踩到：两条线各自 orphan，merge 报 `refusing to merge unrelated histories`。
+
+    判定：两条线必须有**共同祖先**（分叉点），且 `dev` 的根提交与 `main` 的根提交
+    相同——这才说明「dev 从 main 签出」。
+    不要断言 `main` 是 `dev` 的祖先：`dev` 可以已经领先（实测就因这个写法误报）。
+    """
+    assert _git("merge-base", "main", "dev"), "main 与 dev 没有共同祖先（历史无关）"
+    assert _git("rev-list", "--max-parents=0", "dev") == _git(
+        "rev-list", "--max-parents=0", "main"
+    ), "两条线的根提交不同（dev 不是从 main 签出的）"
+
+
+@needs_git
+def test_v01_tag_points_at_the_pruning_baseline() -> None:
+    """`v0.1` 必须指向**剪枝版基线**，而不是被相对位置搞错的别的提交。
+
+    实测踩到：用 `main~1` 定位，结果指向了第 7 条（标题缩进）而不是第 2 条剪枝版。
+    这里改用**内容特征**判断：剪枝版没有 Word 后端。
+    """
+    subject = _git("log", "-1", "--pretty=%s", "v0.1^{commit}")
+    assert "剪枝版 v0.1" in subject, f"v0.1 指向了: {subject}"
+    assert "docx.py" not in _git("ls-tree", "-r", "--name-only", "v0.1^{commit}")
+
+
+@needs_git
+def test_beta_tag_marks_a_commit_whose_version_is_beta() -> None:
+    """`v0.1.0b1` 必须打在一个**版本号确实是预发布**的提交上。
+
+    不要断言它等于某个分支的 tip：版本号可能在协作线上先 bump
+    （实测踩到：β 标签本该在 `dev`，却按"main 的 tip"去断言而失败）。
+    用内容判断更稳：该提交的 `pyproject.toml` 版本必须是 0.1.0b1。
+    """
+    version = _git("show", "v0.1.0b1^{commit}:pyproject.toml")
+    match = re.search(r'^version = "([^"]+)"', version, re.MULTILINE)
+    assert match is not None, "取不到 v0.1.0b1 指向提交的版本号"
+    assert match.group(1) == "0.1.0b1", f"β 标签指向的提交版本是 {match.group(1)}"
+    # 并且它必须落在**发布线或其协作线**上（不能是个孤儿提交）
+    reachable = _git("branch", "-a", "--contains", "v0.1.0b1^{commit}")
+    assert "main" in reachable or "dev" in reachable, f"β 标签不在任何分支的历史里: {reachable!r}"
+
+
+@needs_git
+def test_fine_grained_history_is_archived() -> None:
+    """细粒度开发历史要有归档 ref（否则策展后就找不到了）。
+
+    不写死条数——归档会随开发增长。
+    """
+    count = _git("rev-list", "--count", "history/fine-grained^{commit}")
+    assert count.isdigit() and int(count) >= 36, f"归档历史条数异常: {count}"
+    # 归档线必须含剪枝版基线之前的那种细粒度提交（抽查一条早期的）
+    subjects = _git("log", "--format=%s", "history/fine-grained^{commit}")
+    assert "初始化 docgen(e)骨架" in subjects
 
 
 def test_ci_workflow_is_tracked_in_repo() -> None:

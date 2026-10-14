@@ -131,11 +131,14 @@ def test_paragraph_text_is_present(tmp_path: Path) -> None:
 
 
 def test_first_line_indent_uses_chars(tmp_path: Path) -> None:
-    """首行缩进必须用 firstLineChars（字符单位），不用 firstLine。"""
+    """首行缩进必须用 ``w:ind@w:firstLineChars``（字符单位），不用 ``w:firstLine``。
+
+    注意：``firstLineChars`` 是 ``w:ind`` 的**属性**，在 schema 里没有同名子元素；
+    写成 ``<w:firstLineChars/>`` 会被 Word 忽略。
+    """
     document = _document_xml("正文段落\n", tmp_path)
-    assert "firstLineChars" in document
-    assert '<w:firstLineChars w:val="200"/>' in document
-    assert "<w:firstLine " not in document
+    assert '<w:ind w:firstLineChars="200"/>' in document
+    assert "firstLine=" not in document
 
 
 def test_page_break_marker(tmp_path: Path) -> None:
@@ -239,8 +242,10 @@ def test_formula_renders_as_omml(tmp_path: Path) -> None:
 
     document = _document_xml("$$\nE = mc^2\n$$\n", tmp_path)
     if find_xsl() is not None:
+        # 注意别拿 "mc" 当 OMML 的判据——公式内容里本来就有 ``E = mc^2``（原来是假阳性）
         assert "oMath" in document
-        assert "mc" in document
+        assert "<m:oMath" in document
+        assert 'xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"' in document
     else:
         assert "E = mc^2" in document  # 无 XSL 时降级成 LaTeX 文本
 

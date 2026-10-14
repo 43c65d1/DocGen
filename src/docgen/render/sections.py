@@ -68,6 +68,7 @@ def apply_sections(document: Any, sections: list[dict[str, Any]]) -> list[Any]:
         _apply_numbering(section, spec)
         _apply_cover(section, spec)
         _apply_header_footer(section, spec)
+        _drop_rsids(section)
         handled.append(section)
     return handled
 
@@ -98,8 +99,9 @@ def _apply_page(section: Any, spec: dict[str, Any]) -> None:
 
 def _apply_numbering(section: Any, spec: dict[str, Any]) -> None:
     """页码：``w:pgNumType``（格式 + 可选重启）+ 页脚里的 PAGE 域。"""
-    from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
+
+    from .ooxml import insert_child
 
     numbering = spec.get("numbering")
     numbering = numbering if isinstance(numbering, dict) else {}
@@ -108,29 +110,39 @@ def _apply_numbering(section: Any, spec: dict[str, Any]) -> None:
     if not fmt and start is None:
         return
 
-    sect_pr = section._sectPr
-    element = sect_pr.find(qn("w:pgNumType"))
-    if element is None:
-        element = OxmlElement("w:pgNumType")
-        sect_pr.append(element)
+    attributes: dict[str, str] = {}
     if fmt:
-        element.set(qn("w:fmt"), fmt)
+        attributes["w:fmt"] = fmt
     if start is not None:
-        element.set(qn("w:start"), str(int(start)))
+        attributes["w:start"] = str(int(start))
+    # 必须按 schema 顺序插入：``w:pgNumType`` 要排在 ``w:cols`` / ``w:docGrid`` 之前
+    insert_child(section._sectPr, "w:pgNumType", **attributes)
+    assert section._sectPr.find(qn("w:pgNumType")) is not None
 
 
 def _apply_cover(section: Any, spec: dict[str, Any]) -> None:
-    """封面：页面垂直居中（走 ``sectPr`` 的 ``w:vAlign``，不是段落 spacing）。"""
-    from .ooxml import make_section_v_align
+    """页面垂直对齐：**每节显式设置**，不依赖「上一节留下的值」。
 
-    if not spec.get("cover"):
-        return
-    sect_pr = section._sectPr
+    ``cover = true`` → ``w:vAlign val="center"``；否则显式写 ``val="top"``。
+
+    **为什么显式**：python-docx 的 ``add_section`` 会克隆上一节的 ``sectPr``，
+    所以「非封面节只删除 vAlign」是隐含依赖——依赖克隆行为、也依赖删除时机，
+    真正的意图是「这一节是否垂直居中」，直接写出来最清楚。
+    ``w:vAlign`` 在 schema 里排在 ``w:docGrid`` **之前**，所以用 ``insert_child`` 而非 append。
+    """
+    from .ooxml import insert_child
+
+    value = "center" if spec.get("cover") else "top"
+    insert_child(section._sectPr, "w:vAlign", **{"w:val": value})
+
+
+def _drop_rsids(section: Any) -> None:
+    """清掉母版带来的 ``w:rsid*``：修订标记对生成文档没有意义，还会让产出不稳定。"""
     from docx.oxml.ns import qn
 
-    if sect_pr.find(qn("w:vAlign")) is not None:
-        return
-    sect_pr.append(make_section_v_align("center"))
+    sect_pr = section._sectPr
+    for attribute in ("w:rsidR", "w:rsidRPr", "w:rsidSect", "w:rsidDel"):
+        sect_pr.attrib.pop(qn(attribute), None)
 
 
 def _apply_header_footer(section: Any, spec: dict[str, Any]) -> None:

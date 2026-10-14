@@ -21,11 +21,22 @@ font.color = "2E5395"
 font.size = "@document.font.size"
 first_line_chars = 200
 
+# 内置样式名：Markdown 语法产出的就是这几个名字，不声明就没有格式
+# （**粗体** → strong、*斜体* → em、~~删除~~ → strike、E=mc^2^ → sup、H~2~O → sub）
 [styles.strong]
 font.bold = true
 
 [styles.em]
 font.italic = true
+
+[styles.strike]
+font.strike = true
+
+[styles.sup]
+font.size = "8pt"
+
+[styles.sub]
+font.size = "8pt"
 
 [styles.keyword]
 font.color = "0000FF"
@@ -43,7 +54,7 @@ background = "F5F5F5"
 border = "CCCCCC"
 
 [code_block.python]
-font.color = "004400"
+font.color = "00F4F0"
 
 # ── 表格（W4）──────────────────────────────────────────
 [table]

@@ -17,6 +17,8 @@ import io
 from pathlib import Path
 from typing import Any
 
+from docx.oxml import OxmlElement
+
 from ..config import Config, build_style_table
 from ..ir import (
     BlockNode,
@@ -53,6 +55,7 @@ from .ooxml import (
     append_text,
     apply_font,
     apply_three_line_borders,
+    clean_document_xml,
     drop_empty_runs,
     length_from_text,
     make_bookmark_end,
@@ -73,6 +76,7 @@ from .ooxml import (
     set_paragraph_shading,
     set_paragraph_spacing,
     set_table_borders,
+    set_table_width,
 )
 from .template import create_document
 
@@ -91,11 +95,11 @@ def render_docx(
     template: Path | None = None,
     base_dir: Path | None = None,
 ) -> Path:
-    """渲染为 ``.docx`` 文件，返回写入路径（有脚注时注入 ``word/footnotes.xml``）。"""
-    document, footnotes = _build_document(blocks, config, template, base_dir)
-    from .footnotes import save_with_footnotes
-
-    return save_with_footnotes(document, output, footnotes)
+    """渲染为 ``.docx`` 文件，返回写入路径。"""
+    data = render_docx_bytes(blocks, config, template, base_dir)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_bytes(data)
+    return output
 
 
 def render_docx_bytes(
@@ -104,14 +108,39 @@ def render_docx_bytes(
     template: Path | None = None,
     base_dir: Path | None = None,
 ) -> bytes:
-    """渲染到内存（测试用，避免落盘）。"""
+    """渲染到内存（测试用，避免落盘）。
+
+    收尾顺序：存盘 → 删 ``stylesWithEffects`` 部件 → 清理多余的命名空间声明
+    → 注入脚注部件。
+    """
     from .footnotes import inject_footnotes
+    from .template import _strip_effects_part
 
     document, footnotes = _build_document(blocks, config, template, base_dir)
     buffer = io.BytesIO()
     document.save(buffer)
     data = buffer.getvalue()
+    drop_part = getattr(document, "_docgen_drop_part", "")
+    if drop_part:
+        data = _strip_effects_part(data, drop_part)
+    data = _rewrite_zips_part(data, "word/document.xml", clean_document_xml)
     return inject_footnotes(data, footnotes) if footnotes else data
+
+
+def _rewrite_zips_part(data: bytes, name: str, transform: Any) -> bytes:
+    """把 zip 里某个部件的字节替换成 ``transform(旧字节)``。"""
+    import zipfile
+
+    source = zipfile.ZipFile(io.BytesIO(data))
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as target:
+        for item in source.infolist():
+            payload = source.read(item.filename)
+            if item.filename == name:
+                payload = transform(payload)
+            target.writestr(item, payload)
+    source.close()
+    return buffer.getvalue()
 
 
 def _build_document(
@@ -130,6 +159,7 @@ def _build_document(
     )
     _render_blocks(state, blocks)
     _ensure_update_fields(document)
+    _normalise_root(document)
     return document, state.footnotes
 
 
@@ -140,6 +170,13 @@ def _apply_sections(document: Any, config: Config) -> list[Any]:
     raw = config.extra.get("sections")
     specs = [item for item in raw if isinstance(item, dict)] if isinstance(raw, list) else []
     return apply_sections(document, specs)
+
+
+def _normalise_root(document: Any) -> list[str]:
+    """渲染完成后整理根元素的命名空间声明（见 ``normalise_document_root``）。"""
+    from .ooxml import normalise_document_root
+
+    return normalise_document_root(document)
 
 
 class _RenderState:
@@ -339,8 +376,18 @@ def _add_picture(state: _RenderState, paragraph: Any, src: str, width: str = "")
 
 
 def _render_thematic_break(state: _RenderState) -> None:
-    """分隔线：用一串破折号表示（Word 的 ``w:pBdr`` 也行，但这样更稳）。"""
-    state.document.add_paragraph("———" * 8)
+    """``---`` 分隔线：写**段落底边框**，不要输出一长串破折号。
+
+    以前输出 ``"———" * 8``，产物里就是一行字面破折号——复制、检索、换字号都成问题。
+    正确做法是空段落 + ``w:pBdr/w:bottom``（Word 会把边框画满正文宽度）。
+    线段样式取 ``[document] hr.style`` / ``hr.color`` / ``hr.size``，缺省单实线。
+    """
+    paragraph = state.document.add_paragraph()
+    set_paragraph_spacing(paragraph, before_points=6, after_points=6)
+    style = str(state.config.setting("hr.style", "single")) or "single"
+    color = str(state.config.setting("hr.color", "auto")) or "auto"
+    size = str(state.config.setting("hr.size", "6")) or "6"
+    set_paragraph_border(paragraph, "bottom", style=style, size=size, color=color)
 
 
 def _render_page_break(state: _RenderState) -> None:
@@ -512,24 +559,59 @@ def _render_table(state: _RenderState, block: Table) -> None:
 
     properties = _table_properties(state)
     columns = max(len(row) for row in block.rows)
+    # 先按正确列数建表：python-docx 的 ``add_table(rows, cols)`` 会为每行建 cols 个 ``w:tc``
+    # （``cols`` 影响的是行内单元格，不是 ``tblGrid``），再确保 ``tblGrid`` 列数与之一致
     table = state.document.add_table(rows=len(block.rows), cols=columns)
+    _fit_grid(table, columns)
     if properties.get("borders", "grid") == "grid":
         table.style = "Table Grid"
 
     widths = _column_widths(properties, columns, state)
+    set_table_width(table, widths)
     for row_index, row in enumerate(block.rows):
         for column_index in range(columns):
-            text = row[column_index] if column_index < len(row) else ""
             cell = table.cell(row_index, column_index)
             drop_empty_runs(cell.paragraphs[0])
-            run = cell.paragraphs[0].add_run(text)
+            nodes = _cell_nodes(block, row_index, column_index)
+            if nodes:
+                # 有行内 IR 就渲染它：单元格里的粗体/代码/公式/链接都要保留
+                _render_inlines(state, cell.paragraphs[0], nodes, None)
+            else:
+                text = row[column_index] if column_index < len(row) else ""
+                run = cell.paragraphs[0].add_run(text)
+                if row_index == 0:
+                    run.bold = True
             if row_index == 0:
-                run.bold = True
+                for run in cell.paragraphs[0].runs:
+                    run.bold = True
             _apply_cell_format(cell, widths[column_index], _column_alignment(block, column_index))
         if row_index == 0 and bool(properties.get("header_repeat", True)):
             repeat_table_header(table.rows[0])
 
     _apply_table_borders(table, properties, header_rows=1)
+
+
+def _cell_nodes(block: Table, row: int, column: int) -> list[InlineNode]:
+    """取单元格的行内 IR；没有则返回空列表（调用方回退纯文本）。"""
+    if row < len(block.cell_nodes) and column < len(block.cell_nodes[row]):
+        return block.cell_nodes[row][column]
+    return []
+
+
+def _fit_grid(table: Any, columns: int) -> int:
+    """把 ``w:tblGrid`` 的列数对齐到 ``columns``，返回实际列数。"""
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    grid = table._tbl.find(qn("w:tblGrid"))
+    if grid is None:
+        grid = OxmlElement("w:tblGrid")
+        table._tbl.insert(1, grid)
+    while len(grid.findall(qn("w:gridCol"))) < columns:
+        grid.append(OxmlElement("w:gridCol"))
+    for extra in grid.findall(qn("w:gridCol"))[columns:]:
+        grid.remove(extra)
+    return columns
 
 
 def _render_cell_table(state: _RenderState, block: Table) -> None:
@@ -540,9 +622,12 @@ def _render_cell_table(state: _RenderState, block: Table) -> None:
     if not columns:
         return
     table = state.document.add_table(rows=len(rows), cols=columns)
+    _fit_grid(table, columns)
     if properties.get("borders", "grid") == "grid":
         table.style = "Table Grid"
 
+    widths = _column_widths(properties, columns, state)
+    set_table_width(table, widths)
     for row_index, row in enumerate(rows):
         column_index = 0
         for cell_spec in row:
@@ -595,7 +680,11 @@ def _table_properties(state: _RenderState) -> dict[str, Any]:
 
 
 def _column_widths(properties: dict[str, Any], columns: int, state: _RenderState) -> list[int]:
-    """列宽：``[table] col_widths`` 给出相对比例；否则按内容平均分配。"""
+    """列宽（twips）：``[table] col_widths`` 给出相对比例；否则平均分。
+
+    总和**必须**落在正文可用宽度内（页面宽 - 左右页边距），否则表格会超出页面——
+    Word 与 LibreOffice 的表现不同，容易在渲染核对时才发现。
+    """
     total = page_content_width(state.document)
     ratios = properties.get("col_widths")
     if (
@@ -604,7 +693,10 @@ def _column_widths(properties: dict[str, Any], columns: int, state: _RenderState
         and all(isinstance(item, (int, float)) and item > 0 for item in ratios)
     ):
         weight_sum = float(sum(ratios))
-        return [int(total * float(item) / weight_sum) for item in ratios]
+        widths = [int(total * float(item) / weight_sum) for item in ratios]
+        # 取整误差可能让总和略超，最后一列吸收掉
+        widths[-1] = max(1, widths[-1] - (sum(widths) - total))
+        return widths
     return [total // columns] * columns
 
 
@@ -681,12 +773,42 @@ def _render_inline(
     elif isinstance(node, Styled):
         _render_styled(state, paragraph, node, context_style)
     elif isinstance(node, Link):
-        start = len(paragraph.runs)
-        _render_inlines(state, paragraph, node.content, context_style)
-        for run in paragraph.runs[start:]:
-            run.font.underline = True
+        _render_link(state, paragraph, node, context_style)
     elif isinstance(node, Image):
         _add_picture(state, paragraph, node.src)
+
+
+def _render_link(
+    state: _RenderState,
+    paragraph: Any,
+    node: Link,
+    context_style: str | None,
+) -> None:
+    """``[文字](url)`` → 真正的 Word 超链接（关系项 + ``w:hyperlink``），不是只加下划线。"""
+    from .ooxml import wrap_external_hyperlink
+
+    start = len(paragraph._p)
+    _render_inlines(state, paragraph, node.content, context_style)
+    if not node.url:
+        for run in paragraph.runs:
+            run.font.underline = True
+        return
+    hyperlink = wrap_external_hyperlink(state.document.part, paragraph, node.url, start)
+    for run in hyperlink.findall(f"{_W_NS}r"):
+        rpr = run.find(f"{_W_NS}rPr")
+        if rpr is None:
+            rpr = OxmlElement("w:rPr")
+            run.insert(0, rpr)
+        color = rpr.find(f"{_W_NS}color")
+        if color is None:
+            color = OxmlElement("w:color")
+            rpr.append(color)
+        color.set(f"{_W_NS}val", "0563C1")  # Word 默认超链接蓝
+        underline = rpr.find(f"{_W_NS}u")
+        if underline is None:
+            underline = OxmlElement("w:u")
+            rpr.append(underline)
+        underline.set(f"{_W_NS}val", "single")
 
 
 def _render_styled(
@@ -704,14 +826,24 @@ def _render_styled(
     start = len(paragraph.runs)
     _render_inlines(state, paragraph, node.content, context_style or None)
 
-    if node.style_name in ("sup", "sub"):
-        for run in paragraph.runs[start:]:
-            run.font.superscript = node.style_name == "sup"
-            run.font.subscript = node.style_name == "sub"
-        return
     if properties:
         for run in paragraph.runs[start:]:
             _apply_run_style(state, run, properties)
+    if node.style_name in ("sup", "sub"):
+        # 上下标与 config 样式**都要生效**：以前这里提前 return，config 里的
+        # [styles.sup] / [styles.sub]（如字号）会被整段丢掉（实测踩到）
+        for run in paragraph.runs[start:]:
+            _set_vertical_align(run, "superscript" if node.style_name == "sup" else "subscript")
+
+
+def _set_vertical_align(run: Any, value: str) -> None:
+    """写 ``w:vertAlign``（上下标）；``w:sz`` 的缩放由 Word 自己处理。"""
+    from docx.oxml.ns import qn
+
+    from .ooxml import insert_child
+
+    insert_child(run._element.get_or_add_rPr(), "w:vertAlign", **{"w:val": value})
+    assert run._element.find(qn("w:rPr")) is not None
 
 
 def _add_text_run(
@@ -742,6 +874,7 @@ def _apply_run_style(state: _RenderState, run: Any, properties: dict[str, Any]) 
     bold = font.get("bold", properties.get("font.bold"))
     italic = font.get("italic", properties.get("font.italic"))
     strike = properties.get("strike", font.get("strike"))
+    underline = font.get("underline", properties.get("font.underline"))
 
     apply_font(
         run,
@@ -751,6 +884,7 @@ def _apply_run_style(state: _RenderState, run: Any, properties: dict[str, Any]) 
         italic=bool(italic) if italic is not None else None,
         strike=bool(strike) if strike is not None else None,
         color=str(color) if color else None,
+        underline=bool(underline) if underline is not None else None,
     )
 
 
@@ -768,12 +902,19 @@ def _render_math_inline(state: _RenderState, paragraph: Any, latex: str) -> None
 
 
 def _code_properties(state: _RenderState, language: str) -> dict[str, Any]:
+    """代码块样式：base ``[code_block]`` 与语言变体 ``[code_block.<lang>]`` **深合并**。
+
+    必须深合并：两者都可能带嵌套表（``font.color`` / ``font.name``），
+    浅合并会让变体的 ``font.color`` 被 base 的 ``font`` 整个覆盖掉。
+    """
+    from ..config import deep_merge
+
     properties = dict(state.styles.get("code_block", {}))
     language = language.strip()
     if language:
         variant = state.styles.get(f"code_block.{language}")
         if variant:
-            properties.update(variant)
+            properties = deep_merge(properties, variant)
     return properties
 
 

@@ -72,6 +72,32 @@ class Config:
     extra: Table = field(default_factory=dict)
     raw: Table = field(default_factory=dict, repr=False)
 
+    def setting(self, key: str, default: Any = None) -> Any:
+        """按点号路径取设置，**同时支持**扁平键与嵌套表两种写法。
+
+        ``document.setting("hr.style")`` 对下面两种 config 都成立：
+
+        ```toml
+        [document]
+        hr.style = "double"     # 扁平点号键
+        ```
+        ```toml
+        [document.hr]
+        style = "double"        # 嵌套表
+        ```
+
+        ``[document]`` 里的点号键**不会**被展开成嵌套表（只有样式属性会），
+        所以取值必须两条路径都试——否则 `hr.style = "double"` 会被静默忽略。
+        """
+        if key in self.document:
+            return self.document[key]
+        current: Any = self.document
+        for part in key.split("."):
+            if not isinstance(current, dict) or part not in current:
+                return default
+            current = current[part]
+        return current
+
 
 class _LinkError(Exception):
     """config 内部错误：在 :func:`build_style_table` 边界统一转成 ``DocGenError``。"""
@@ -203,14 +229,43 @@ def _styles_of(merged: Table) -> dict[str, Style]:
     return styles
 
 
+def deep_merge(base: Properties, override: Properties) -> Properties:
+    """递归合并样式属性：嵌套表（``font.color`` 展开成 ``{"font": {...}}``）逐层合并。
+
+    浅合并（``dict.update``）会让 ``[code_block]`` 的 ``font`` 整个盖掉
+    ``[code_block.python]`` 的 ``font.color``——**配置看起来没生效**（实测踩到）。
+    """
+    merged: Properties = dict(base)
+    for key, value in override.items():
+        current = merged.get(key)
+        if isinstance(current, dict) and isinstance(value, dict):
+            merged[key] = deep_merge(current, value)
+        else:
+            merged[key] = value
+    return merged
+
+
+#: ``[code_block]`` 下属于「基座配置」的子命名空间（点号键展开后会变成嵌套表）。
+#: 例如 ``font.name = "Consolas"`` 解析成 ``code_block.font``——它**不是**语言变体。
+_CODE_BLOCK_SUBNAMESPACES = frozenset({"font", "spacing", "border", "background", "shading"})
+
+
 def _code_blocks_of(merged: Table) -> tuple[Properties, dict[str, Properties]]:
-    """把 ``[code_block]`` 拆成「标量属性」与「语言变体子表」。"""
+    """把 ``[code_block]`` 拆成「基座属性」与「语言变体子表」。
+
+    判据不能是「值是不是表」——点号键（``font.name``）展开后也是表，
+    曾被误判成语言 ``font``，导致基座的字体/字号凭空丢失（实测踩到）。
+    """
     namespace = _table(merged.get("code_block"))
-    base = {key: value for key, value in namespace.items() if not isinstance(value, dict)}
+    base = {
+        key: value
+        for key, value in namespace.items()
+        if not isinstance(value, dict) or key in _CODE_BLOCK_SUBNAMESPACES
+    }
     languages = {
         str(key): {k: v for k, v in value.items()}
         for key, value in namespace.items()
-        if isinstance(value, dict)
+        if isinstance(value, dict) and key not in _CODE_BLOCK_SUBNAMESPACES
     }
     return base, languages
 
@@ -221,14 +276,21 @@ def _code_blocks_of(merged: Table) -> tuple[Properties, dict[str, Properties]]:
 def build_style_table(config: Config) -> dict[str, Properties]:
     """把 config 展开成「最终值」符号表：先算继承链，再解析 ``@ref``。
 
-    返回结构以样式名为键、最终属性为值，按样式名排序（确定性输出），包含
-    ``[styles.*]``、``code_block`` 与每个 ``code_block.<lang>``。
+    返回结构以样式名为键、最终属性为值（确定性顺序），包含 ``[styles.*]``、
+    ``document``、``code_block`` 与每个语言变体 ``code_block.<lang>``。
+
+    语言变体**必须键名为** ``code_block.<lang>``：渲染层按这个名字查
+    （``state.styles["code_block.python"]``），以前登记成裸 ``python`` 导致
+    ``[code_block.python]`` 的配置永远读不到（实测踩到）。
     """
     renumbered, symbols = _expand(config)
     try:
+        styles = {name: _resolve_properties(renumbered[name], symbols) for name in renumbered}
+        for language in config.code_blocks:
+            styles[f"code_block.{language}"] = styles.pop(language)
         table: dict[str, Properties] = {
             "document": _resolve_properties(config.document, symbols),
-            **{name: _resolve_properties(renumbered[name], symbols) for name in sorted(renumbered)},
+            **{name: styles[name] for name in sorted(styles)},
         }
     except _LinkError as err:
         raise DocGenError(err.code, err.message) from None

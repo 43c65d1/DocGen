@@ -72,14 +72,22 @@ def property_to_css(name: str) -> str:
 
 
 def declarations(properties: dict[str, Any]) -> list[tuple[str, str]]:
-    """把样式属性转成有序的 CSS 声明（跳过空值与内部键）。"""
+    """把样式属性转成有序的 CSS 声明（跳过空值、内部键与 Word 专用的嵌套表）。
+
+    ``font`` / ``font.*`` 是 **Word 口径**的嵌套属性（``font.bold`` 展开成
+    ``{"font": {"bold": true}}``）；CSS 对应物是 ``font-weight`` / ``font-style`` 这类
+    扁平键。嵌套表直接转字符串会产出 ``font: {'bold': True}`` 这种废声明（实测踩到），
+    所以这里整段跳过——想要 HTML 生效就在 config 里同时写扁平键。
+    """
     result: list[tuple[str, str]] = []
     for key in sorted(properties):
-        if key == "based_on":
+        if key == "based_on" or key == "font" or key.startswith("font."):
             continue
         value = properties[key]
         if value is None or value is False or value == "":
             continue
+        if isinstance(value, dict):
+            continue  # 其它嵌套命名空间（如 table/image）也不属于 CSS
         result.append((property_to_css(key), _css_value(value)))
     return result
 

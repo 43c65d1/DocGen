@@ -415,6 +415,8 @@ def _table(tokens: list[Token], start: int, end: int) -> tuple[Table, int]:
     open_token = tokens[start]
     rows: list[list[str]] = []
     row: list[str] = []
+    cell_nodes: list[list[list[InlineNode]]] = []
+    nodes_row: list[list[InlineNode]] = []
     row_alignments: list[str] = []
     alignments: list[str] = []
     i = start
@@ -423,24 +425,41 @@ def _table(tokens: list[Token], start: int, end: int) -> tuple[Table, int]:
         token = tokens[i]
         if token.type == "table_close":
             return (
-                Table(rows=rows, source_line=_line_of(open_token), alignments=alignments),
+                Table(
+                    rows=rows,
+                    source_line=_line_of(open_token),
+                    alignments=alignments,
+                    cell_nodes=cell_nodes,
+                ),
                 i + 1,
             )
         if token.type == "tr_open":
             row = []
+            nodes_row = []
             row_alignments = []
         elif token.type == "tr_close":
             rows.append(row)
+            cell_nodes.append(nodes_row)
             if not alignments and any(row_alignments):
                 alignments = list(row_alignments)
         elif token.type in ("th_open", "td_open"):
             inline = tokens[i + 1] if i + 1 < end else None
             row.append(_cell_text(inline))
+            # 同时保留行内 IR：单元格里的粗体/代码/公式不能被拍平
+            nodes_row.append(_inline_to_ir(inline.children or []) if inline else [])
             if token.type == "th_open":
                 row_alignments.append(_alignment_of(_attr(token, "style")))
         i += 1
 
-    return Table(rows=rows, source_line=_line_of(open_token), alignments=alignments), i
+    return (
+        Table(
+            rows=rows,
+            source_line=_line_of(open_token),
+            alignments=alignments,
+            cell_nodes=cell_nodes,
+        ),
+        i,
+    )
 
 
 def _alignment_of(css_style: str) -> str:

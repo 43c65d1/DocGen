@@ -160,7 +160,29 @@ def test_thematic_break() -> None:
 
 
 def test_table_rows() -> None:
-    assert _full_blocks()[8] == Table(source_line=24, rows=[["列 A", "列 B"], ["a1", "b1"]])
+    """表格同时保留纯文本行与**行内 IR**（后者让单元格里的格式不丢）。"""
+    table = _full_blocks()[8]
+    assert isinstance(table, Table)
+    assert table.source_line == 24
+    assert table.rows == [["列 A", "列 B"], ["a1", "b1"]]
+    assert table.cell_nodes == [
+        [[Text("列 A")], [Text("列 B")]],
+        [[Text("a1")], [Text("b1")]],
+    ]
+
+
+def test_table_cell_keeps_inline_formatting() -> None:
+    """回归：单元格里的粗体 / 代码不能被拍平成纯文本。
+
+    ``rows`` 仍是纯文本（``_cell_text`` 的结果），``cell_nodes`` 才带格式；
+    两者并存，前者给不支持富文本的路径用。
+    """
+    table = parse_dfm("| 语法 | 值 |\n| --- | --- |\n| **粗体** | `code` |\n")[0]
+    assert isinstance(table, Table)
+    assert table.rows[1] == ["粗体", "code"]
+    body = table.cell_nodes[1]
+    assert body[0] == [Styled(content=[Text("粗体")], style_name="strong")]
+    assert body[1] == [Code("code")]
 
 
 def test_block_math_becomes_formula() -> None:

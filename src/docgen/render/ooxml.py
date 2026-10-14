@@ -21,14 +21,18 @@ from docx.oxml.ns import qn
 from docx.shared import Length
 
 __all__ = [
+    "CHILD_ORDER",
     "FONT_ATTRS",
+    "HYPERLINK_RELATIONSHIP",
     "append_field",
     "append_omml",
     "append_text",
     "apply_font",
     "apply_three_line_borders",
+    "clean_document_xml",
     "drop_empty_runs",
     "heading_style_id",
+    "insert_child",
     "make_bookmark_end",
     "make_bookmark_start",
     "make_caption_field",
@@ -42,6 +46,7 @@ __all__ = [
     "make_update_fields",
     "merge_cell_horizontal",
     "merge_cell_vertical",
+    "normalise_document_root",
     "page_content_width",
     "repeat_table_header",
     "set_cell_alignment",
@@ -56,7 +61,9 @@ __all__ = [
     "set_style_outline_level",
     "set_table_borders",
     "set_table_cell_width",
+    "set_table_width",
     "set_vert_align",
+    "wrap_external_hyperlink",
 ]
 
 #: ``w:rFonts`` 的四个属性：少任何一个都会导致中英混排或西文回退
@@ -70,6 +77,146 @@ def _element(tag: str, **attributes: str) -> Any:
     return element
 
 
+#: 各容器的子元素**合法顺序**（OOXML 的属性容器是 ``xsd:sequence``：顺序错的位置会被忽略）。
+#: 这张表由 ``tests/schemas/ecma-376/wml.xsd`` 反推，并由 ``test_ooxml_schema.py`` 兜住，
+#: 不要凭记忆改。
+def _qnames(names: str) -> tuple[str, ...]:
+    """``"pStyle spacing ind"`` -> ``("w:pStyle", "w:spacing", "w:ind")``。"""
+    return tuple(f"w:{name}" for name in names.split())
+
+
+CHILD_ORDER: dict[str, tuple[str, ...]] = {
+    "w:pPr": _qnames(
+        "pStyle keepNext keepLines pageBreakBefore framePr widowControl numPr "
+        "suppressLineNumbers pBdr shd tabs suppressAutoHyphens kinsoku wordWrap "
+        "overflowPunct topLinePunct autoSpaceDE autoSpaceDN bidi adjustRightInd "
+        "snapToGrid spacing ind contextualSpacing mirrorIndents suppressOverlap jc "
+        "textDirection textAlignment textboxTightWrap outlineLvl divId cnfStyle rPr "
+        "sectPr pPrChange"
+    ),
+    "w:rPr": _qnames(
+        "rStyle rFonts b bCs i iCs caps smallCaps strike dstrike outline shadow emboss "
+        "imprint noProof snapToGrid vanish webHidden color spacing w kern position sz "
+        "szCs highlight u effect bdr shd fitText vertAlign rtl cs em lang "
+        "eastAsianLayout specVanish oMath"
+    ),
+    "w:sectPr": _qnames(
+        "footnotePr endnotePr type pgSz pgMar paperSrc pgBorders lnNumType pgNumType "
+        "cols formProt vAlign noEndnote titlePg textDirection bidi rtlGutter docGrid "
+        "printerSettings sectPrChange"
+    ),
+    "w:tblPr": _qnames(
+        "tblStyle tblpPr tblOverlap bidiVisual tblStyleRowBandSize tblStyleColBandSize "
+        "tblW jc tblCellSpacing tblInd tblBorders shd tblLayout tblCellMar tblLook "
+        "tblCaption tblDescription tblPrChange"
+    ),
+    "w:tcPr": _qnames(
+        "cnfStyle tcW gridSpan hMerge vMerge tcBorders shd noWrap tcMar textDirection "
+        "tcFitText vAlign hideMark"
+    ),
+    # 框线：``top`` 在 ``left`` 之前、``insideH`` 在最后（schema 如此，别按“上下左右”写）
+    "w:tblBorders": _qnames("top start left bottom end right insideH insideV"),
+    "w:tcBorders": _qnames("top start left bottom end right insideH insideV"),
+    "w:pBdr": _qnames("top left bottom right between bar"),
+}
+
+
+def insert_child(parent: Any, name: str, **attributes: str) -> Any:
+    """按 schema 顺序把 ``name`` 插到 ``parent`` 里（已存在则返回并补属性）。
+
+    所有「加一条属性」的操作都应走这里而不是 ``append``，
+    否则元素落在 sequence 的错误位置、被 Word 静默忽略。
+    """
+    existing = parent.find(qn(name))
+    if existing is not None:
+        for attribute, value in attributes.items():
+            existing.set(qn(attribute), value)
+        return existing
+
+    element = _element(name, **attributes)
+    order = CHILD_ORDER.get(_local_name(parent))
+    if order is None or name not in order:
+        parent.append(element)
+        return element
+
+    rank = order.index(name)
+    for index, child in enumerate(parent):
+        child_name = _local_name(child)
+        child_rank = order.index(child_name) if child_name in order else rank
+        if child_rank > rank:
+            parent.insert(index, element)
+            return element
+    parent.append(element)
+    return element
+
+
+def _local_name(element: Any) -> str:
+    tag = str(element.tag)
+    return "w:" + tag.split("}")[-1] if "}" in tag else tag
+
+
+#: 根元素上``xmlns:`` 声明 -> 该前缀的命名空间 URI（用于清理未使用的声明）
+_KNOWN_PREFIXES = {
+    "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+    "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+    "m": "http://schemas.openxmlformats.org/officeDocument/2006/math",
+    "wp": "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
+    "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
+    "pic": "http://schemas.openxmlformats.org/drawingml/2006/picture",
+    "mc": "http://schemas.openxmlformats.org/markup-compatibility/2006",
+    "w14": "http://schemas.microsoft.com/office/word/2010/wordml",
+    "wp14": "http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing",
+    "v": "urn:schemas-microsoft-com:vml",
+    "o": "urn:schemas-microsoft-com:office:office",
+    "w10": "urn:schemas-microsoft-com:office:word",
+    "wne": "http://schemas.microsoft.com/office/word/2006/wordml",
+    "wpc": "http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas",
+    "wpg": "http://schemas.microsoft.com/office/word/2010/wordprocessingGroup",
+    "wpi": "http://schemas.microsoft.com/office/word/2010/wordprocessingInk",
+    "wps": "http://schemas.microsoft.com/office/word/2010/wordprocessingShape",
+    "mo": "http://schemas.microsoft.com/office/mac/office/2008/main",
+    "mv": "urn:schemas-microsoft-com:mac:vml",
+}
+
+
+def normalise_document_root(document: Any) -> list[str]:
+    """去掉根元素上的 ``mc:Ignorable``（Markup Compatibility 机制）。
+
+    默认模板会写 ``mc:Ignorable="w14 wp14"``——那要求消费者实现 mc 处理，
+    严格 schema 校验会直接报「属性不允许」。未使用的**命名空间声明**由
+    :func:`clean_document_xml` 在序列化后按字节清掉（lxml 的 ``nsmap`` 删除是空操作）。
+    """
+    root = document._element
+    ignorable = "{" + _KNOWN_PREFIXES["mc"] + "}Ignorable"
+    if root.get(ignorable) is None:
+        return []
+    del root.attrib[ignorable]
+    return ["mc:Ignorable"]
+
+
+def clean_document_xml(data: bytes) -> bytes:
+    """从 ``document.xml`` 里删掉**未被引用**的命名空间声明。
+
+    lxml 会在根元素上原样保留模板带来的 ``v``/``o``/``w10``/``wps``/``wp14``… 声明
+    （``nsmap`` 删除不生效），但它们对应的前缀在文档里根本没用到——
+    对严格 schema 校验是无意义噪声，也会让产物不稳定。这里按字节清理。
+
+    判据必须是**真正用到的前缀**，且要覆盖三种写法：
+    元素名（``<w:p>``）、属性名（``r:id``，lxml 会把它变成完整 URI，必须从**原始文本**看）、
+    属性值（``w:val`` 之类一般不需要，但一并兜住）。
+    不能拿 URI 做子串计数——``xmlns:w14`` 的值里就含 ``w`` 的 URI（实测踩到）。
+    """
+    text = data.decode("utf-8")
+    for prefix, uri in _KNOWN_PREFIXES.items():
+        declaration = f'xmlns:{prefix}="{uri}"'
+        if declaration not in text:
+            continue
+        if f"<{prefix}:" in text or f" {prefix}:" in text or f'"{prefix}:' in text:
+            continue
+        text = text.replace(f" {declaration}", "")
+    return text.encode("utf-8")
+
+
 def apply_font(
     run: Any,
     name: str | None = None,
@@ -80,6 +227,7 @@ def apply_font(
     italic: bool | None = None,
     strike: bool | None = None,
     color: str | None = None,
+    underline: bool | None = None,
     superscript: bool | None = None,
     subscript: bool | None = None,
 ) -> None:
@@ -103,6 +251,10 @@ def apply_font(
         run.font.strike = strike
     if color is not None:
         set_run_color(run, color)
+    if underline is not None:
+        insert_child(
+            run._element.get_or_add_rPr(), "w:u", **{"w:val": "single" if underline else "none"}
+        )
     if superscript is not None:
         run.font.superscript = superscript
     if subscript is not None:
@@ -146,16 +298,22 @@ def set_paragraph_spacing(
     before_lines: int | None = None,
     after_lines: int | None = None,
 ) -> None:
-    """段前段后：优先用 ``beforeLines``/``afterLines``（行单位），与钉住的排版细则一致。"""
+    """段前段后：优先用 ``beforeLines``/``afterLines``（行单位），与钉住的排版细则一致。
+
+    ``beforeLines`` / ``afterLines`` 都是 ``w:spacing`` 的**属性**（顺序也在 ``w:ind`` 之前）。
+    """
     pf = paragraph.paragraph_format
     if before_points is not None:
         pf.space_before = _points(before_points)
     if after_points is not None:
         pf.space_after = _points(after_points)
-    if before_lines is not None:
-        _set_pf_child(paragraph, "w:beforeLines", str(before_lines * 100))
-    if after_lines is not None:
-        _set_pf_child(paragraph, "w:afterLines", str(after_lines * 100))
+    if before_lines is not None or after_lines is not None or line_spacing is not None:
+        ppr = paragraph._p.get_or_add_pPr()
+        spacing = insert_child(ppr, "w:spacing")
+        if before_lines is not None:
+            spacing.set(qn("w:beforeLines"), str(before_lines * 100))
+        if after_lines is not None:
+            spacing.set(qn("w:afterLines"), str(after_lines * 100))
     if line_spacing is not None:
         pf.line_spacing = line_spacing
 
@@ -166,20 +324,21 @@ def set_paragraph_indent(
     first_line_chars: int | None = None,
     left_chars: int | None = None,
 ) -> None:
-    """首行缩进用 ``firstLineChars``（字符单位，200 = 2 字符），不用 ``firstLine``。"""
+    """首行缩进用 ``firstLineChars``（字符单位，200 = 2 字符），不用 ``firstLine``。
+
+    两个属性都挂在 ``w:ind`` 上，**属性名不同**（``w:firstLineChars`` / ``w:leftChars``），
+    别写成 ``w:val``。``w:ind`` 在 schema 里排在 ``w:spacing`` 之后、``w:jc`` 之前。
+    """
     if first_line_chars is not None:
-        _set_pf_child(paragraph, "w:firstLineChars", str(first_line_chars))
+        _set_indent_child(paragraph, "w:firstLineChars", str(first_line_chars))
     if left_chars is not None:
-        _set_pf_child(paragraph, "w:leftChars", str(left_chars * 100))
+        _set_indent_child(paragraph, "w:leftChars", str(left_chars * 100))
 
 
-def _set_pf_child(paragraph: Any, tag: str, value: str) -> None:
+def _set_indent_child(paragraph: Any, attribute: str, value: str) -> None:
     ppr = paragraph._p.get_or_add_pPr()
-    element = ppr.find(qn(tag))
-    if element is None:
-        element = OxmlElement(tag)
-        ppr.append(element)
-    element.set(qn("w:val"), value)
+    indent = insert_child(ppr, "w:ind")
+    indent.set(qn(attribute), value)
 
 
 def _points(value: float) -> Any:
@@ -193,32 +352,31 @@ def set_paragraph_shading(
 ) -> None:
     """段落底纹（代码块背景）：``<w:shd w:val="clear" w:fill="F5F5F5"/>``。"""
     ppr = paragraph._p.get_or_add_pPr()
-    shading = ppr.find(qn("w:shd"))
-    if shading is None:
-        shading = OxmlElement("w:shd")
-        ppr.append(shading)
-    shading.set(qn("w:val"), pattern)
-    shading.set(qn("w:color"), color)
+    shading = insert_child(ppr, "w:shd", **{"w:val": pattern, "w:color": color})
     shading.set(qn("w:fill"), fill.lstrip("#").upper())
+
+
+def _border_color(color: str) -> str:
+    """框线颜色：``auto`` 必须保持**小写**，其余转大写十六进制。
+
+    ``w:ST_HexColor`` 是「``auto`` 或 ``RRGGBB``」的联合类型——
+    写成 ``AUTO`` 会被 schema 判为非法值（实测被 ``test_ooxml_schema`` 抓到）。
+    """
+    text = color.lstrip("#")
+    return "auto" if text.lower() == "auto" else text.upper()
 
 
 def set_paragraph_border(
     paragraph: Any, edge: str, *, style: str = "single", size: str = "4", color: str = "CCCCCC"
 ) -> None:
-    """段落边框（代码块外框）：``edge`` 取 ``top``/``left``/``bottom``/``right``。"""
+    """段落边框（代码块外框 / 分隔线）：``edge`` 取 ``top``/``left``/``bottom``/``right``。"""
     ppr = paragraph._p.get_or_add_pPr()
-    borders = ppr.find(qn("w:pBdr"))
-    if borders is None:
-        borders = OxmlElement("w:pBdr")
-        ppr.append(borders)
-    element = borders.find(qn(f"w:{edge}"))
-    if element is None:
-        element = OxmlElement(f"w:{edge}")
-        borders.append(element)
+    borders = insert_child(ppr, "w:pBdr")
+    element = insert_child(borders, f"w:{edge}")
     element.set(qn("w:val"), style)
     element.set(qn("w:sz"), size)
     element.set(qn("w:space"), "4")
-    element.set(qn("w:color"), color.lstrip("#").upper())
+    element.set(qn("w:color"), _border_color(color))
 
 
 def append_omml(parent: Any, omml: str) -> bool:
@@ -246,27 +404,45 @@ def make_math_paragraph(paragraph: Any, omml: str, *, align: str = "center") -> 
     if not append_omml(paragraph, omml):
         return False
     ppr = paragraph._p.get_or_add_pPr()
-    jc = ppr.find(qn("w:jc"))
-    if jc is None:
-        jc = OxmlElement("w:jc")
-        ppr.append(jc)
-    jc.set(qn("w:val"), align)
+    insert_child(ppr, "w:jc", **{"w:val": align})
     return True
 
 
 def set_style_outline_level(style: Any, level: int) -> None:
     """标题样式必须带 ``w:outlineLvl``，否则导航窗格与 TOC 不认。"""
     ppr = style.element.get_or_add_pPr()
-    outline = ppr.find(qn("w:outlineLvl"))
-    if outline is None:
-        outline = OxmlElement("w:outlineLvl")
-        ppr.append(outline)
-    outline.set(qn("w:val"), str(level))
+    insert_child(ppr, "w:outlineLvl", **{"w:val": str(level)})
 
 
 def make_update_fields() -> Any:
     """``settings.xml`` 里的 ``<w:updateFields w:val="true"/>``：打开时自动更新域。"""
     return _element("w:updateFields", **{"w:val": "true"})
+
+
+#: 办公文档的超链接关系类型（Office 全系列用同一个 URI）
+HYPERLINK_RELATIONSHIP = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"
+)
+
+
+def wrap_external_hyperlink(part: Any, paragraph: Any, url: str, start: int) -> Any:
+    """把段落里从 ``start`` 起新增的 run 包进 ``<w:hyperlink>``，返回该元素。
+
+    超链接必须**同时**写两处，只加下划线只是视觉假象、点不动：
+
+    1. 关系项 ``word/_rels/document.xml.rels`` 登记 Target（外链带 ``TargetMode="External"``）
+    2. 正文里 ``<w:hyperlink r:id="rIdN">`` 引用它
+
+    ``start`` 是包裹前的 ``len(paragraph.runs)``。这些 run 成为 ``w:hyperlink`` 的
+    **子元素**后，``paragraph.runs`` 就不再把它们算进来（python-docx 只认直接子级）。
+    """
+    relation_id = part.relate_to(url, HYPERLINK_RELATIONSHIP, is_external=True)
+    hyperlink = _element("w:hyperlink", **{"r:id": relation_id})
+    for child in list(paragraph._p)[start:]:
+        if _local_name(child) in ("w:r", "w:ins"):
+            hyperlink.append(child)
+    paragraph._p.append(hyperlink)
+    return hyperlink
 
 
 def make_footnote_reference(footnote_id: int) -> Any:
@@ -277,11 +453,7 @@ def make_footnote_reference(footnote_id: int) -> Any:
 def set_paragraph_alignment(paragraph: Any, alignment: str) -> None:
     """段落对齐（图片常用）：``left`` / ``center`` / ``right``。"""
     ppr = paragraph._p.get_or_add_pPr()
-    jc = ppr.find(qn("w:jc"))
-    if jc is None:
-        jc = OxmlElement("w:jc")
-        ppr.append(jc)
-    jc.set(qn("w:val"), alignment)
+    insert_child(ppr, "w:jc", **{"w:val": alignment})
 
 
 def length_from_text(value: str) -> Any:
@@ -310,8 +482,11 @@ def make_field(instruction: str, placeholder: str = "") -> list[Any]:
 
     **返回的是 ``w:r`` 列表**：``w:fldChar`` / ``w:instrText`` / ``w:t`` 必须包在 run 里，
     直接挂在 ``w:p`` 下会让 Word 判定文档损坏（这是实测踩到的坑）。
+
+    ``begin`` 带 ``w:dirty="true"``（做法参考 pandoc）：强制 Word 打开时重算该域，
+    比只依赖 ``settings.xml`` 的 ``updateFields`` 更可靠——后者在部分版本/另存后不生效。
     """
-    begin = _run_with(_element("w:fldChar", **{"w:fldCharType": "begin"}))
+    begin = _run_with(_element("w:fldChar", **{"w:fldCharType": "begin", "w:dirty": "true"}))
 
     instr = OxmlElement("w:instrText")
     instr.set(qn("xml:space"), "preserve")
@@ -420,18 +595,27 @@ def set_vert_align(cell: Any, align: str = "center") -> None:
 
 
 def set_table_borders(table: Any, **edges: str) -> None:
-    """设置表格边框：``edges`` 形如 ``top="single"``、``insideH="none"``。"""
+    """设置表格边框：``edges`` 形如 ``top="single"``、``insideH="none"``。
+
+    按 ``CHILD_ORDER`` 的顺序写入——参数书写顺序（如先 bottom 后 left）与 schema 不一致时，
+    直接 append 会产出非法顺序，Word 会丢掉后面的边。
+    """
     tbl_pr = table._tbl.tblPr
-    borders = tbl_pr.find(qn("w:tblBorders"))
-    if borders is None:
-        borders = OxmlElement("w:tblBorders")
-        tbl_pr.append(borders)
-    for edge, value in edges.items():
-        element = borders.find(qn(f"w:{edge}"))
+    borders = insert_child(tbl_pr, "w:tblBorders")
+    _write_borders(borders, edges)
+
+
+def _write_borders(borders: Any, edges: dict[str, str]) -> None:
+    ordered = CHILD_ORDER.get(_local_name(borders), ())
+    names = [name for name in ordered if name.split(":")[-1] in edges]
+    names += [f"w:{key}" for key in edges if f"w:{key}" not in names]
+    for name in names:
+        edge = name.split(":")[-1]
+        element = borders.find(qn(name))
         if element is None:
-            element = OxmlElement(f"w:{edge}")
+            element = OxmlElement(name)
             borders.append(element)
-        element.set(qn("w:val"), value)
+        element.set(qn("w:val"), edges[edge])
 
 
 def set_table_cell_width(cell: Any, width: Length) -> None:
@@ -439,7 +623,11 @@ def set_table_cell_width(cell: Any, width: Length) -> None:
 
 
 def page_content_width(document: Any) -> int:
-    """正文可用宽度（twips）：页面宽 - 左右页边距（1 twip = 635 EMU）。"""
+    """正文可用宽度（twips）：页面宽 - 左右页边距（1 twip = 635 EMU）。
+
+    注意不要在表格宽度里额外扣 ``w:tblCellMar``：已用「纯 python-docx 手写对照文档」
+    验证过，页边距口径就是这一条；多扣会让表格明显偏窄。
+    """
     section = document.sections[-1]
     usable = int(section.page_width) - int(section.left_margin) - int(section.right_margin)
     return max(1, usable // 635)
@@ -448,23 +636,29 @@ def page_content_width(document: Any) -> int:
 def set_cell_width(cell: Any, width_twips: int) -> None:
     """固定列宽：写 ``w:tcW``（``dxa`` = twips）。"""
     tcpr = cell._tc.get_or_add_tcPr()
-    element = tcpr.find(qn("w:tcW"))
-    if element is None:
-        element = OxmlElement("w:tcW")
-        tcpr.insert(0, element)
-    element.set(qn("w:w"), str(width_twips))
-    element.set(qn("w:type"), "dxa")
+    insert_child(tcpr, "w:tcW", **{"w:w": str(width_twips), "w:type": "dxa"})
 
 
 def set_cell_alignment(cell: Any, alignment: str) -> None:
     """列对齐（GFM 分隔行）：给单元格里所有段落写 ``w:jc``。"""
     for paragraph in cell.paragraphs:
-        ppr = paragraph._p.get_or_add_pPr()
-        jc = ppr.find(qn("w:jc"))
-        if jc is None:
-            jc = OxmlElement("w:jc")
-            ppr.append(jc)
-        jc.set(qn("w:val"), alignment)
+        insert_child(paragraph._p.get_or_add_pPr(), "w:jc", **{"w:val": alignment})
+
+
+def set_table_width(table: Any, widths: list[int]) -> None:
+    """固定表格总宽与每列宽（``w:tblW`` + ``w:tblLayout fixed`` + ``w:gridCol``）。
+
+    不设总宽时 Word 用 ``auto``，会按内容重算列宽，把表格撑出页面。
+    """
+    tbl_pr = table._tbl.tblPr
+    insert_child(tbl_pr, "w:tblW", **{"w:w": str(sum(widths)), "w:type": "dxa"})
+    insert_child(tbl_pr, "w:tblLayout", **{"w:type": "fixed"})
+
+    grid = table._tbl.find(qn("w:tblGrid"))
+    if grid is None:
+        return
+    for column, width in zip(grid.findall(qn("w:gridCol")), widths, strict=False):
+        column.set(qn("w:w"), str(width))
 
 
 def repeat_table_header(row: Any) -> None:
@@ -478,11 +672,7 @@ def merge_cell_horizontal(table: Any, row: int, column: int, span: int = 1) -> N
     """横向合并：给起始单元格写 ``w:gridSpan``。"""
     cell = table.cell(row, column)
     tcpr = cell._tc.get_or_add_tcPr()
-    element = tcpr.find(qn("w:gridSpan"))
-    if element is None:
-        element = OxmlElement("w:gridSpan")
-        tcpr.append(element)
-    element.set(qn("w:val"), str(max(2, span)))
+    insert_child(tcpr, "w:gridSpan", **{"w:val": str(max(2, span))})
 
 
 def merge_cell_vertical(table: Any, row: int, column: int, offset: int) -> None:
@@ -490,14 +680,10 @@ def merge_cell_vertical(table: Any, row: int, column: int, offset: int) -> None:
     target_row = row + offset
     cell = table.cell(target_row, column)
     tcpr = cell._tc.get_or_add_tcPr()
-    element = tcpr.find(qn("w:vMerge"))
-    if element is None:
-        element = OxmlElement("w:vMerge")
-        tcpr.append(element)
     if offset == 0:
-        element.set(qn("w:val"), "restart")
+        insert_child(tcpr, "w:vMerge", **{"w:val": "restart"})
     else:
-        element.attrib.pop(qn("w:val"), None)
+        insert_child(tcpr, "w:vMerge")
 
 
 def apply_three_line_borders(table: Any, header_rows: int = 1) -> None:
@@ -519,14 +705,8 @@ def apply_three_line_borders(table: Any, header_rows: int = 1) -> None:
 def _set_row_bottom_border(row: Any, style: str) -> None:
     for cell in row.cells:
         tcpr = cell._tc.get_or_add_tcPr()
-        borders = tcpr.find(qn("w:tcBorders"))
-        if borders is None:
-            borders = OxmlElement("w:tcBorders")
-            tcpr.append(borders)
-        bottom = borders.find(qn("w:bottom"))
-        if bottom is None:
-            bottom = OxmlElement("w:bottom")
-            borders.append(bottom)
+        borders = insert_child(tcpr, "w:tcBorders")
+        bottom = insert_child(borders, "w:bottom")
         bottom.set(qn("w:val"), style)
         bottom.set(qn("w:sz"), "8")
         bottom.set(qn("w:space"), "0")

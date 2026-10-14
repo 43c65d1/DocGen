@@ -217,16 +217,21 @@ class TableCell:
 
 @dataclass(frozen=True, slots=True)
 class Table(Block):
-    """表格：``rows`` 是纯文本行（GFM 简单表格），第一行是表头。
+    """表格：``rows`` 是单元格文本行（GFM 简单表格），第一行是表头。
 
     ``cells`` 是结构化单元格（支持合并），给了它就优先于 ``rows``；
     ``alignments`` 来自 GFM 分隔行（``:---`` / ``:---:`` / ``---:``），
     每列取值 ``left`` / ``center`` / ``right``，空列表表示未声明。
+
+    ``cell_nodes`` 是每个单元格的**行内 IR**（与 ``rows`` 同形状）：
+    有了它，单元格里的加粗、行内代码、公式、链接才不会被拍平成纯文本。
+    ``rows`` 保留原样文本，供不支持富文本的路径（如规范结构对比）使用。
     """
 
     rows: list[list[str]]
     cells: list[list[TableCell]] = field(default_factory=list)
     alignments: list[str] = field(default_factory=list)
+    cell_nodes: list[list[list["InlineNode"]]] = field(default_factory=list)
 
 
 BlockNode = (

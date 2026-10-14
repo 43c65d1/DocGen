@@ -53,8 +53,35 @@ color = "#222"
 | `[styles.*]` | 内容样式（标题、正文、`[文字]{.样式名}`） | `styles.heading1` 等 |
 | `[code_block]` / `[code_block.<lang>]` | 代码块样式 | `code_block`、`code_block.python` |
 
-内置样式名（无需声明即可引用，声明则覆盖）：`strong`、`em`、`strike`
-—— 分别对应 `**粗体**`、`*斜体*`、`~~删除~~`。
+`[code_block]` 里的**点号键**（`font.name`）会被识别为「基座属性」而不是语言变体；
+语言变体只认 `[code_block.<语言>]` 这种表头写法。
+
+## 两个后端的键名
+
+同一份 config 服务 HTML 与 Word，但两边读的键名不同：
+
+| 后端 | 键名风格 | 例 |
+|---|---|---|
+| Word | 点号键（解析后是嵌套表） | `font.bold` / `font.color` / `font.name` / `font.size` |
+| HTML | 扁平键 | `font_weight` / `color` / `font_family` / `font_size` |
+
+要两个后端都生效，两种键都要写（`examples/features/config.toml` 是范例）。
+HTML 侧遇到 `font` 这类嵌套表会跳过，不会产出 `font: {'bold': True}` 这种废声明。
+
+内置样式名（**无需声明即可引用，但只有声明了才会有格式**）：
+`strong`、`em`、`strike`、`sup`、`sub`
+—— 分别对应 `**粗体**`、`*斜体*`、`~~删除~~`、`E=mc^2^`、`H~2~O`。
+
+> ⚠️ **最常见的坑**：`**粗体**` 用的是**内置样式名 `strong`**，不是自定义名。
+> config 若不声明 `[styles.strong]`，产物里**不会加粗**（内容照常输出，只是没有格式）——
+> 因为「config 是唯一真源」，引擎不写死任何视觉属性。
+>
+> ```toml
+> [styles.strong]        # ← 必须写这一段，**粗体** 才会真的粗
+> font.bold = true
+> ```
+>
+> 对照表见 [examples/features/README.md](../examples/features/README.md)。
 
 ## `include`：多文件合并
 

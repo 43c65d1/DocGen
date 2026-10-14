@@ -124,7 +124,7 @@ def _render_block(
         lines.append("</blockquote>")
         return lines
     if isinstance(block, Table):
-        return _render_table(block)
+        return _render_table(block, style_table)
     if isinstance(block, NamedBlock):
         return _render_named_block(block, style_table, heading)
     if isinstance(block, Toc):
@@ -184,22 +184,42 @@ def _render_code_block(block: CodeBlock, style_table: dict[str, dict[str, Any]])
     return [f"<pre{style}><code{class_attr}>{html.escape(block.content)}</code></pre>"]
 
 
-def _render_table(block: Table) -> list[str]:
+def _render_table(block: Table, style_table: dict[str, dict[str, Any]]) -> list[str]:
+    """表格：单元格用行内 IR 渲染（保留粗体/代码/公式），缺失时回退纯文本。"""
     if not block.rows:
         return ["<table></table>"]
     head, *body = block.rows
     lines = ["<table>", "<thead>", "<tr>"]
-    lines.extend(f"<th>{html.escape(cell)}</th>" for cell in head)
+    lines.extend(_cell_html(block, 0, index, cell, style_table) for index, cell in enumerate(head))
     lines.extend(["</tr>", "</thead>"])
     if body:
         lines.append("<tbody>")
-        for row in body:
+        for row_index, row in enumerate(body, start=1):
             lines.append("<tr>")
-            lines.extend(f"<td>{html.escape(cell)}</td>" for cell in row)
+            lines.extend(
+                _cell_html(block, row_index, index, cell, style_table)
+                for index, cell in enumerate(row)
+            )
             lines.append("</tr>")
         lines.append("</tbody>")
     lines.append("</table>")
     return lines
+
+
+def _cell_html(
+    block: Table,
+    row: int,
+    column: int,
+    text: str,
+    style_table: dict[str, dict[str, Any]],
+) -> str:
+    tag = "th" if row == 0 else "td"
+    nodes: list[InlineNode] = []
+    if row < len(block.cell_nodes) and column < len(block.cell_nodes[row]):
+        nodes = block.cell_nodes[row][column]
+    if nodes:
+        return f"<{tag}>{_render_inline(nodes, style_table)}</{tag}>"
+    return f"<{tag}>{html.escape(text)}</{tag}>"
 
 
 def _render_image(src: str, alt: str) -> str:

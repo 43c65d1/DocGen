@@ -51,13 +51,13 @@ def build_template(config: Config | None = None, output: Path | None = None) -> 
 
     返回 python-docx ``Document``；给了 ``output`` 就同时落盘为 ``.docx``。
     """
-    from .template import apply_document_defaults
+    from .template import apply_document_defaults, heading_numbering_enabled
 
     document = _Document()
     if config is not None:
         apply_document_defaults(document, config)
     add_toc_styles(document)
-    add_heading_numbering(document)
+    add_heading_numbering(document, enabled=heading_numbering_enabled(config) if config else True)
     ensure_update_fields(document)
     if output is not None:
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -88,11 +88,21 @@ def _set_style_id(style: Any, style_id: str) -> None:
     style.element.set(qn("w:styleId"), style_id)
 
 
-def add_heading_numbering(document: Any, num_id: int = HEADING_NUMBER_ID, levels: int = 9) -> int:
+def add_heading_numbering(
+    document: Any,
+    num_id: int = HEADING_NUMBER_ID,
+    levels: int = 9,
+    enabled: bool = True,
+) -> int:
     """给标题加多级编号：``Heading1`` -> ``1``、``Heading2`` -> ``1.1``……
 
     返回新写入的 ``abstractNumId``；若已存在则直接返回现值（幂等）。
+    ``enabled=False`` 时不建立编号、也不把 ``HeadingN`` 绑上去（``[document] heading_numbering = false``）。
+    注意：**``outlineLvl`` 与编号无关**，关闭编号后目录/导航窗格照常工作。
     """
+    if not enabled:
+        return num_id
+
     numbering = document.part.numbering_part.element
     if _has_abstract_num(numbering, num_id):
         return num_id

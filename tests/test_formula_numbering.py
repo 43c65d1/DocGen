@@ -101,6 +101,9 @@ def test_formula_number_can_be_referenced(tmp_path: Path) -> None:
 
 
 def test_plain_formula_paragraph_is_not_indented(tmp_path: Path) -> None:
-    """块级公式（独立段落）不应带首行缩进，否则居中会偏。"""
+    """块级公式（独立段落）不应带首行缩进，否则居中会偏。
+
+    ``firstLineChars`` 是 ``w:ind`` 的属性，所以「没有缩进」= 无该属性或值为 0。
+    """
     document = _document_xml(tmp_path, "$$\nx=1\n$$\n")
-    assert "firstLineChars" not in document or 'w:val="0"' in document
+    assert "firstLineChars" not in document or 'w:firstLineChars="0"' in document

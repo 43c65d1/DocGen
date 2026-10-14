@@ -192,8 +192,13 @@ def test_style_without_based_on_is_itself(base_config: Path) -> None:
 
 
 def test_code_block_inheritance(base_config: Path) -> None:
+    """语言变体以 ``code_block.<lang>`` 为键登记（渲染层按这个键查）。"""
     table = build_style_table(load_config(base_config))
-    assert table["python"] == {"background": "#f5f5f5", "font_family": "monospace", "color": "#222"}
+    assert table["code_block.python"] == {
+        "background": "#f5f5f5",
+        "font_family": "monospace",
+        "color": "#222",
+    }
 
 
 def test_cycles_are_detected(tmp_path: Path) -> None:

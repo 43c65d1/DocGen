@@ -6,6 +6,99 @@
 
 ## [Unreleased]
 
+### 修复（用户实测报告的三项行为异常）
+
+- **`---` 输出成一长串破折号**：原来输出 `"———" * 8`，产物里就是字面破折号
+  （复制、检索、改字号都会出问题）。现在渲染成**空段落 + `w:pBdr/w:bottom`**，
+  线段样式可配：`[document] hr.style` / `hr.color` / `hr.size`
+- **标题自动编号不可关**：新增 `[document] heading_numbering`（默认 `true`）。
+  关闭后 `HeadingN` 不再绑 `numPr`，但 **`outlineLvl` 保留**，目录与导航窗格照常工作。
+  另外明确「标题文字里不要自己写序号」——`# 1 概述` 叠加自动编号会变成 `1 1 概述`
+- **页面垂直对齐改为每节显式设置**：封面写 `w:vAlign val="center"`、正文写 `val="top"`，
+  不再依赖「python-docx 克隆上一节 sectPr 后再把 `vAlign` 删掉」这种隐含流程
+
+### 修复（顺带发现）
+
+- **`w:color="AUTO"` 是非法值**：`set_paragraph_border` 把颜色统一转大写，
+  但 `w:ST_HexColor` 只认小写 `auto`——新增 `_border_color()` 保留小写（由 `test_ooxml_schema` 抓到）
+- **`[document]` 里的点号键取不到值**：`hr.style = "double"` 这类点号键在
+  `[document]` 中**不会**展开成嵌套表，原来只查嵌套路径 → 配置被静默忽略；
+  新增 `Config.setting()`，扁平键与嵌套表两种写法都支持
+- 特性矩阵去掉标题里手写的序号（否则与自动编号叠加成 `1.1 1. xxx`）
+
+### 新增（特性矩阵示例 + 每特性一条断言）
+
+- 新增 [`examples/features/`](examples/features)：**每个特性一行、独立信号值**的调试样例
+  （粗体/斜体/删除线/下划线/颜色/字号/链接/公式/代码块语言色/表格单元格格式/题注/脚注/分节…），
+  一眼看出哪个特性失效，见 [README](examples/features/README.md)
+- 新增 [`tests/test_feature_matrix.py`](tests/test_feature_matrix.py)：**每个特性一条断言**，
+  矩阵里哪条红就是哪个特性没生效（含两层校验与 HTML 侧）
+
+### 修复（用户实测报告：链接 / 语言变体色 / 表格单元格格式）
+
+- **链接不是真超链接**：原来只给文字加下划线，点不动、也没有关系项。
+  现在写正式的「关系项 + `<w:hyperlink r:id>`」两件套（外链 `TargetMode="External"`），
+  并套用 Word 默认超链接色 `0563C1`
+- **`[code_block.<lang>]` 配置永不生效**（两个独立缺陷叠加）：
+  1. `_code_blocks_of` 把点号键展开出的 `code_block.font` **误判成语言变体** `font`，
+     导致基座的 `font.name`/`font.size` 凭空丢失；
+  2. `build_style_table` 把语言变体登记成裸键 `python`，而渲染层查的是
+     `code_block.python` —— 名字对不上，配置永远读不到
+  另外语言的合并由「浅合并」改为**深合并**（`config.deep_merge`），
+  否则变体的 `font.color` 会被基座的 `font` 整个覆盖
+- **表格单元格格式丢失**：单元格原来被拍平成纯文本，`**粗体**` 显示为字面量。
+  IR 的 `Table` 新增 `cell_nodes`（与 `rows` 同形状的行内 IR），
+  Word/HTML 两侧都按行内节点渲染 → 单元格里的加粗、行内代码、公式、链接都保留
+- **`sup`/`sub` 丢掉 config 样式**：`_render_styled` 对上下标提前 `return`，
+  `[styles.sup]`/`[styles.sub]`（如字号）被整段丢弃
+- **`font.underline` 未实现**：config 声明了却不生效，现已支持（`w:u`）
+- **HTML 产出废声明**：Word 口径的嵌套表被硬编码进 CSS，产出
+  `style="font: {'bold': True}; font-weight: bold"`；CSS 层现在跳过 `font*` 嵌套键
+- **示例库补上内置样式**：`examples/minimal` 与 `examples/features` 现在都声明
+  `[styles.strike]`/`[styles.sup]`/`[styles.sub]`（原来缺 `strike`，
+  `~~删除~~` 写了却看不到效果）；`docs/config.md` 强化说明
+  「Markdown 语法用的是**内置样式名**，不声明就没有格式」
+
+### 新增（官方 OOXML schema 硬校验，学习借鉴 python-docx）
+
+- 随附 ECMA-376 / ISO-IEC 29500 的 WordprocessingML schema 于
+  [`tests/schemas/ecma-376/`](tests/schemas/ecma-376)（取自 python-docx 的 `ref/xsd`，
+  说明见 [tests/schemas/README.md](tests/schemas/README.md)）
+- 新增 `ooxml_check.validate_with_schema()`：用官方 `wml.xsd` 校验 `document.xml`
+  （schema 编译 0.1s 并缓存），配 [`tests/test_ooxml_schema.py`](tests/test_ooxml_schema.py) 16 项
+- 新增 `ooxml.insert_child()` + `CHILD_ORDER`：**按 schema 顺序**插入属性元素。
+  OOXML 的属性容器是 `xsd:sequence`，顺序错了 Word 会静默忽略——
+  之前全部用 `append`，产出的 `w:pPr` / `w:sectPr` / `w:tblPr` / `w:tcPr` 顺序不合法
+
+### 修复（schema 校验发现的结构缺陷）
+
+- `w:pgNumType` / `w:vAlign` 在 `w:sectPr` 里位置错（`vAlign` 必须排在 `docGrid` **之前**）
+- `w:tblLayout` / `w:tblBorders` 在 `w:tblPr` 里位置错（`tblLayout` 在 `tblCellMar` 之前）
+- `w:left` 在 `w:tblBorders` 里排到了 `w:bottom` 之后（schema 顺序是 `top, start, left, bottom, …`）
+- **`w:firstLineChars` / `w:beforeLines` / `w:afterLines` 被当成独立元素**——
+  它们其实是 `w:ind` / `w:spacing` 的**属性**，写成子元素 Word 直接忽略，
+  等于「首行缩进、段前段后」这条排版细则此前**根本没生效**
+- 根元素残留 12 个未使用的命名空间声明与 `mc:Ignorable`（严格 schema 会报错），
+  现按「前缀是否真的被用到」清理
+- 测试假阳性修正：`test_formula_renders_as_omml` 原来断言文档里含 `"mc"`，
+  而 `"mc"` 来自公式内容 `E = mc^2`——已改为断言 `<m:oMath` 与 `xmlns:m=`
+
+### 修复（渲染核对 / Word 实测发现）
+
+- **表格宽度写不进去**：`add_table(rows, cols)` 的 `cols` 决定的是**行内 `w:tc` 数量**，
+  而列宽写在 `w:tblGrid` 上——之前按 3 列算宽度、grid 只有 2 列，表格宽度对不上。
+  现在统一 `_fit_grid()` 对齐列数，并写全 `w:tblW` + `w:tblLayout fixed` + 每列 `w:gridCol`，
+  防止 Word 按内容重算列宽把表格撑开。
+- **封面垂直居中泄漏到正文节**：python-docx 的 `add_section()` 会**克隆上一节的 `sectPr`**，
+  于是 `w:vAlign val="center"`（封面专用）跟到了正文节。现在非封面节显式删除该元素。
+- **`stylesWithEffects.xml` 里的 `Courier`**：默认模板的该部件完整复制了一份样式表，
+  删掉 `MacroText` 后仍会报「缺少字体」；现在构建时删除该部件并同步清理内容类型。
+- **`rsid` 噪声**：母版带来的 `w:rsidR/RPr/Sect` 对生成文档无意义，构建时清掉。
+- **渲染口径澄清**：bundled LibreOffice 渲染 docx 时**忽略右页边距**
+  （用纯 python-docx 手写对照文档验证过，同样现象），因此视觉核对改用
+  **Word 导出 PDF**（`ExportAsFixedFormat`）+ pdfium 渲染。Word 实测：A4 左右页边距
+  均为 2.5cm（渲染 109–117px / 910px 页宽），表格、页眉页脚、域结果全部正确。
+
 ### 新增（完整版 W5：分节 / 页码 / 页眉页脚 / 封面）
 
 - **分节**：`[[sections]]` 配置纸张（A4/A3/A5/Letter/Legal）、页边距（cm）、分节符

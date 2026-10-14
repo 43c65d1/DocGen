@@ -13,6 +13,7 @@ W0 阶段用 python-docx 自带的默认模板作为最小母版，先跑通链�
 
 from __future__ import annotations
 
+import io
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,7 @@ __all__ = [
     "TEMPLATE_VERSION",
     "create_document",
     "ensure_font_table",
+    "heading_numbering_enabled",
     "iter_styles",
 ]
 
@@ -63,20 +65,49 @@ def create_document(config: Config, template: Path | None = None) -> Any:
         document = _Document(str(template))
     else:
         document = _Document()
-        _extend_default_template(document)
+        _extend_default_template(document, config)
     apply_document_defaults(document, config)
     return document
 
 
-def _extend_default_template(document: Any) -> None:
+def heading_numbering_enabled(config: Config) -> bool:
+    """``[document] heading_numbering``：标题多级编号开关，缺省开启（手册 §14 要求）。
+
+    支持 ``heading_numbering = false`` 与 ``heading_numbering.enabled = false`` 两种写法。
+    """
+    value = config.setting("heading_numbering", True)
+    if isinstance(value, dict):
+        value = value.get("enabled", True)
+    return bool(value)
+
+
+def _extend_default_template(document: Any, config: Config | None = None) -> None:
     """补齐 §14.1 槽位（幂等）：目录样式、题注样式、字体表、多级编号、updateFields。"""
     from .template_build import add_heading_numbering, add_toc_styles, ensure_update_fields
 
+    _drop_macro_styles(document)
+    drop_styles_with_effects(document)
     add_toc_styles(document)
     _ensure_caption_styles(document)
     ensure_font_table(document)
-    add_heading_numbering(document)
+    enabled = heading_numbering_enabled(config) if config is not None else True
+    add_heading_numbering(document, enabled=enabled)
     ensure_update_fields(document)
+
+
+#: 默认模板里带点阵 ``Courier`` 的宏样式：内容文档用不到，且该字体在 Linux 上必然缺失，
+#: 留着会让 Word/LibreOffice 报「缺少字体」
+UNUSED_STYLE_NAMES = frozenset({"MacroText", "MacroTextChar", "macro", "Macro Text Char"})
+
+
+def _drop_macro_styles(document: Any) -> list[str]:
+    """删掉用不到的宏样式，避免凭空引入 ``Courier`` 字体依赖。"""
+    removed: list[str] = []
+    for style in list(document.styles):
+        if style.name in UNUSED_STYLE_NAMES or style.style_id in UNUSED_STYLE_NAMES:
+            style.element.getparent().remove(style.element)
+            removed.append(style.name)
+    return removed
 
 
 def _ensure_caption_styles(document: Any) -> None:
@@ -95,8 +126,51 @@ MONO_FONT = "Consolas"
 #: 代码块里中文的回退字体
 MONO_EAST_ASIA = "等线"
 
-#: 名称需要替代字体时给出的别名
-FONT_ALIASES: dict[str, str] = {"Courier": "Courier New"}
+
+def drop_styles_with_effects(document: Any) -> bool:
+    """断开并删除 ``word/stylesWithEffects.xml``（Word 2007 兼容部件）。
+
+    内容文档用不到它，但它完整复制了一份样式表——里面就有 ``Courier``，
+    会让我们在删掉 ``MacroText`` 之后**依然**报「缺少字体」。
+    删完必须同时清掉关系与 ``[Content_Types].xml`` 里对应的 Override。
+    """
+    target_name = ""
+    for part in list(document.part.package.parts):
+        if "stylesWithEffects" in str(part.partname):
+            target_name = str(part.partname)
+            break
+    if not target_name:
+        return False
+    for rel in list(document.part.rels.values()):
+        if "stylesWithEffects" in getattr(rel, "reltype", ""):
+            del document.part.rels[rel.rId]
+    document._docgen_drop_part = target_name
+    return True
+
+
+def _strip_effects_part(data: bytes, part_name: str) -> bytes:
+    """把已断开关系的部件从 zip 与 ``[Content_Types].xml`` 里真正删掉。"""
+    import re
+    import zipfile
+
+    source = zipfile.ZipFile(io.BytesIO(data))
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as target:
+        for item in source.infolist():
+            if item.filename == part_name.lstrip("/"):
+                continue
+            payload = source.read(item.filename)
+            if item.filename == "[Content_Types].xml":
+                text = payload.decode("utf-8")
+                text = re.sub(rf'<Override PartName="{re.escape(part_name)}"[^/]*/>', "", text)
+                payload = text.encode("utf-8")
+            target.writestr(item, payload)
+    source.close()
+    return buffer.getvalue()
+
+
+#: 名称需要替代字体时给出的别名（``Courier`` 已随宏样式一起删除，不需要别名）
+FONT_ALIASES: dict[str, str] = {}
 
 
 def ensure_font_table(document: Any, extra_fonts: list[str] | None = None) -> list[str]:

@@ -149,10 +149,54 @@ $$
 
 **W5 已实现**：分节（`[[sections]]` → 纸张/页边距/分节符）、页码体系
 （`w:pgNumType` 格式 + 重启 + 页脚 `PAGE` 域）、页眉页脚（每节独立、`is_linked_to_previous=False`）、
-封面（`sectPr` 的 `w:vAlign` 垂直居中）。
+页面垂直对齐（每节**显式** `w:vAlign`：封面 `center`、正文 `top`）。
 
 **后续阶段**：`docgen init --preset` 预设库、视觉回归（LibreOffice headless）、
 打包发布、公式图片降级（matplotlib）、`docgen format`。
+
+## 三个容易被误判为缺陷的行为
+
+### 表格边框：三线表**本来就没有竖线**
+
+`[table] style` 的取值与外观：
+
+| 取值 | 框线 |
+|---|---|
+| `three_line`（**默认**） | 顶线 + 表头下线 + 底线，**无竖线、无内部横线**（学术三线表） |
+| `grid` | 四周框线 + 全部内部横竖线 |
+| `none` | 完全无框线 |
+
+看到「只有表头上下和整表上下有框线」时，那是 `three_line` 的**设计如此**；
+要竖线请显式设 `style = "grid"`。见
+[examples/features/content.md](../examples/features/content.md) 的两种样式对照。
+
+### 标题自动编号（可关）
+
+标题的 `1` / `1.1` 由 `[document] heading_numbering` 控制，**默认开启**：
+
+```toml
+[document]
+heading_numbering = true    # 默认：H1 → "1"、H2 → "1.1"
+heading_numbering = false   # 关闭：标题不再自动编号
+```
+
+> ⚠️ **标题文字里不要自己写序号**。`# 1 概述` 叠加自动编号会变成
+> `1 1 概述` 的观感（H2 则是 `1.1 1. 概述`）。要么去掉手写序号，要么关掉自动编号。
+>
+> 关闭编号**不影响** `outlineLvl`：目录域与导航窗格照常工作。
+
+### `---` 分隔线是段落底边框
+
+渲染成「空段落 + `w:pBdr/w:bottom`」，线段样式可配：
+
+```toml
+[document]
+hr.style = "single"     # single / double / dashed / dotted / wave …
+hr.color = "808080"
+hr.size = "6"           # 八分之一磅为单位
+```
+
+**不会**再输出 `————————` 这种破折号串（那样复制、检索、改字号都会出问题）。
 
 ## 分节 / 页码 / 页眉页脚（W5）
 
@@ -186,7 +230,32 @@ footer.text = "第 PAGE 页"         # PAGE 会变成页码域
   （样式槽位、`outlineLvl`、四个字体属性、`firstLineChars`、`updateFields`、
   分页符、表格边框、`config 值 == 输出属性` 不变量、确定性输出、图片嵌入）。
 - [tests/test_ooxml_validity.py](../tests/test_ooxml_validity.py)：**结构校验**（见下节）。
+- [tests/test_ooxml_schema.py](../tests/test_ooxml_schema.py)：**官方 schema 硬校验**（见下节）。
 - **不做全文 `document.xml` 快照**（手册 §10.1：属性顺序与库版本差异会让它脆弱）。
+
+## 两层校验
+
+| 层 | 工具 | 能抓什么 |
+|---|---|---|
+| 结构 | [render/ooxml_check.py](../src/docgen/render/ooxml_check.py) 的手写规则 | `w:p` 下挂了 `w:fldChar`、空 run、表格层级 |
+| **schema** | 同上 `validate_with_schema()` + 官方 `wml.xsd` | 子元素**顺序**、属性拼写、必需属性缺漏 |
+
+**为什么需要 schema 这一层**：OOXML 的属性容器是 `xsd:sequence`，
+顺序错了 Word **静默忽略**——不报错、也看不出来。手写规则只覆盖了少数几条，
+schema 是完整判据。随附的 schema 与用法见
+[tests/schemas/README.md](../tests/schemas/README.md)。
+
+| schema 抓到的真实缺陷 | 后果 |
+|---|---|
+| `w:firstLineChars` / `w:beforeLines` 写成了子元素 | 它们其实是 `w:ind` / `w:spacing` 的**属性** → 首行缩进与段前段后**从未生效** |
+| `w:pgNumType` / `w:vAlign` 在 `w:sectPr` 里位置错 | 页码格式与封面垂直居中可能被忽略 |
+| `w:tblLayout` / `w:tblBorders` 在 `w:tblPr` 里位置错 | 固定列宽失效 → 表格被内容撑开 |
+| `w:left` 排在 `w:tblBorders` 的 `w:bottom` 之后 | 左边框被丢弃 |
+| 根元素残留 12 个无用命名空间 + `mc:Ignorable` | 严格消费者报错 |
+
+因此渲染层的所有「加一条属性」都走
+[`ooxml.insert_child()`](../src/docgen/render/ooxml.py)：它按 `CHILD_ORDER`
+（由 schema 反推）找到正确插入位置，而不是 `append`。
 
 ## 结构校验器（防「Word 打不开」）
 
@@ -205,3 +274,22 @@ footer.text = "第 PAGE 页"         # PAGE 会变成页码域
 **验收方式**：`tests/test_ooxml_validity.py` + 用 Word COM 实际打开。本机已实测示例可被
 Word 打开（49 段落 / 19 域 / 3 书签），域更新后结果正确：
 `SEQ 图 => 1`、`REF fig:1 => 1`、`REF eq:main => (1)`、标题自动编号 `1 / 1.1 / 1.2`、目录已填充 7 条。
+
+## 渲染核对（视觉验收）
+
+**用 Word 导出 PDF 再渲染**，不要只看 bundled LibreOffice 的排版：
+
+```powershell
+# Word COM：导出 PDF（权威排版）
+$doc.ExportAsFixedFormat("out.pdf", 17)
+# 再用 bundled pdfium 渲染成图
+node <libreoffice-kit>/lib/cli.js render --input out.pdf --output-dir preview --pages 2,3 --dpi 110
+```
+
+**踩过的坑**：bundled LibreOffice 渲染 docx 时**忽略右页边距**，正文与表格看起来会「排到
+页面右边界之外」。用**纯 python-docx 手写的最小对照文档**（显式 `Cm(2.5)` 页边距）渲染，
+现象完全相同 → 这是渲染器的局限，不是产出缺陷。同一份 docx 经 Word 导出 PDF 后测得
+左右页边距都是 2.5cm（910px 页宽下各约 110px），排版正确。
+
+**结论**：`w:tblW` / `w:tblLayout` / `w:gridCol` 的宽度口径就是「页面宽 − 左右页边距」，
+不要为了迁就 LibreOffice 额外扣 `w:tblCellMar`——那会让表格明显偏窄。

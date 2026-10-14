@@ -109,6 +109,23 @@ hr.style = "single"
 hr.color = "808080"
 hr.size = "6"
 
+# ── 输出与日志（见 docs/config.md）──────────────────────────
+[output]
+level = "warn"          # 终端阈值：log | warn | err | none（none 静默打印但保留退出码）
+logfile = ""            # 空 = 关闭；如 "run.log" 则覆盖写、头部含环境、尾部含退出码
+logfile_level = "log"   # 文件阈值，独立于终端（通常更详细）
+
+# ── 语义名 -> 样式名映射（默认同名；这里演示重定向）────────
+# 不写 [inline] 时 sup/strong/em/strike/sub 全都同名，行为与以前一致。
+[inline]
+sup = "sup_caret"       # 于是 ^x^ 改用 [styles.sup_caret]
+
+[styles.sup_caret]
+font.size = "7pt"
+font.color = "C00000"
+font_size = "7pt"
+color = "#C00000"
+
 # ── 代码块：基座 + 语言变体换色（可验证深合并是否生效）──────
 [code_block]
 font.name = "Consolas"

@@ -57,6 +57,7 @@ __all__ = [
     "set_paragraph_shading",
     "set_paragraph_spacing",
     "set_run_color",
+    "set_run_shading",
     "set_run_size",
     "set_style_outline_level",
     "set_table_borders",
@@ -353,6 +354,16 @@ def set_paragraph_shading(
     """段落底纹（代码块背景）：``<w:shd w:val="clear" w:fill="F5F5F5"/>``。"""
     ppr = paragraph._p.get_or_add_pPr()
     shading = insert_child(ppr, "w:shd", **{"w:val": pattern, "w:color": color})
+    shading.set(qn("w:fill"), fill.lstrip("#").upper())
+
+
+def set_run_shading(run: Any, fill: str, *, color: str = "auto", pattern: str = "clear") -> None:
+    """run 底纹（行内代码的灰底）：``w:rPr/w:shd``。
+
+    必须画在 **run** 上而不是段落：段落底纹会把整行涂上，看起来像代码块。
+    """
+    rpr = run._element.get_or_add_rPr()
+    shading = insert_child(rpr, "w:shd", **{"w:val": pattern, "w:color": color})
     shading.set(qn("w:fill"), fill.lstrip("#").upper())
 
 

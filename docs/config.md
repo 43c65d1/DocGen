@@ -68,6 +68,62 @@ color = "#222"
 要两个后端都生效，两种键都要写（`examples/features/config.toml` 是范例）。
 HTML 侧遇到 `font` 这类嵌套表会跳过，不会产出 `font: {'bold': True}` 这种废声明。
 
+## `[output]`：输出与日志
+
+```toml
+[output]
+level = "warn"          # 终端阈值：log | warn(默认) | err | none
+logfile = ""            # 空 = 关闭；相对路径按当前工作目录解析
+logfile_level = "log"   # 文件阈值，**独立于终端**（通常更详细）
+```
+
+| 级别 | 含义 |
+|---|---|
+| `log` | 全部输出（`-v/--verbose` 等价于此） |
+| `warn` | **默认**：只出警告与错误 |
+| `err` | 只出错误诊断；命令**结果照常打印**（`-q/--quiet` 等价于此） |
+| `none` | **完全静默**（连结果也不打印），只留退出码 |
+
+> `none` 与 `-q` 不一样：`-q` 只是「别刷日志」，脚本仍能拿到结果；
+> `none` 是「什么都别打印」，**但退出码照常返回**（0/1/2），不会被静默掉。
+> 静默只针对**终端**：``logfile`` 仍按 ``logfile_level`` 照常记录。
+
+- **分流**：命令的**结果**走 stdout（`build` 的「已生成 …」、`check` 的 `OK:`、
+  `check --json` 的 JSON），**诊断**走 stderr。`--json` 时 stdout 只有 JSON。
+- **logfile**：默认关闭、**覆盖写**、单文件、无滚动。头部含
+  docgen / python / 平台 / config / input，尾部含退出码；
+  环境变量里的 `*_TOKEN`、`*_PASSWORD` 等敏感键会被过滤。
+- CLI 的 `-q` / `-v` / `--logfile` **只影响终端**，不改文件内的级别。
+
+## `[inline]`：语义名 -> 样式名映射
+
+Markdown/DFM 语法产出的是**语义名**（`**粗体**` → `strong` 等），默认**同名**，
+所以不写 `[inline]` 时行为完全不变；写了就能重定向到任意样式：
+
+```toml
+[inline]
+sup = "sup_caret"          # ^x^ 改用 [styles.sup_caret]
+
+[styles.sup_caret]
+font.size = "7pt"
+font.color = "C00000"
+```
+
+| 语义名 | 触发语法 |
+|---|---|
+| `strong` | `**粗体**` |
+| `em` | `*斜体*` |
+| `strike` | `~~删除~~` |
+| `sup` | `^上标^` / `[文字]{.sup}` |
+| `sub` | `~下标~` / `[文字]{.sub}` |
+
+> 重定向后**必须**声明目标样式，否则报 `E1003`，且错误信息会**暴露映射链**：
+>
+> ```
+> E1003:^上标^ 或 [文字]{.sup} 映射到 sup_caret（来自 [inline].sup），
+>       但 config 缺少 [styles.sup_caret]
+> ```
+
 内置样式名（**无需声明即可引用，但只有声明了才会有格式**）：
 `strong`、`em`、`strike`、`sup`、`sub`
 —— 分别对应 `**粗体**`、`*斜体*`、`~~删除~~`、`E=mc^2^`、`H~2~O`。

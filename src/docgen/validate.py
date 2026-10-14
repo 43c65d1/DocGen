@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from .config import BUILTIN_STYLES, Config
+from .config import BUILTIN_STYLES, INLINE_STYLE_NAMES, Config
 from .errors import E_CONFIG, E_UNKNOWN_STYLE
 from .ir import (
     BlockNode,
@@ -33,6 +33,16 @@ __all__ = ["ContentError", "validate_content"]
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".bmp")
 
 _INLINE_BLOCK_TYPES = (Heading, Paragraph)
+
+#: 语义名 -> 触发它的 Markdown/DFM 写法，用于把映射链讲清楚
+#: （需求：「报错暴露映射链」——既要说明是哪个语法，也要说明它现在指向谁）
+INLINE_SYNTAX_HINTS: dict[str, str] = {
+    "strong": "**粗体**",
+    "em": "*斜体*",
+    "strike": "~~删除~~",
+    "sup": "^上标^ 或 [文字]{.sup}",
+    "sub": "~下标~ 或 [文字]{.sub}",
+}
 
 
 @dataclass(frozen=True)
@@ -64,14 +74,38 @@ def validate_content(
     source: Path | None = None,
     base_dir: Path | None = None,
 ) -> list[ContentError]:
-    """检查样式引用与图片路径，返回全部错误（可能为空）。"""
+    """检查样式引用与图片路径，返回全部错误（可能为空）。
+
+    ``[inline]`` 映射会一并展开：``sup = "sup_caret"`` 时，
+    检查的是**映射后的实际样式名** ``sup_caret``，报错信息里带上映射链。
+    """
     file_name = str(source) if source is not None else ""
     root = base_dir if base_dir is not None else (source.parent if source else Path())
+    mapping = config.inline_mapping()
+    # 已知样式 = 显式声明的 + 内置语义名。
+    # **不能**把 mapping.values() 也算进来：``sup = "sup_caret"`` 而没声明
+    # ``[styles.sup_caret]`` 时必须报错（需求要求暴露映射链），
+    # 否则重定向会把「样式缺失」静默吞掉。
     known_styles = (
         set(config.styles) | set(BUILTIN_STYLES) | {"code_block"} | set(config.code_blocks)
     )
-
     errors: list[ContentError] = []
+
+    def style_error(semantic: str, line: int) -> ContentError:
+        """构造「样式不存在」的错误；语义名带映射时把映射链写给用户。"""
+        target = mapping.get(semantic, semantic)
+        if target != semantic:
+            syntax = INLINE_SYNTAX_HINTS.get(semantic, semantic)
+            message = (
+                f"{syntax} 映射到 {target}"
+                f"（来自 [inline].{semantic}），但 config 缺少 [styles.{target}]"
+            )
+        elif semantic in INLINE_STYLE_NAMES:
+            syntax = INLINE_SYNTAX_HINTS.get(semantic, semantic)
+            message = f"{syntax} 使用的样式 {semantic} 未在 config 中声明 [styles.{semantic}]"
+        else:
+            message = f"引用了不存在的样式: {semantic}"
+        return ContentError(code=E_UNKNOWN_STYLE, message=message, file=file_name, line=line)
 
     def check_image(src: str, line: int) -> None:
         if not src or "://" in src or src.startswith("data:"):
@@ -91,15 +125,10 @@ def validate_content(
     def check_inline(nodes: list[InlineNode], line: int) -> None:
         for node in nodes:
             if isinstance(node, Styled):
-                if node.style_name not in known_styles:
-                    errors.append(
-                        ContentError(
-                            code=E_UNKNOWN_STYLE,
-                            message=f"引用了不存在的样式: {node.style_name}",
-                            file=file_name,
-                            line=line,
-                        )
-                    )
+                # 语义名先按 [inline] 映射成实际样式名，再查样式表
+                target = mapping.get(node.style_name, node.style_name)
+                if target not in known_styles:
+                    errors.append(style_error(node.style_name, line))
                 check_inline(node.content, line)
             elif isinstance(node, Image):
                 check_image(node.src, line)

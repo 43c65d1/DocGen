@@ -48,7 +48,20 @@ docgen build input.md -c config.toml -o output.html
 # 生成 Word（完整版：按扩展名自动选择后端）
 docgen build input.md -c config.toml -o output.docx
 docgen build input.md -c config.toml -o output.docx --format docx
+
+# 输出控制（全局开关放在子命令前）：只影响终端，不影响 [output] logfile
+docgen -q build input.md -c config.toml -o out.html          # 终端只出 err
+docgen -v build input.md -c config.toml -o out.html          # 终端出 log 级
+docgen -v --logfile run.log build input.md -c config.toml    # 同时写日志文件
+
+# 出问题时的出口：打包环境 + config 摘要 + 退出码
+docgen bug-report --output report.txt -c config.toml
 ```
+
+**输出约定**：结果走 stdout、诊断走 stderr（`--json` 时 stdout 只有 JSON）。
+日志级别是**阈值**（`log` < `warn` 默认 < `err`，`none` 全静默），
+设成 `none` 只静默打印，**退出码照常返回**。详见
+[docs/config.md 的 `[output]` 段](docs/config.md)。
 
 退出码（手册 §10）：
 

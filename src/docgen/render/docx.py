@@ -19,7 +19,7 @@ from typing import Any
 
 from docx.oxml import OxmlElement
 
-from ..config import Config, build_style_table
+from ..config import INLINE_STYLE_NAMES, Config, build_style_table
 from ..ir import (
     BlockNode,
     BlockQuote,
@@ -75,6 +75,7 @@ from .ooxml import (
     set_paragraph_indent,
     set_paragraph_shading,
     set_paragraph_spacing,
+    set_run_shading,
     set_table_borders,
     set_table_width,
 )
@@ -86,6 +87,9 @@ _W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 
 #: 代码块缺省等宽字体（config 没声明 font.name 时兜底）
 DEFAULT_MONO_FONT = "Consolas"
+
+#: 行内代码的默认底纹（与代码块的 F5F5F5 略区分；config 可覆盖或置空关闭）
+DEFAULT_INLINE_CODE_FILL = "F2F2F2"
 
 
 def render_docx(
@@ -760,8 +764,7 @@ def _render_inline(
     if isinstance(node, Text):
         _add_text_run(state, paragraph, node.content, context_style)
     elif isinstance(node, Code):
-        run = paragraph.add_run(node.content)
-        _apply_run_style(state, run, _code_properties(state, ""))
+        _render_inline_code(state, paragraph, node.content)
     elif isinstance(node, Break):
         paragraph.add_run().add_break()
     elif isinstance(node, Math):
@@ -811,6 +814,26 @@ def _render_link(
         underline.set(f"{_W_NS}val", "single")
 
 
+def _render_inline_code(state: _RenderState, paragraph: Any, text: str) -> Any:
+    """行内代码：等宽字体 + **run 级灰底**。
+
+    段落里与表格单元格里都走这里，保证两处外观一致。
+    底纹必须画在 run 上（``w:rPr/w:shd``）——段落底纹会涂满整行、看起来像代码块。
+    """
+    run = paragraph.add_run(text)
+    properties = _code_properties(state, "")
+    _apply_run_style(state, run, properties)
+    # 底纹优先级：config 的 inline_background > shading.fill > 引擎默认浅灰。
+    # 默认值是为了「开了就有、且和代码块的 F5F5F5 略有区分」。
+    # 想彻底关掉：config 写 inline_background = ""（空串不画底纹）。
+    fill = properties.get(
+        "inline_background", properties.get("shading.fill", DEFAULT_INLINE_CODE_FILL)
+    )
+    if isinstance(fill, str) and fill:
+        set_run_shading(run, fill)
+    return run
+
+
 def _render_styled(
     state: _RenderState,
     paragraph: Any,
@@ -819,10 +842,16 @@ def _render_styled(
 ) -> None:
     """``Styled``：先渲染内容，再把样式属性写到这一段新建的 run 上。
 
-    ``sup`` / ``sub`` 是语义样式名：即使 config 没声明，也走上下标
+    ``sup`` / ``sub`` 是**语义名**：即便 config 未声明 ``[styles.sup]``，仍走上下标
     （手册 §6.2.3 的 ``[上标]{.sup}`` 与 ``H~2~O``）。
+
+    ``node.style_name`` 先经 ``[inline]`` 映射解析成**实际样式名**：
+    ``[inline] sup = "sup_caret"`` 时 ``^x^`` 会去找 ``[styles.sup_caret]``。
     """
-    properties = state.styles.get(node.style_name, {})
+    semantic = node.style_name
+    if semantic in INLINE_STYLE_NAMES:
+        semantic = state.config.inline_style_name(semantic)
+    properties = state.styles.get(semantic, {})
     start = len(paragraph.runs)
     _render_inlines(state, paragraph, node.content, context_style or None)
 

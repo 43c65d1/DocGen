@@ -35,11 +35,19 @@ MAX_INHERITANCE_DEPTH = 8
 #: config 没声明它们时按空属性处理，保证「引用不存在的样式」不会误报。
 BUILTIN_STYLES = ("strong", "em", "strike", "sup", "sub")
 
+#: ``[inline]`` 段可重定向的语义名（与 ``BUILTIN_STYLES`` 同集合）
+INLINE_STYLE_NAMES = BUILTIN_STYLES
+
+#: 语义名 -> 实际样式名 的映射（默认同名）
+InlineMapping = dict[str, str]
+
 __all__ = [
     "BUILTIN_STYLES",
     "CONFIG_VERSION",
+    "INLINE_STYLE_NAMES",
     "MAX_INHERITANCE_DEPTH",
     "Config",
+    "InlineMapping",
     "Style",
     "build_style_table",
     "build_style_tree",
@@ -97,6 +105,47 @@ class Config:
                 return default
             current = current[part]
         return current
+
+    # ---- 命名空间查询（供「是否显式声明过」这类判断）-------------------
+    def namespace(self, name: str) -> Table:
+        """取一个顶层命名空间表；不存在或不是表时返回空表。"""
+        value = self.extra.get(name)
+        return dict(value) if isinstance(value, dict) else {}
+
+    def declares(self, namespace: str, key: str) -> bool:
+        """配置里是否**显式声明**了 ``[namespace] key``（用于默认值提示）。
+
+        例：``[table] style`` 没写时返回 False —— 引擎据此提示「用了默认三线表」。
+        支持 ``key.sub`` 形式的嵌套写法。
+        """
+        table = self.namespace(namespace)
+        if not table:
+            return False
+        if key in table:
+            return True
+        current: Any = table
+        for part in key.split("."):
+            if not isinstance(current, dict) or part not in current:
+                return False
+            current = current[part]
+        return True
+
+    def inline_mapping(self) -> InlineMapping:
+        """``[inline]`` 段：Markdown/DFM 语义名 -> 实际样式名。
+
+        **默认同名**，所以不写 ``[inline]`` 时行为完全不变；写了就能重定向，
+        例如 ``sup = "sup_caret"`` 会让 ``^x^`` 走 ``[styles.sup_caret]``。
+        """
+        declared = self.namespace("inline")
+        return {name: str(declared.get(name, name)) for name in INLINE_STYLE_NAMES}
+
+    def inline_style_name(self, semantic: str) -> str:
+        """解析一个语义名到实际样式名（未映射则同名）。"""
+        return self.inline_mapping().get(semantic, semantic)
+
+    def has_style(self, name: str) -> bool:
+        """config 是否声明了该样式（``[styles.<name>]``）。"""
+        return name in self.styles
 
 
 class _LinkError(Exception):
@@ -298,20 +347,26 @@ def build_style_table(config: Config) -> dict[str, Properties]:
 
 
 def build_style_tree(config: Config) -> Table:
-    """展开后的样式树，形状与 config 一致（``document`` / ``styles`` / ``code_block``）。"""
+    """展开后的样式树，形状与 config 一致（``document`` / ``styles`` / ``code_block``）。
+
+    额外步骤：按 ``[inline]`` 把**语义名**指向实际样式名，让渲染层用
+    ``tree["styles"]["sup"]`` 也能取到重定向后的 ``sup_caret``。
+    """
     renumbered, symbols = _expand(config)
     try:
         code_block: Table = dict(_resolve_properties(config.code_block, symbols))
         for name in sorted(config.code_blocks):
             code_block[name] = _resolve_properties(renumbered[name], symbols)
 
-        tree: Table = {
-            "styles": {
-                name: _resolve_properties(renumbered[name], symbols)
-                for name in sorted(config.styles)
-            },
-            "code_block": code_block,
+        styles: Table = {
+            name: _resolve_properties(renumbered[name], symbols) for name in sorted(config.styles)
         }
+        # ``[inline]`` 重定向：语义名 -> 实际样式名，两边都留一份，渲染层无需感知映射
+        for semantic, target in config.inline_mapping().items():
+            if target != semantic and target in styles and semantic not in styles:
+                styles[semantic] = styles[target]
+
+        tree: Table = {"styles": styles, "code_block": code_block}
         if config.document:
             tree["document"] = _resolve_properties(config.document, symbols)
     except _LinkError as err:

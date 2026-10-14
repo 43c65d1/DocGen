@@ -6,6 +6,43 @@
 
 ## [Unreleased]
 
+### 新增（Output 系统）
+
+- 新增 [`output.py`](src/docgen/output.py)：日志级别是**阈值**（`log` < `warn`(默认) < `err`），
+  `none` **完全静默打印（连结果也不打印）但不静默退出码**；
+  `-q` 与 `none` 的区别：`-q` 只收诊断、结果照常，`none` 什么都不打印
+- **结果走 stdout、诊断走 stderr**（`check --json` 时 stdout 只有 JSON）
+- `[output] level` / `logfile` / `logfile_level`：logfile 默认关闭、**覆盖写**、单文件无滚动，
+  头部含 docgen/python/平台/config/input，尾部含退出码；环境变量里的
+  `*_TOKEN`/`*_PASSWORD` 等敏感键被过滤
+- CLI 全局开关 `-q/--quiet`（终端 err）、`-v/--verbose`（终端 log）、`--logfile PATH`
+  ——**只影响终端**，不改文件内的级别
+- 新增 `docgen bug-report --output report.txt [-c config]`：打包环境 + config 摘要 + 退出码，
+  作为用户报错时的出口
+
+### 新增（table 默认值提示）
+
+- 保持默认 `three_line` 不变；当 **config 未声明 `[table] style` 且内容含表格**时，
+  每次构建向 stderr 打一次 **warn 级**提示：
+  `[warn] 表格使用默认三线表样式。如需网格：style = "grid"；无框线：style = "none"。`
+  显式声明（哪怕仍是 `three_line`）后不再提示；`-q` 下随 warn 一起被收起
+
+### 新增（`[inline]` 映射段）
+
+- `[inline]`：语义名（`strong`/`em`/`strike`/`sup`/`sub`）→ 样式名，**默认同名**，
+  不写该段行为完全不变；可重定向，如 `sup = "sup_caret"` 配合 `[styles.sup_caret]`
+- 映射在**渲染与校验层**解析，IR 仍保留语义名（解析器不依赖 config）
+- 重定向后缺目标样式时报 `E1003`，错误信息**暴露映射链**：
+  `^上标^ 或 [文字]{.sup} 映射到 sup_caret（来自 [inline].sup），但 config 缺少 [styles.sup_caret]`
+- 样式树里同时保留语义名别名（HTML 侧按名查表也能命中）
+
+### 修复（表格单元格内 inline code 灰底）
+
+- 行内代码此前**没有底纹**；现在统一由 `_render_inline_code` 渲染，
+  段落与**表格单元格**内都画 **run 级** `w:rPr/w:shd`
+  （不是段落底纹——那样会涂满整行、看着像代码块）
+- 默认 `F2F2F2`，可用 `[code_block] inline_background` 改色、`= ""` 关闭
+
 ### 修复（用户实测报告的三项行为异常）
 
 - **`---` 输出成一长串破折号**：原来输出 `"———" * 8`，产物里就是字面破折号

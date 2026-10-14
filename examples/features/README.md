@@ -68,9 +68,27 @@ docgen build examples/features/content.md -c examples/features/config.toml -o ex
 所以本示例的样式**两种键都写**。只写 `font.bold` 时 HTML 侧不会加粗；
 只写 `font_weight` 时 Word 侧不会加粗。
 
-## 已知未实现（不要误判为失效）
+## 本示例额外演示的三项（后续需求）
 
-- `[table] style = "three_line"` 的**行内代码灰底**：单元格里的 `` `code` `` 用等宽字体，
-  但没有额外底纹。
-- 上标/下标的字号缩放交给 Word（``w:vertAlign`` 自带缩放），config 里的
-  `[styles.sup] font.size` 只影响显式 `[文字]{.sup}` 的写法。
+| 特性 | 在哪看 | 怎么验证 |
+|---|---|---|
+| `[output]` 输出与日志 | `config.toml` 的 `[output]` 段 | `docgen -v --logfile run.log build …` 后看 `run.log` 的头部与尾部（含退出码） |
+| 表格默认提示 | 不声明 `[table] style` 时 | `docgen build …` 的 stderr 会出现 `[warn] 表格使用默认三线表样式…`；本示例声明了 `style`，所以**不会**提示 |
+| `[inline]` 映射 | `config.toml` 的 `[inline] sup = "sup_caret"` | 文档里 `E=mc^2^` 的上标应变成**红色 7pt**（来自 `[styles.sup_caret]`） |
+
+`[inline]` 的两个对照实验：
+
+- 删掉整段 `[inline]` 后重建 → 上标回到 `[styles.sup]`（**默认同名**，行为与以前一致）
+- 只删 `[styles.sup_caret]` 但保留映射 → `check --strict` 报 `E1003` 并**打印映射链**：
+
+```
+^上标^ 或 [文字]{.sup} 映射到 sup_caret（来自 [inline].sup），但 config 缺少 [styles.sup_caret]
+```
+
+## 已知限制（不要误判为失效）
+
+- 上标/下标的字号缩放交给 Word（``w:vertAlign`` 自带缩放）；
+  `[styles.sup]` 的字号只在**显式** `[文字]{.sup}` 写法上完全可控。
+- **行内代码的灰底**默认由引擎给（`F2F2F2`），可用
+  `[code_block] inline_background = "DDEBF7"` 改色、`= ""` 关闭；
+  本示例未显式声明，用的是默认值。

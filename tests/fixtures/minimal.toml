@@ -1,0 +1,26 @@
+# DocGen 配置示例：覆盖标题、正文、自定义样式与代码块
+config_version = "0.1"
+
+[document]
+font_family = "sans-serif"
+font_size = "16px"
+line_height = "1.6"
+
+[styles.heading1]
+font_size = "2em"
+font_weight = "bold"
+
+[styles.body]
+font_size = "@document.font_size"
+
+[styles.keyword]
+color = "#0000FF"
+font_weight = "bold"
+
+[styles.caption]
+color = "#666"
+font_size = "0.9em"
+
+[code_block]
+background = "#f5f5f5"
+font_family = "monospace"

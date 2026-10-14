@@ -1,0 +1,22 @@
+config_version = "0.1"
+
+[document]
+font_family = "Georgia, serif"
+font_size = "15px"
+line_height = "1.8"
+
+[styles.heading1]
+font_size = "2.2em"
+font_weight = "bold"
+color = "#0b3d91"
+
+[styles.body]
+font_size = "@document.font_size"
+color = "#1a1a1a"
+
+[styles.keyword]
+color = "#b00020"
+font_weight = "bold"
+
+[code_block]
+background = "#f7f7f7"

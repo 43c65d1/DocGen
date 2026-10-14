@@ -1,0 +1,35 @@
+config_version = "0.1"
+
+[document]
+font_family = "system-ui, sans-serif"
+font_size = "16px"
+line_height = "1.7"
+
+[styles.heading1]
+font_size = "2em"
+font_weight = "bold"
+color = "#111111"
+
+[styles.heading2]
+based_on = "heading1"
+font_size = "1.4em"
+color = "#222222"
+
+[styles.body]
+font_size = "@document.font_size"
+color = "#333333"
+
+[styles.keyword]
+color = "#0000ff"
+font_weight = "bold"
+
+[styles.caption]
+color = "#666666"
+font_size = "0.9em"
+
+[code_block]
+background = "#f5f5f5"
+font_family = "monospace"
+
+[code_block.python]
+color = "#004400"

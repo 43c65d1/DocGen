@@ -1,0 +1,18 @@
+# 演示 include / based_on / @ref / for = false 四件事。
+# 合并顺序：include 依次合并 -> 自身最后覆盖。
+config_version = "0.1"
+include = ["base.toml"]
+
+[document]
+font_size = "16px"          # 覆盖 base.toml 的 15px
+
+[styles.heading1]
+font_size = "2em"           # 子覆盖父：base 的 2.2em 被换掉，color 仍继承
+
+[styles.heading2]
+based_on = "heading1"       # 单继承：拿 heading1 的最终值当父
+font_size = "1.4em"
+color = "#444444"
+
+[styles.body]
+color = false               # for = false 软删除：删掉 base 里的 #1a1a1a

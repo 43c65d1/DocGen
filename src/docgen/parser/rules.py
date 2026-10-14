@@ -1,0 +1,138 @@
+"""DFM 自研标记的行内规则。
+
+这些规则注册在 markdown-it-py 内置行内规则之前（``before="escape"``），
+因为它们必须看到**原始**源文本：
+
+- ``[[img:path]]`` / ``[[pagebreak]]``
+- ``[文字]{.样式名}``
+- 行内数学 ``$latex$`` 与块级数学 ``$$ ... $$``
+- ``\\`` 转义由 markdown-it 的 escape 规则处理，无需自定义
+  （数学内容在自定义规则里直接切片，因此 ``\\,`` 不会被当成转义吃掉）
+
+冲突规则（手册 5.1）：数学内不解析 Markdown；``[...]{...}`` 内不解析嵌套 ``[...]``；
+转义只作用于后一个字符。
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from markdown_it.token import Token
+
+if TYPE_CHECKING:  # pragma: no cover
+    from markdown_it import MarkdownIt
+    from markdown_it.rules_inline import StateInline
+
+
+def rule_wiki(state: StateInline, silent: bool) -> bool:
+    """``[[...]]``：目前白名单为 ``[[img:path]]`` 与 ``[[pagebreak]]``。"""
+    src = state.src
+    if src[state.pos : state.pos + 2] != "[[":
+        return False
+
+    end = src.find("]]", state.pos + 2)
+    if end == -1:
+        return False
+
+    inner = src[state.pos + 2 : end]
+    if inner != "pagebreak" and not inner.startswith("img:"):
+        return False
+
+    if silent:
+        return True
+
+    if inner == "pagebreak":
+        token = Token("dfm_pagebreak", "", 0)
+    else:
+        token = Token("dfm_image", "", 0)
+        token.content = inner[len("img:") :]
+    state.pushPending()
+    state.tokens.append(token)
+    state.pos = end + 2
+    return True
+
+
+def rule_styled(state: StateInline, silent: bool) -> bool:
+    """``[文字]{.样式名}``：属性语法内不解析嵌套 ``[...]``。"""
+    src = state.src
+    if src[state.pos] != "[" or src[state.pos : state.pos + 2] == "[[":
+        return False
+
+    close = src.find("]", state.pos + 1)
+    if close == -1 or src[close + 1 : close + 2] != "{":
+        return False
+
+    brace_end = src.find("}", close + 2)
+    if brace_end == -1:
+        return False
+
+    label = src[state.pos + 1 : close]
+    if "[" in label:
+        return False
+
+    style_name = src[close + 2 : brace_end].strip().lstrip(".#")
+    if not style_name or not _is_style_name(style_name):
+        return False
+
+    if silent:
+        return True
+
+    inner_tokens = state.md.parseInline(label, state.env)
+    state.pushPending()
+
+    open_token = Token("dfm_styled_open", "", 0)
+    open_token.attrSet("style", style_name)
+    state.tokens.append(open_token)
+    if inner_tokens:
+        state.tokens.extend(inner_tokens[0].children or [])
+    state.pushPending()
+    state.tokens.append(Token("dfm_styled_close", "", 0))
+
+    state.pos = brace_end + 1
+    return True
+
+
+def rule_math(state: StateInline, silent: bool) -> bool:
+    """``$latex$`` 与 ``$$latex$$``；内容原样保留，内部不解析 Markdown。"""
+    src = state.src
+    if src[state.pos] != "$":
+        return False
+
+    if src[state.pos : state.pos + 2] == "$$":
+        closing = src.find("$$", state.pos + 2)
+        if closing == -1:
+            return False
+        latex = src[state.pos + 2 : closing]
+        display = True
+        end = closing + 2
+    else:
+        closing = src.find("$", state.pos + 1)
+        if closing == -1:
+            return False
+        latex = src[state.pos + 1 : closing]
+        if not latex.strip():
+            return False
+        display = False
+        end = closing + 1
+
+    if silent:
+        return True
+
+    token = Token("dfm_math", "", 0)
+    token.content = latex
+    token.meta = {"display": display}
+    state.pushPending()
+    state.tokens.append(token)
+    state.pos = end
+    return True
+
+
+def _is_style_name(name: str) -> bool:
+    """样式名允许字母、数字与 ``_ - .``（点用于命名空间）。"""
+    return all(ch.isalnum() or ch in "_-." for ch in name)
+
+
+def register_rules(md: MarkdownIt) -> None:
+    md.inline.ruler.before("escape", "dfm_wiki", rule_wiki)
+    md.inline.ruler.before("escape", "dfm_math", rule_math)
+    md.inline.ruler.before("escape", "dfm_styled", rule_styled)

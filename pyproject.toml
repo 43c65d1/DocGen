@@ -15,6 +15,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
+    "pytest-cov>=5",
     "ruff>=0.5",
     "mypy>=1.10",
 ]
@@ -28,10 +29,27 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+tmp_path_retention_policy = "none"
+# 覆盖率门槛（手册 §12：> 70%）
+addopts = "--cov=docgen --cov-report=term-missing --cov-fail-under=70"
+
+[tool.coverage.run]
+branch = true
+source = ["src/docgen"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "assert_never",
+]
 
 [tool.ruff]
 line-length = 100
+# 沙箱内这些目录不可读：直接跳过，避免 ruff 扫描时刷权限警告
+exclude = ["^/\\.(?:(?:venv|venv-dev|tmp|uv-cache|pytest-tmp|tmp-pytest|cache))/"]
 
 [tool.mypy]
-python_version = "3.12.10"
+python_version = "3.12"
 strict = true
+exclude = ["^\\.(tmp|uv-cache|pytest-tmp|tmp-pytest|venv|venv-dev)/"]

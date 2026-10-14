@@ -26,17 +26,27 @@ __all__ = [
     "append_omml",
     "append_text",
     "apply_font",
+    "apply_three_line_borders",
+    "drop_empty_runs",
     "heading_style_id",
     "make_bookmark_end",
     "make_bookmark_start",
     "make_caption_field",
     "make_field",
+    "make_footnote_reference",
     "make_math_paragraph",
     "make_page_break",
     "make_reference_field",
     "make_section_v_align",
     "make_toc_field",
     "make_update_fields",
+    "merge_cell_horizontal",
+    "merge_cell_vertical",
+    "page_content_width",
+    "repeat_table_header",
+    "set_cell_alignment",
+    "set_cell_width",
+    "set_paragraph_alignment",
     "set_paragraph_border",
     "set_paragraph_indent",
     "set_paragraph_shading",
@@ -64,6 +74,7 @@ def apply_font(
     run: Any,
     name: str | None = None,
     *,
+    east_asia: str | None = None,
     size: Length | None = None,
     bold: bool | None = None,
     italic: bool | None = None,
@@ -72,12 +83,16 @@ def apply_font(
     superscript: bool | None = None,
     subscript: bool | None = None,
 ) -> None:
-    """统一的字体入口：四个 ``rFonts`` 属性一起写，避免 eastAsia 遗漏。
+    """统一的字体入口。
+
+    ``name`` 写西文（``ascii``/``hAnsi``/``cs``）；``east_asia`` 单独给中文。
+    代码块这类场景应只设西文字体、把 eastAsia 留给样式链——否则中文会掉字体
+    （把 ``eastAsia`` 也设成 Consolas 是错的）。
 
     ``color`` 接受 ``RRGGBB`` 或 ``#RRGGBB``（OOXML 不带 ``#``）。
     """
-    if name is not None:
-        _set_run_fonts(run, name)
+    if name is not None or east_asia is not None:
+        _set_run_fonts(run, name, east_asia)
     if size is not None:
         run.font.size = size
     if bold is not None:
@@ -94,14 +109,18 @@ def apply_font(
         run.font.subscript = subscript
 
 
-def _set_run_fonts(run: Any, name: str) -> None:
+def _set_run_fonts(run: Any, name: str | None, east_asia: str | None = None) -> None:
+    """写 ``rFonts``：西文三个属性 + 可选的中文（``eastAsia``）。"""
     rpr = run._element.get_or_add_rPr()
     fonts = rpr.find(qn("w:rFonts"))
     if fonts is None:
         fonts = OxmlElement("w:rFonts")
         rpr.insert(0, fonts)
-    for attribute in FONT_ATTRS:
-        fonts.set(qn(attribute), name)
+    if name is not None:
+        for attribute in ("w:ascii", "w:hAnsi", "w:cs"):
+            fonts.set(qn(attribute), name)
+    if east_asia is not None:
+        fonts.set(qn("w:eastAsia"), east_asia)
 
 
 def set_run_color(run: Any, color: str) -> None:
@@ -250,22 +269,71 @@ def make_update_fields() -> Any:
     return _element("w:updateFields", **{"w:val": "true"})
 
 
+def make_footnote_reference(footnote_id: int) -> Any:
+    """正文里的脚注引用：``<w:footnoteReference w:id="N"/>``（要放在 ``w:r`` 里）。"""
+    return _element("w:footnoteReference", **{"w:id": str(footnote_id)})
+
+
+def set_paragraph_alignment(paragraph: Any, alignment: str) -> None:
+    """段落对齐（图片常用）：``left`` / ``center`` / ``right``。"""
+    ppr = paragraph._p.get_or_add_pPr()
+    jc = ppr.find(qn("w:jc"))
+    if jc is None:
+        jc = OxmlElement("w:jc")
+        ppr.append(jc)
+    jc.set(qn("w:val"), alignment)
+
+
+def length_from_text(value: str) -> Any:
+    """``2cm`` / ``1in`` / ``120px`` / ``10mm`` -> ``docx.shared`` 长度；无法识别返回 None。"""
+    from docx.shared import Cm, Emu, Inches, Mm, Pt
+
+    text = value.strip().lower()
+    try:
+        if text.endswith("cm"):
+            return Cm(float(text[:-2]))
+        if text.endswith("mm"):
+            return Mm(float(text[:-2]))
+        if text.endswith("in"):
+            return Inches(float(text[:-2]))
+        if text.endswith("px"):
+            return Emu(int(float(text[:-2]) * 9525))  # 96 DPI：1px = 9525 EMU
+        if text.endswith("pt"):
+            return Pt(float(text[:-2]))
+    except ValueError:
+        return None
+    return None
+
+
 def make_field(instruction: str, placeholder: str = "") -> list[Any]:
-    """构造一个简单域（``fldChar`` 三段式），如 ``SEQ``、``REF``、``PAGE``、``TOC``。"""
-    begin = _element("w:fldChar", **{"w:fldCharType": "begin"})
+    """构造一个简单域（``fldChar`` 三段式），如 ``SEQ``、``REF``、``PAGE``、``TOC``。
+
+    **返回的是 ``w:r`` 列表**：``w:fldChar`` / ``w:instrText`` / ``w:t`` 必须包在 run 里，
+    直接挂在 ``w:p`` 下会让 Word 判定文档损坏（这是实测踩到的坑）。
+    """
+    begin = _run_with(_element("w:fldChar", **{"w:fldCharType": "begin"}))
+
     instr = OxmlElement("w:instrText")
     instr.set(qn("xml:space"), "preserve")
     instr.text = f" {instruction} "
-    separate = _element("w:fldChar", **{"w:fldCharType": "separate"})
-    end = _element("w:fldChar", **{"w:fldCharType": "end"})
+    instr_run = _run_with(instr)
 
-    elements: list[Any] = [begin, instr, separate]
+    separate = _run_with(_element("w:fldChar", **{"w:fldCharType": "separate"}))
+
+    runs: list[Any] = [begin, instr_run, separate]
     if placeholder:
         text = OxmlElement("w:t")
         text.text = placeholder
-        elements.append(text)
-    elements.append(end)
-    return elements
+        runs.append(_run_with(text))
+    runs.append(_run_with(_element("w:fldChar", **{"w:fldCharType": "end"})))
+    return runs
+
+
+def _run_with(child: Any) -> Any:
+    """把子元素包进 ``w:r``（run 是段落里唯一合法的容器）。"""
+    run = OxmlElement("w:r")
+    run.append(child)
+    return run
 
 
 def make_toc_field(levels: str = "1-9", placeholder: str = "按 F9 更新目录") -> list[Any]:
@@ -285,26 +353,46 @@ def make_bookmark_end(bookmark_id: int) -> Any:
     return _element("w:bookmarkEnd", **{"w:id": str(bookmark_id)})
 
 
-def append_field(parent: Any, instruction: str, placeholder: str = "") -> None:
-    """把域（``fldChar`` 三段式）直接挂到段落的 XML 上。
+def drop_empty_runs(paragraph: Any) -> int:
+    """删掉段落里的空 ``<w:r/>``（python-docx 清空单元格时会留下），返回删除数量。"""
+    target = getattr(paragraph, "_p", paragraph)
+    removed = 0
+    for run in list(target.findall(qn("w:r"))):
+        if len(run) == 0:
+            target.remove(run)
+            removed += 1
+    return removed
 
-    与 :func:`make_field` 的区别：那个返回元素列表给 run 用，这个负责挂载，
-    是渲染层的便捷入口（题注 ``SEQ``、引用 ``REF``、目录 ``TOC`` 都走它）。
+
+def append_field(
+    parent: Any,
+    instruction: str,
+    placeholder: str = "",
+    bookmark: str = "",
+    bookmark_id: int = 0,
+) -> None:
+    """把域（``fldChar`` 三段式）挂到段落上；每个片段都是独立的 ``w:r``。
+
+    给了 ``bookmark`` 就把**书签只包住域结果**（编号），这样 ``REF`` 域取到的是
+    ``1`` 而不是整条题注文字。``bookmark_id`` 由调用方提供，保证：
+    start/end 同 id、且**整篇文档内不重复**（重复会让 REF 取错书签）。
     """
     target = getattr(parent, "_p", parent)
-    for element in make_field(instruction, placeholder):
-        target.append(element)
+    if bookmark:
+        target.append(make_bookmark_start(bookmark, bookmark_id))
+    for run in make_field(instruction, placeholder):
+        target.append(run)
+    if bookmark:
+        target.append(make_bookmark_end(bookmark_id))
 
 
 def append_text(parent: Any, text: str) -> None:
-    """往段落里塞一段裸文本（域之间夹的文字，如「图」「：」）。"""
+    """往段落里塞一段裸文本（域之间夹的文字，如「图」「：」），同样包在 run 里。"""
     target = getattr(parent, "_p", parent)
-    run = OxmlElement("w:r")
     element = OxmlElement("w:t")
     element.set(qn("xml:space"), "preserve")
     element.text = text
-    run.append(element)
-    target.append(run)
+    target.append(_run_with(element))
 
 
 def make_caption_field(kind_label: str) -> str:
@@ -348,6 +436,101 @@ def set_table_borders(table: Any, **edges: str) -> None:
 
 def set_table_cell_width(cell: Any, width: Length) -> None:
     cell.width = width
+
+
+def page_content_width(document: Any) -> int:
+    """正文可用宽度（twips）：页面宽 - 左右页边距（1 twip = 635 EMU）。"""
+    section = document.sections[-1]
+    usable = int(section.page_width) - int(section.left_margin) - int(section.right_margin)
+    return max(1, usable // 635)
+
+
+def set_cell_width(cell: Any, width_twips: int) -> None:
+    """固定列宽：写 ``w:tcW``（``dxa`` = twips）。"""
+    tcpr = cell._tc.get_or_add_tcPr()
+    element = tcpr.find(qn("w:tcW"))
+    if element is None:
+        element = OxmlElement("w:tcW")
+        tcpr.insert(0, element)
+    element.set(qn("w:w"), str(width_twips))
+    element.set(qn("w:type"), "dxa")
+
+
+def set_cell_alignment(cell: Any, alignment: str) -> None:
+    """列对齐（GFM 分隔行）：给单元格里所有段落写 ``w:jc``。"""
+    for paragraph in cell.paragraphs:
+        ppr = paragraph._p.get_or_add_pPr()
+        jc = ppr.find(qn("w:jc"))
+        if jc is None:
+            jc = OxmlElement("w:jc")
+            ppr.append(jc)
+        jc.set(qn("w:val"), alignment)
+
+
+def repeat_table_header(row: Any) -> None:
+    """重复表头：``w:trPr/w:tblHeader``，跨页时表头自动重复。"""
+    trpr = row._tr.get_or_add_trPr()
+    if trpr.find(qn("w:tblHeader")) is None:
+        trpr.append(OxmlElement("w:tblHeader"))
+
+
+def merge_cell_horizontal(table: Any, row: int, column: int, span: int = 1) -> None:
+    """横向合并：给起始单元格写 ``w:gridSpan``。"""
+    cell = table.cell(row, column)
+    tcpr = cell._tc.get_or_add_tcPr()
+    element = tcpr.find(qn("w:gridSpan"))
+    if element is None:
+        element = OxmlElement("w:gridSpan")
+        tcpr.append(element)
+    element.set(qn("w:val"), str(max(2, span)))
+
+
+def merge_cell_vertical(table: Any, row: int, column: int, offset: int) -> None:
+    """纵向合并：起始格 ``w:vMerge val="restart"``，被并格 ``w:vMerge``（continue）。"""
+    target_row = row + offset
+    cell = table.cell(target_row, column)
+    tcpr = cell._tc.get_or_add_tcPr()
+    element = tcpr.find(qn("w:vMerge"))
+    if element is None:
+        element = OxmlElement("w:vMerge")
+        tcpr.append(element)
+    if offset == 0:
+        element.set(qn("w:val"), "restart")
+    else:
+        element.attrib.pop(qn("w:val"), None)
+
+
+def apply_three_line_borders(table: Any, header_rows: int = 1) -> None:
+    """三线表：顶线 + 底线 + 表头下横线；其余框线为 none。"""
+    set_table_borders(
+        table,
+        top="single",
+        bottom="single",
+        left="none",
+        right="none",
+        insideH="none",
+        insideV="none",
+    )
+    for index in range(header_rows):
+        if index < len(table.rows):
+            _set_row_bottom_border(table.rows[index], "single")
+
+
+def _set_row_bottom_border(row: Any, style: str) -> None:
+    for cell in row.cells:
+        tcpr = cell._tc.get_or_add_tcPr()
+        borders = tcpr.find(qn("w:tcBorders"))
+        if borders is None:
+            borders = OxmlElement("w:tcBorders")
+            tcpr.append(borders)
+        bottom = borders.find(qn("w:bottom"))
+        if bottom is None:
+            bottom = OxmlElement("w:bottom")
+            borders.append(bottom)
+        bottom.set(qn("w:val"), style)
+        bottom.set(qn("w:sz"), "8")
+        bottom.set(qn("w:space"), "0")
+        bottom.set(qn("w:color"), "auto")
 
 
 def heading_style_id(level: int) -> str:

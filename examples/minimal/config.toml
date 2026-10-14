@@ -1,35 +1,80 @@
 config_version = "0.1"
 
+# ── 全局排版（Word 口径：点号键）──────────────────────────────
 [document]
-font_family = "system-ui, sans-serif"
-font_size = "16px"
-line_height = "1.7"
+font.name = "宋体"
+font.size = "12pt"
+line_spacing = 1.5
 
+# ── 内容样式（HTML 与 Word 共用；Word 读 font.*，HTML 读同名键）──
 [styles.heading1]
-font_size = "2em"
-font_weight = "bold"
-color = "#111111"
+font.size = "18pt"
+font.bold = true
+font.color = "1F3864"
 
 [styles.heading2]
 based_on = "heading1"
-font_size = "1.4em"
-color = "#222222"
+font.size = "14pt"
+font.color = "2E5395"
 
 [styles.body]
-font_size = "@document.font_size"
-color = "#333333"
+font.size = "@document.font.size"
+first_line_chars = 200
+
+[styles.strong]
+font.bold = true
+
+[styles.em]
+font.italic = true
 
 [styles.keyword]
-color = "#0000ff"
-font_weight = "bold"
+font.color = "0000FF"
+font.bold = true
 
 [styles.caption]
-color = "#666666"
-font_size = "0.9em"
+font.size = "10.5pt"
+font.color = "666666"
 
+# ── 代码块 ──────────────────────────────────────────────
 [code_block]
-background = "#f5f5f5"
-font_family = "monospace"
+font.name = "Consolas"
+font.size = "10pt"
+background = "F5F5F5"
+border = "CCCCCC"
 
 [code_block.python]
-color = "#004400"
+font.color = "004400"
+
+# ── 表格（W4）──────────────────────────────────────────
+[table]
+style = "three_line"
+header_repeat = true
+col_widths = [3, 2, 5]
+
+# ── 图片（W4）──────────────────────────────────────────
+[image]
+width = "6cm"
+align = "center"
+
+# ── 分节 / 页码 / 页眉页脚（W5）──────────────────────────
+# 第 1 节：封面（垂直居中、罗马页码、无页眉页脚）
+[[sections]]
+page.size = "A4"
+page.margin.top = 2.5
+page.margin.bottom = 2.5
+page.margin.left = 3.0
+page.margin.right = 2.5
+numbering.format = "upperRoman"
+cover = true
+
+# 第 2 节：正文（阿拉伯页码重启、页眉页脚）
+[[sections]]
+page.size = "A4"
+page.margin.top = 2.0
+page.margin.bottom = 2.0
+page.margin.left = 2.5
+page.margin.right = 2.5
+numbering.format = "decimal"
+numbering.start = 1
+header.text = "DocGen 演示文档"
+footer.text = "第 PAGE 页"

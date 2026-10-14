@@ -67,6 +67,9 @@ class Config:
     styles: dict[str, Style]
     code_block: Properties
     code_blocks: dict[str, Properties]
+    #: 其它顶层命名空间（``[table]`` / ``[math]`` / ``[image]`` / ``[page]``…）；
+    #: 渲染层按需取用，不参与样式继承
+    extra: Table = field(default_factory=dict)
     raw: Table = field(default_factory=dict, repr=False)
 
 
@@ -105,8 +108,27 @@ def load_config(path: Path) -> Config:
         styles=_styles_of(merged),
         code_block=base,
         code_blocks=languages,
+        extra=_extra_of(merged),
         raw=merged,
     )
+
+
+#: 已由专门字段承载的顶层键
+_RESERVED_TABLES = frozenset({"config_version", "include", "document", "styles", "code_block"})
+
+
+def _extra_of(merged: Table) -> Table:
+    """收集其它顶层命名空间：``[table]``/``[math]``/``[image]``（表）与
+    ``[[sections]]``（表数组）。"""
+    extra: Table = {}
+    for key, value in merged.items():
+        if key in _RESERVED_TABLES:
+            continue
+        if isinstance(value, dict) or (
+            isinstance(value, list) and value and all(isinstance(item, dict) for item in value)
+        ):
+            extra[str(key)] = value
+    return extra
 
 
 def _read_toml(path: Path) -> Table:

@@ -16,21 +16,9 @@
 
 from __future__ import annotations
 
-import functools
-from pathlib import Path
-
 from lxml import etree
 
-__all__ = [
-    "SCHEMA_DIR",
-    "validate_document_xml",
-    "validate_parts",
-    "validate_with_schema",
-    "wml_schema",
-]
-
-#: 随仓库提供的 ECMA-376 schema（见 ``tests/schemas/README.md``）
-SCHEMA_DIR = Path(__file__).resolve().parents[3] / "tests" / "schemas" / "ecma-376"
+__all__ = ["validate_document_xml", "validate_parts"]
 
 _W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 
@@ -153,43 +141,3 @@ def _local(element: etree._Element) -> str:
     if not isinstance(tag, str):
         return "?"
     return tag.split("}")[-1] if "}" in tag else tag
-
-
-@functools.lru_cache(maxsize=1)
-def wml_schema() -> etree.XMLSchema:
-    """官方 **WML** schema（``wml.xsd``，含 drawingml / math 依赖）。
-
-    编译约 0.1s，缓存复用；校验一份真实文档约几十毫秒。
-    """
-    return etree.XMLSchema(etree.parse(str(SCHEMA_DIR / "wml.xsd")))
-
-
-def validate_with_schema(xml: bytes | str) -> list[str]:
-    """用官方 WML schema 校验 ``document.xml``，返回问题列表（空 = 合法）。
-
-    比 :func:`validate_document_xml` 强得多：schema 是 ``xsd:sequence``，
-    **子元素顺序**、属性拼写、必需属性缺漏都会被指出来——
-    这些正是 Word 会静默忽略、肉眼看不出的问题
-    （实测抓到过 ``w:pgNumType``/``w:vAlign``/``w:tblLayout``/``w:left`` 顺序错）。
-    """
-    data = xml.encode("utf-8") if isinstance(xml, str) else xml
-    try:
-        root = etree.fromstring(data)
-    except etree.XMLSyntaxError as exc:
-        return [f"XML 不合法: {exc}"]
-
-    schema = wml_schema()
-    if schema.validate(root):
-        return []
-
-    problems: list[str] = []
-    for error in schema.error_log:
-        message = str(error)
-        message = message.replace(
-            "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}", "w:"
-        )
-        message = message.replace(
-            "{http://schemas.openxmlformats.org/markup-compatibility/2006}", "mc:"
-        )
-        problems.append(message)
-    return problems

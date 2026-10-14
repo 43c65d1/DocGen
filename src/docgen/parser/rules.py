@@ -35,7 +35,7 @@ def rule_wiki(state: StateInline, silent: bool) -> bool:
         return False
 
     inner = src[state.pos + 2 : end]
-    if inner != "pagebreak" and inner != "toc" and not inner.startswith(("img:", "ref:")):
+    if inner != "pagebreak" and inner != "toc" and not inner.startswith(("img:", "ref:", "fn:")):
         return False
 
     if silent:
@@ -48,6 +48,9 @@ def rule_wiki(state: StateInline, silent: bool) -> bool:
     elif inner.startswith("ref:"):
         token = Token("dfm_ref", "", 0)
         token.content = inner[len("ref:") :]
+    elif inner.startswith("fn:"):
+        token = Token("dfm_footnote", "", 0)
+        token.content = inner[len("fn:") :]
     else:
         token = Token("dfm_image", "", 0)
         token.content = inner[len("img:") :]

@@ -16,6 +16,7 @@ __all__ = [
     "Break",
     "Code",
     "CodeBlock",
+    "Footnote",
     "Formula",
     "Heading",
     "Image",
@@ -31,6 +32,7 @@ __all__ = [
     "Ref",
     "Styled",
     "Table",
+    "TableCell",
     "Text",
     "ThematicBreak",
     "Toc",
@@ -95,7 +97,14 @@ class Ref(Inline):
     target: str
 
 
-InlineNode = Text | Styled | Code | Math | Link | Image | Break | Ref
+@dataclass(frozen=True, slots=True)
+class Footnote(Inline):
+    """``[[fn:文字]]``：行内脚注（渲染成引用 run + ``word/footnotes.xml`` 条目）。"""
+
+    text: str
+
+
+InlineNode = Text | Styled | Code | Math | Link | Image | Break | Ref | Footnote
 
 
 # --------------------------------------------------------------------------
@@ -146,8 +155,12 @@ class Formula(Block):
 
 @dataclass(frozen=True, slots=True)
 class ImageBlock(Block):
+    """独立一行的 ``[[img:path]]``；``width`` / ``align`` 来自属性或 config。"""
+
     src: str
     alt: str = ""
+    width: str = ""
+    align: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,10 +200,33 @@ class BlockQuote(Block):
 
 
 @dataclass(frozen=True, slots=True)
+class TableCell:
+    """表格单元格（支持合并）。
+
+    ``blocks`` 是单元格内容（段落/列表/公式/图片），**禁止嵌套表格**，
+    且块序列最多 2 层（手册 §6.3.2 的硬约束）。
+    """
+
+    blocks: list["BlockNode"] = field(default_factory=list)
+    colspan: int = 1
+    rowspan: int = 1
+    is_merge_continuation: bool = False
+    diag: int = 0
+    diag_parts: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
 class Table(Block):
-    """简单表格：``rows`` 为单元格文本的行列表，第一行是表头。"""
+    """表格：``rows`` 是纯文本行（GFM 简单表格），第一行是表头。
+
+    ``cells`` 是结构化单元格（支持合并），给了它就优先于 ``rows``；
+    ``alignments`` 来自 GFM 分隔行（``:---`` / ``:---:`` / ``---:``），
+    每列取值 ``left`` / ``center`` / ``right``，空列表表示未声明。
+    """
 
     rows: list[list[str]]
+    cells: list[list[TableCell]] = field(default_factory=list)
+    alignments: list[str] = field(default_factory=list)
 
 
 BlockNode = (

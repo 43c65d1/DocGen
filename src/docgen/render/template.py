@@ -24,7 +24,14 @@ from ..config import Config
 from ..units import to_points
 from .ooxml import set_style_outline_level
 
-__all__ = ["TEMPLATE_VERSION", "create_document", "iter_styles"]
+__all__ = [
+    "MONO_EAST_ASIA",
+    "MONO_FONT",
+    "TEMPLATE_VERSION",
+    "create_document",
+    "ensure_font_table",
+    "iter_styles",
+]
 
 #: 母版版本：随解包入库的模板一起提交，CI 可校验
 TEMPLATE_VERSION = "0.1"
@@ -62,11 +69,12 @@ def create_document(config: Config, template: Path | None = None) -> Any:
 
 
 def _extend_default_template(document: Any) -> None:
-    """给默认母版补齐 §14.1 槽位（幂等）：目录样式、多级编号、题注、updateFields。"""
+    """补齐 §14.1 槽位（幂等）：目录样式、题注样式、字体表、多级编号、updateFields。"""
     from .template_build import add_heading_numbering, add_toc_styles, ensure_update_fields
 
     add_toc_styles(document)
     _ensure_caption_styles(document)
+    ensure_font_table(document)
     add_heading_numbering(document)
     ensure_update_fields(document)
 
@@ -80,6 +88,80 @@ def _ensure_caption_styles(document: Any) -> None:
         style.base_style = document.styles["Normal"]
         style.quick_style = True
         style.hidden = False
+
+
+#: 代码块等场景的等宽字体（与 docx.py 的 DEFAULT_MONO_FONT 一致）
+MONO_FONT = "Consolas"
+#: 代码块里中文的回退字体
+MONO_EAST_ASIA = "等线"
+
+#: 名称需要替代字体时给出的别名
+FONT_ALIASES: dict[str, str] = {"Courier": "Courier New"}
+
+
+def ensure_font_table(document: Any, extra_fonts: list[str] | None = None) -> list[str]:
+    """把用到的字体登记进 ``word/fontTable.xml``，返回本次新增的字体名。
+
+    Word 只认 fontTable / theme 里声明过的字体：缺登记会提示「缺少字体」并替换字形
+    （DSH 预览侧的 "Missing fonts" 就是这里来的）。python-docx 没有 fontTable 的
+    专用 API，所以直接改这个部件的 XML。
+    """
+    part = _font_table_part(document)
+    if part is None:
+        return []
+
+    from lxml import etree
+
+    root = etree.fromstring(part.blob)
+    existing = {
+        font.get(qn("w:name")) for font in root.findall(qn("w:font")) if font.get(qn("w:name"))
+    }
+
+    wanted = [MONO_FONT, MONO_EAST_ASIA, *FONT_ALIASES, *(extra_fonts or [])]
+    added: list[str] = []
+    for name in wanted:
+        if not name or name in existing:
+            continue
+        root.append(_font_element(name, FONT_ALIASES.get(name)))
+        existing.add(name)
+        added.append(name)
+
+    if added:
+        part._blob = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True)
+    return added
+
+
+def _font_table_part(document: Any) -> Any:
+    """在包部件里找 ``/word/fontTable.xml``。"""
+    for part in document.part.package.parts:
+        if str(part.partname).endswith("fontTable.xml"):
+            return part
+    return None
+
+
+def _font_element(name: str, substitute: str | None = None) -> Any:
+    """构造 ``<w:font w:name="X">``；中文额外写 ``w:charset="86"``（GB2312）。"""
+    font = OxmlElement("w:font")
+    font.set(qn("w:name"), name)
+    if substitute:
+        alternative = OxmlElement("w:altName")
+        alternative.set(qn("w:val"), substitute)
+        font.append(alternative)
+    if _is_cjk(name):
+        charset = OxmlElement("w:charset")
+        charset.set(qn("w:val"), "86")
+        font.append(charset)
+    family = OxmlElement("w:family")
+    family.set(qn("w:val"), "auto")
+    font.append(family)
+    pitch = OxmlElement("w:pitch")
+    pitch.set(qn("w:val"), "variable")
+    font.append(pitch)
+    return font
+
+
+def _is_cjk(name: str) -> bool:
+    return any("\u4e00" <= char <= "\u9fff" for char in name)
 
 
 def apply_document_defaults(document: Any, config: Config) -> None:

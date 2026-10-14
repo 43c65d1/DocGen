@@ -6,6 +6,46 @@
 
 ## [Unreleased]
 
+### 新增（完整版 W5：分节 / 页码 / 页眉页脚 / 封面）
+
+- **分节**：`[[sections]]` 配置纸张（A4/A3/A5/Letter/Legal）、页边距（cm）、分节符
+- **页码体系**：`numbering.format`（decimal / upperRoman / lowerRoman / upperLetter）
+  与 `numbering.start`（重启）→ `w:pgNumType`；页脚里的 `PAGE` 变成页码域
+- **页眉页脚**：每节独立（`is_linked_to_previous = False`），避免 Word 继承错乱（§17.1）
+- **封面**：`cover = true` → `sectPr` 的 `w:vAlign val="center"` 垂直居中
+
+### 新增（完整版 W4：表格 / 图片 / 脚注）
+
+- **表格**：`[table] style` 三线表/网格/无框、`header_repeat`（`w:tblHeader` 跨页重复表头）、
+  `col_widths` 固定列宽（比例归一化）、GFM 列对齐（`:---:`）、IR `TableCell` 合并
+  （`w:gridSpan` / `w:vMerge`）
+- **图片**：`[[img:path width=2cm align=center]]` 与 `[image]` 默认值，支持 `cm/mm/in/px/pt`
+- **脚注**：`[[fn:文字]]` → `Footnote` 行内节点 + **手写 `word/footnotes.xml`**
+  （含 `separator`/`continuationSeparator` 条目）+ 内容类型与关系项注入
+- IR 新增 `TableCell` / `Footnote`，`ImageBlock` 增加 `width`/`align`；
+  config 新增 `extra` 命名空间（`[table]`/`[image]`/`[math]`/`[[sections]]`）
+
+### 修复（Word 打不开 / 域结果错误，均由 Word 实测发现）
+
+- **Word 报「无法打开文件」**：`w:fldChar` / `w:instrText` / `w:t` 被直接挂在 `<w:p>` 下，
+  而 OOXML 要求它们必须包在 `<w:r>` 里。涉及题注 `SEQ` 域、引用 `REF` 域、目录 `TOC` 域；
+  已在 [ooxml.py](src/docgen/render/ooxml.py) 统一改成「每个域片段一个 run」。
+- **`REF` 域报「错误！未找到引用源」**：公式编号的书签 `start`/`end` 用了**两个不同 id**；
+  另外题注书签包住了整条题注，引用取到整段文字而不是编号。现在书签只包编号，
+  id 由文档级计数器统一分配（不重复）。
+- **空书签**：先插书签再写内容会得到空书签（`REF` 取不到值），改为写完内容再整体包书签。
+- **表格单元格残留空 `<w:r/>`**：`cell.text = ""` 会留下空 run，改为删除空 run。
+- **字体未登记**：`word/fontTable.xml` 没登记 Consolas/等线等实际用到的字体，
+  Word 与预览会提示「缺少字体」并替换字形；新增 `ensure_font_table()` 构建时登记。
+- **代码块的中文字体**：原来把 `w:eastAsia` 也设成 Consolas（等宽西文字体），
+  中文会掉字体；现在只设西文（`ascii`/`hAnsi`/`cs`），`eastAsia` 留给样式链。
+
+### 新增（Word 产出结构校验器）
+
+- [render/ooxml_check.py](src/docgen/render/ooxml_check.py)：检查「XML 合法但结构非法」的问题
+  （域元素必须在 run 内、`w:pPr`/`w:rPr` 顺序、表格层级、空 run）；
+  [tests/test_ooxml_validity.py](tests/test_ooxml_validity.py) 覆盖全部特性与真实示例。
+
 ### 新增（完整版 W3：编号 / 题注 / 交叉引用）
 
 - **公式编号**：`\begin{equation #eq:main number=1}` → 无边框三列表格（左空 / 中公式 / 右编号），

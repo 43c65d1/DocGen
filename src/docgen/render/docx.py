@@ -24,6 +24,7 @@ from ..ir import (
     Break,
     Code,
     CodeBlock,
+    Footnote,
     Formula,
     Heading,
     Image,
@@ -39,6 +40,7 @@ from ..ir import (
     Ref,
     Styled,
     Table,
+    TableCell,
     Text,
     ThematicBreak,
     Toc,
@@ -50,12 +52,22 @@ from .ooxml import (
     append_omml,
     append_text,
     apply_font,
+    apply_three_line_borders,
+    drop_empty_runs,
+    length_from_text,
     make_bookmark_end,
     make_bookmark_start,
     make_caption_field,
     make_math_paragraph,
     make_page_break,
     make_reference_field,
+    merge_cell_horizontal,
+    merge_cell_vertical,
+    page_content_width,
+    repeat_table_header,
+    set_cell_alignment,
+    set_cell_width,
+    set_paragraph_alignment,
     set_paragraph_border,
     set_paragraph_indent,
     set_paragraph_shading,
@@ -79,11 +91,11 @@ def render_docx(
     template: Path | None = None,
     base_dir: Path | None = None,
 ) -> Path:
-    """渲染为 ``.docx`` 文件，返回写入路径。"""
-    document = _build_document(blocks, config, template, base_dir)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    document.save(str(output))
-    return output
+    """渲染为 ``.docx`` 文件，返回写入路径（有脚注时注入 ``word/footnotes.xml``）。"""
+    document, footnotes = _build_document(blocks, config, template, base_dir)
+    from .footnotes import save_with_footnotes
+
+    return save_with_footnotes(document, output, footnotes)
 
 
 def render_docx_bytes(
@@ -93,10 +105,13 @@ def render_docx_bytes(
     base_dir: Path | None = None,
 ) -> bytes:
     """渲染到内存（测试用，避免落盘）。"""
-    document = _build_document(blocks, config, template, base_dir)
+    from .footnotes import inject_footnotes
+
+    document, footnotes = _build_document(blocks, config, template, base_dir)
     buffer = io.BytesIO()
     document.save(buffer)
-    return buffer.getvalue()
+    data = buffer.getvalue()
+    return inject_footnotes(data, footnotes) if footnotes else data
 
 
 def _build_document(
@@ -104,8 +119,9 @@ def _build_document(
     config: Config,
     template: Path | None,
     base_dir: Path | None,
-) -> Any:
+) -> tuple[Any, list[str]]:
     document = create_document(config, template)
+    _apply_sections(document, config)
     state = _RenderState(
         document=document,
         config=config,
@@ -114,7 +130,16 @@ def _build_document(
     )
     _render_blocks(state, blocks)
     _ensure_update_fields(document)
-    return document
+    return document, state.footnotes
+
+
+def _apply_sections(document: Any, config: Config) -> list[Any]:
+    """``[[sections]]``：设置纸张/页边距/页码/页眉页脚（无配置时保持默认）。"""
+    from .sections import apply_sections
+
+    raw = config.extra.get("sections")
+    specs = [item for item in raw if isinstance(item, dict)] if isinstance(raw, list) else []
+    return apply_sections(document, specs)
 
 
 class _RenderState:
@@ -122,8 +147,11 @@ class _RenderState:
         "_bookmark_id",
         "base_dir",
         "config",
+        "default_east_asia",
         "doc_settings",
         "document",
+        "footnote_reference_maker",
+        "footnotes",
         "math_engine",
         "math_on_fail",
         "math_xsl",
@@ -143,7 +171,11 @@ class _RenderState:
         self.base_dir = base_dir
         self.doc_settings = dict(config.document)
         self.math_engine, self.math_on_fail, self.math_xsl = math_settings(config)
-        self._bookmark_id = 0
+        self._bookmark_id = 1000
+        self.footnotes: list[str] = []
+        self.footnote_reference_maker: Any = None
+        # 可选的配置键：代码块等场景要显式指定中文字体时用
+        self.default_east_asia = str(config.document.get("font.east_asia", "")) or None
 
     def next_bookmark_id(self) -> int:
         self._bookmark_id += 1
@@ -240,7 +272,8 @@ def _render_code_block(state: _RenderState, block: CodeBlock) -> None:
     run = paragraph.add_run(block.content.rstrip("\n"))
     _apply_run_style(state, run, properties)
     if "font.name" not in properties and "font" not in properties:
-        apply_font(run, DEFAULT_MONO_FONT)
+        # 只设西文字体：把 eastAsia 留给样式链，否则代码块里的中文会掉字体
+        apply_font(run, DEFAULT_MONO_FONT, east_asia=state.default_east_asia)
 
     # 背景与边框：config 里可以写 ``background = "F5F5F5"``、``border = "CCCCCC"``
     fill = properties.get("background") or properties.get("shading.fill")
@@ -269,12 +302,45 @@ def _render_formula(state: _RenderState, block: Formula) -> None:
 
 def _render_image_block(state: _RenderState, block: ImageBlock) -> None:
     paragraph = state.document.add_paragraph()
-    _add_picture(state, paragraph, block.src)
+    width = block.width or _image_setting(state, "width")
+    align = block.align or _image_setting(state, "align")
+    if align:
+        set_paragraph_alignment(paragraph, align)
+    _add_picture(state, paragraph, block.src, width=width)
+
+
+def _image_setting(state: _RenderState, key: str) -> str:
+    """``[image]`` 配置：尺寸/对齐的默认值。"""
+    settings = state.config.extra.get("image")
+    if isinstance(settings, dict):
+        value = settings.get(key)
+        if value:
+            return str(value)
+    return ""
+
+
+def _add_picture(state: _RenderState, paragraph: Any, src: str, width: str = "") -> None:
+    """图片：相对路径按源文件所在目录解析；``width`` 支持 ``2cm`` / ``1in`` / ``120px``。"""
+    candidate = Path(src)
+    if not candidate.is_absolute() and state.base_dir is not None:
+        candidate = state.base_dir / src
+    if not candidate.is_file():
+        paragraph.add_run(f"[图片缺失: {src}]")
+        return
+    run = paragraph.add_run()
+    if width:
+        length = length_from_text(width)
+        if length is not None:
+            run.add_picture(str(candidate), width=length)
+            return
+    run.add_picture(str(candidate))
+    paragraph = state.document.add_paragraph()
+    paragraph.add_run("\u2014" * 20)
 
 
 def _render_thematic_break(state: _RenderState) -> None:
-    paragraph = state.document.add_paragraph()
-    paragraph.add_run("\u2014" * 20)
+    """分隔线：用一串破折号表示（Word 的 ``w:pBdr`` 也行，但这样更稳）。"""
+    state.document.add_paragraph("———" * 8)
 
 
 def _render_page_break(state: _RenderState) -> None:
@@ -333,20 +399,18 @@ def _render_numbered_formula(state: _RenderState, block: NamedBlock) -> None:
         insideV="none",
     )
     for cell in table.rows[0].cells:
-        cell.text = ""
+        drop_empty_runs(cell.paragraphs[0])
 
     middle = table.cell(0, 1)
     _fill_formula_cell(state, middle, formula)
 
     number_cell = table.cell(0, 2)
     number = str(block.attributes.get("number", ""))
+    paragraph = number_cell.paragraphs[0]
+    # 先放文本，再整体包书签：反过来会得到「空书签」，REF 域取不到东西
+    append_text(paragraph, f"({number})")
     if block.label:
-        number_cell.paragraphs[0]._p.append(
-            make_bookmark_start(block.label, state.next_bookmark_id())
-        )
-    append_text(number_cell.paragraphs[0], f"({number})")
-    if block.label:
-        number_cell.paragraphs[0]._p.append(make_bookmark_end(state.next_bookmark_id()))
+        set_paragraph_bookmark(paragraph, block.label, state.next_bookmark_id())
 
 
 def _fill_formula_cell(state: _RenderState, cell: Any, formula: Formula) -> None:
@@ -369,14 +433,27 @@ def _render_caption(state: _RenderState, block: NamedBlock) -> None:
 
     label = CAPTION_KINDS[caption_kind(block)]
     paragraph = state.document.add_paragraph(style="Caption")
-    bookmark_id = state.next_bookmark_id()
-    paragraph._p.append(make_bookmark_start(block.label, bookmark_id))
     append_text(paragraph, f"{label} ")
-    append_field(paragraph, make_caption_field(label), "1")
+    append_field(
+        paragraph,
+        make_caption_field(label),
+        "1",
+        bookmark=block.label,
+        bookmark_id=state.next_bookmark_id(),
+    )
     text = _caption_text(block)
     if text:
         append_text(paragraph, f" {text}")
-    paragraph._p.append(make_bookmark_end(bookmark_id))
+
+
+def set_paragraph_bookmark(paragraph: Any, name: str, bookmark_id: int) -> None:
+    """把段落**已有内容**包进一个书签（start 放最前、end 放最后，同 id）。
+
+    必须在内容写入之后调用——先插空书签会让 REF 域取不到任何东西。
+    """
+    target = paragraph._p
+    target.insert(0, make_bookmark_start(name, bookmark_id))
+    target.append(make_bookmark_end(bookmark_id))
 
 
 def _caption_text(block: NamedBlock) -> str:
@@ -413,21 +490,160 @@ def _render_ref(state: _RenderState, paragraph: Any, target: str) -> None:
     append_field(paragraph, make_reference_field(target), "1")
 
 
+def _render_footnote(state: _RenderState, paragraph: Any, text: str) -> None:
+    """``[[fn:文字]]`` → 正文里的脚注引用 run（脚注条目在存盘时注入部件）。"""
+    state.footnotes.append(text)
+    if state.footnote_reference_maker is None:
+        from .ooxml import make_footnote_reference
+
+        state.footnote_reference_maker = make_footnote_reference
+    run = paragraph.add_run()
+    run._element.append(state.footnote_reference_maker(len(state.footnotes)))
+    run.font.superscript = True
+
+
 def _render_table(state: _RenderState, block: Table) -> None:
+    """表格：config 驱动三线表/网格/无框 + 重复表头 + 固定列宽 + 列对齐 + 合并。"""
+    if block.cells:
+        _render_cell_table(state, block)
+        return
     if not block.rows:
         return
+
+    properties = _table_properties(state)
     columns = max(len(row) for row in block.rows)
     table = state.document.add_table(rows=len(block.rows), cols=columns)
-    table.style = "Table Grid"
+    if properties.get("borders", "grid") == "grid":
+        table.style = "Table Grid"
+
+    widths = _column_widths(properties, columns, state)
     for row_index, row in enumerate(block.rows):
         for column_index in range(columns):
             text = row[column_index] if column_index < len(row) else ""
             cell = table.cell(row_index, column_index)
-            cell.text = ""
+            drop_empty_runs(cell.paragraphs[0])
             run = cell.paragraphs[0].add_run(text)
             if row_index == 0:
                 run.bold = True
-    set_table_borders(table, top="single", bottom="single", insideH="single")
+            _apply_cell_format(cell, widths[column_index], _column_alignment(block, column_index))
+        if row_index == 0 and bool(properties.get("header_repeat", True)):
+            repeat_table_header(table.rows[0])
+
+    _apply_table_borders(table, properties, header_rows=1)
+
+
+def _render_cell_table(state: _RenderState, block: Table) -> None:
+    """结构化单元格（支持合并）。"""
+    properties = _table_properties(state)
+    rows = block.cells
+    columns = sum(cell.colspan for cell in rows[0]) if rows else 0
+    if not columns:
+        return
+    table = state.document.add_table(rows=len(rows), cols=columns)
+    if properties.get("borders", "grid") == "grid":
+        table.style = "Table Grid"
+
+    for row_index, row in enumerate(rows):
+        column_index = 0
+        for cell_spec in row:
+            cell = table.cell(row_index, column_index)
+            drop_empty_runs(cell.paragraphs[0])
+            if cell_spec.is_merge_continuation:
+                merge_cell_horizontal(table, row_index, column_index)
+            else:
+                span = max(1, cell_spec.colspan)
+                if span > 1:
+                    merge_cell_horizontal(table, row_index, column_index, span)
+                if cell_spec.rowspan > 1:
+                    for offset in range(1, cell_spec.rowspan):
+                        merge_cell_vertical(table, row_index, column_index, offset)
+                _write_cell_content(state, cell, cell_spec)
+            column_index += max(1, cell_spec.colspan)
+        if row_index == 0 and bool(properties.get("header_repeat", True)):
+            repeat_table_header(table.rows[0])
+
+    _apply_table_borders(table, properties, header_rows=1)
+
+
+def _write_cell_content(state: _RenderState, cell: Any, spec: TableCell) -> None:
+    """单元格内容：优先渲染块序列；没有块时留空段落。"""
+    if not spec.blocks:
+        return
+    cell.text = ""
+    drop_empty_runs(cell.paragraphs[0])
+    first = cell.paragraphs[0]
+    for index, child in enumerate(spec.blocks):
+        if isinstance(child, Paragraph):
+            target = first if index == 0 else cell.add_paragraph()
+            _render_inlines(state, target, child.content, None)
+        else:
+            _render_block(state, child)
+
+
+def _table_properties(state: _RenderState) -> dict[str, Any]:
+    """``[table]`` 配置（缺省：三线表 + 重复表头）。"""
+    raw = state.config.extra.get("table")
+    table = dict(raw) if isinstance(raw, dict) else {}
+    style = str(table.get("style", "three_line"))
+    table["style"] = style
+    table["borders"] = {"three_line": "three_line", "grid": "grid", "none": "none"}.get(
+        style, "three_line"
+    )
+    if "header_repeat" not in table:
+        table["header_repeat"] = True
+    return table
+
+
+def _column_widths(properties: dict[str, Any], columns: int, state: _RenderState) -> list[int]:
+    """列宽：``[table] col_widths`` 给出相对比例；否则按内容平均分配。"""
+    total = page_content_width(state.document)
+    ratios = properties.get("col_widths")
+    if (
+        isinstance(ratios, list)
+        and len(ratios) == columns
+        and all(isinstance(item, (int, float)) and item > 0 for item in ratios)
+    ):
+        weight_sum = float(sum(ratios))
+        return [int(total * float(item) / weight_sum) for item in ratios]
+    return [total // columns] * columns
+
+
+def _column_alignment(block: Table, index: int) -> str:
+    if index < len(block.alignments):
+        return block.alignments[index]
+    return ""
+
+
+def _apply_cell_format(cell: Any, width: int, alignment: str) -> None:
+    set_cell_width(cell, width)
+    if alignment:
+        set_cell_alignment(cell, alignment)
+
+
+def _apply_table_borders(table: Any, properties: dict[str, Any], header_rows: int) -> None:
+    style = properties.get("borders", "three_line")
+    if style == "grid":
+        set_table_borders(
+            table,
+            top="single",
+            left="single",
+            bottom="single",
+            right="single",
+            insideH="single",
+            insideV="single",
+        )
+    elif style == "none":
+        set_table_borders(
+            table,
+            top="none",
+            left="none",
+            bottom="none",
+            right="none",
+            insideH="none",
+            insideV="none",
+        )
+    else:
+        apply_three_line_borders(table, header_rows=header_rows)
 
 
 # --------------------------------------------------------------------------
@@ -460,6 +676,8 @@ def _render_inline(
         _render_math_inline(state, paragraph, node.latex)
     elif isinstance(node, Ref):
         _render_ref(state, paragraph, node.target)
+    elif isinstance(node, Footnote):
+        _render_footnote(state, paragraph, node.text)
     elif isinstance(node, Styled):
         _render_styled(state, paragraph, node, context_style)
     elif isinstance(node, Link):
@@ -547,17 +765,6 @@ def _render_math_inline(state: _RenderState, paragraph: Any, latex: str) -> None
     if result.ok and append_omml(paragraph, result.omml or ""):
         return
     paragraph.add_run(latex).font.italic = True
-
-
-def _add_picture(state: _RenderState, paragraph: Any, src: str) -> None:
-    """图片：相对路径按源文件所在目录解析（与校验口径一致）。"""
-    candidate = Path(src)
-    if not candidate.is_absolute() and state.base_dir is not None:
-        candidate = state.base_dir / src
-    if candidate.is_file():
-        paragraph.add_run().add_picture(str(candidate))
-    else:
-        paragraph.add_run(f"[图片缺失: {src}]")
 
 
 def _code_properties(state: _RenderState, language: str) -> dict[str, Any]:

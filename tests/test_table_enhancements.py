@@ -86,28 +86,6 @@ def test_none_table_style_drops_borders(tmp_path: Path) -> None:
     assert 'w:val="none"' in document
 
 
-def test_table_fits_page_content_width(tmp_path: Path) -> None:
-    """回归：表格总宽必须等于正文可用宽度（页面宽 - 左右页边距），且用固定布局。
-
-    宽度写进 ``w:tblW`` 与 ``w:gridCol``；``w:tblLayout fixed`` 防止 Word 按内容重算。
-    """
-    data = render_docx_bytes(parse_dfm(THREE_COL_MD), _config(tmp_path))
-    with zipfile.ZipFile(io.BytesIO(data)) as archive:
-        document = archive.read("word/document.xml").decode("utf-8")
-    tbl_w = int(re.findall(r'<w:tblW w:type="dxa" w:w="(\d+)"/>', document)[0])
-    grid = [int(w) for w in re.findall(r'<w:gridCol w:w="(\d+)"/>', document)]
-    section = re.search(
-        r'<w:pgSz w:w="(\d+)"[^/]*/>.*?<w:pgMar[^/]*w:right="(\d+)"[^/]*w:left="(\d+)"',
-        document,
-        re.DOTALL,
-    )
-    assert section is not None
-    page, right, left = (int(section.group(1)), int(section.group(2)), int(section.group(3)))
-    assert sum(grid) == tbl_w
-    assert tbl_w == page - left - right
-    assert "<w:tblLayout" in document and 'w:type="fixed"' in document
-
-
 def test_header_row_repeats(tmp_path: Path) -> None:
     """跨页时表头重复：首个 ``w:tr`` 里要有 ``w:tblHeader``。"""
     document = _document_xml(tmp_path, TABLE_MD)

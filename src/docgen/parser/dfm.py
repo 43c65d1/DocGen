@@ -20,6 +20,7 @@ from ..ir import (
     Break,
     Code,
     CodeBlock,
+    Footnote,
     Formula,
     Heading,
     Image,
@@ -106,13 +107,17 @@ def _inline_to_ir(tokens: list[Token]) -> list[InlineNode]:
         elif tok.type == "image":
             stack[-1].append(Image(src=_attr(tok, "src"), alt=tok.content))
         elif tok.type == "dfm_image":
-            stack[-1].append(Image(src=tok.content, alt=""))
+            # ``[[img:path width=2cm]]``：第一段是路径，其余是属性
+            target = tok.content.split()
+            stack[-1].append(Image(src=target[0] if target else "", alt=""))
         elif tok.type == "dfm_pagebreak":
             stack[-1].append(Break())
         elif tok.type == "dfm_toc":
             stack[-1].append(Ref(target="__toc__"))  # 段落内的 [[toc]] 按引用占位处理
         elif tok.type == "dfm_ref":
             stack[-1].append(Ref(target=tok.content))
+        elif tok.type == "dfm_footnote":
+            stack[-1].append(Footnote(text=tok.content))
         elif tok.type == "dfm_math":
             stack[-1].append(Math(latex=tok.content, display=_is_display(tok)))
         elif tok.type == "dfm_script":
@@ -260,8 +265,27 @@ def _paragraph_block(open_token: Token, inline_token: Token | None) -> BlockNode
 
     content = _inline_to_ir(children)
     if len(content) == 1 and isinstance(content[0], Image):
-        return ImageBlock(src=content[0].src, alt=content[0].alt, source_line=source_line)
+        image = content[0]
+        return ImageBlock(
+            src=image.src,
+            alt=image.alt,
+            width=_image_attribute(children, "width"),
+            align=_image_attribute(children, "align"),
+            source_line=source_line,
+        )
     return Paragraph(content=content, source_line=source_line)
+
+
+def _image_attribute(tokens: list[Token], name: str) -> str:
+    """从 ``[[img:path width=2cm]]`` 这样的标记里取属性（值写在 token.content 里）。"""
+    for tok in tokens:
+        if tok.type != "dfm_image":
+            continue
+        for part in tok.content.split()[1:]:
+            key, _, value = part.partition("=")
+            if key.strip() == name:
+                return value.strip()
+    return ""
 
 
 def _meaningful_children(inline_token: Token | None) -> list[Token]:
@@ -391,22 +415,43 @@ def _table(tokens: list[Token], start: int, end: int) -> tuple[Table, int]:
     open_token = tokens[start]
     rows: list[list[str]] = []
     row: list[str] = []
+    row_alignments: list[str] = []
+    alignments: list[str] = []
     i = start
 
     while i < end:
         token = tokens[i]
         if token.type == "table_close":
-            return Table(rows=rows, source_line=_line_of(open_token)), i + 1
+            return (
+                Table(rows=rows, source_line=_line_of(open_token), alignments=alignments),
+                i + 1,
+            )
         if token.type == "tr_open":
             row = []
+            row_alignments = []
         elif token.type == "tr_close":
             rows.append(row)
+            if not alignments and any(row_alignments):
+                alignments = list(row_alignments)
         elif token.type in ("th_open", "td_open"):
             inline = tokens[i + 1] if i + 1 < end else None
             row.append(_cell_text(inline))
+            if token.type == "th_open":
+                row_alignments.append(_alignment_of(_attr(token, "style")))
         i += 1
 
-    return Table(rows=rows, source_line=_line_of(open_token)), i
+    return Table(rows=rows, source_line=_line_of(open_token), alignments=alignments), i
+
+
+def _alignment_of(css_style: str) -> str:
+    """``text-align:center`` -> ``center``（GFM 分隔行的对齐标记）。"""
+    for part in css_style.split(";"):
+        if ":" not in part:
+            continue
+        key, _, value = part.partition(":")
+        if key.strip() == "text-align":
+            return value.strip()
+    return ""
 
 
 def _cell_text(inline: Token | None) -> str:

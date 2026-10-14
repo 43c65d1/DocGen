@@ -20,6 +20,7 @@ from ..ir import (
     Break,
     Code,
     CodeBlock,
+    Footnote,
     Formula,
     Heading,
     Image,
@@ -229,6 +230,8 @@ def _render_inline_node(node: InlineNode, style_table: dict[str, dict[str, Any]]
     if isinstance(node, Ref):
         target = html.escape(node.target, quote=True)
         return f'<a class="xref" href="#{target}">[{html.escape(node.target)}]</a>'
+    if isinstance(node, Footnote):
+        return f'<sup class="footnote" title="{html.escape(node.text, quote=True)}">†</sup>'
     assert_never(node)
 
 

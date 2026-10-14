@@ -165,6 +165,43 @@ def test_build_defaults_config_next_to_source(tmp_path: Path) -> None:
     assert output.is_file()
 
 
+def test_build_docx_by_extension_writes_word_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """完整版：-o 是 .docx 时自动走 Word 后端。"""
+    source = tmp_path / "doc.md"
+    source.write_text("# 标题\n\n正文 **粗体**\n", encoding="utf-8")
+    output = tmp_path / "out.docx"
+    assert main(["build", str(source), "-c", CONFIG, "-o", str(output)]) == 0
+    assert output.is_file()
+    assert output.read_bytes()[:2] == b"PK"  # docx 是 zip 包
+    assert "docx" in capsys.readouterr().out
+
+
+def test_build_docx_with_explicit_format(tmp_path: Path) -> None:
+    source = tmp_path / "doc.md"
+    source.write_text("# 标题\n", encoding="utf-8")
+    output = tmp_path / "out.bin"  # 扩展名不可推断，靠 --format 指定
+    assert main(["build", str(source), "-c", CONFIG, "-o", str(output), "--format", "docx"]) == 0
+    assert output.read_bytes()[:2] == b"PK"
+
+
+def test_build_html_format_still_works(tmp_path: Path) -> None:
+    source = tmp_path / "doc.md"
+    source.write_text("# 标题\n", encoding="utf-8")
+    output = tmp_path / "out.html"
+    assert main(["build", str(source), "-c", CONFIG, "-o", str(output)]) == 0
+    assert output.read_text(encoding="utf-8").startswith("<!DOCTYPE html>")
+
+
+def test_build_rejects_unknown_format(tmp_path: Path) -> None:
+    source = tmp_path / "doc.md"
+    source.write_text("# 标题\n", encoding="utf-8")
+    with pytest.raises(SystemExit) as caught:
+        main(["build", str(source), "-o", "out.pdf", "--format", "pdf"])
+    assert caught.value.code == 2
+
+
 def test_check_strict_reports_unclosed_marker_in_json(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

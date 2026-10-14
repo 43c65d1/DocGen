@@ -22,6 +22,7 @@ from .errors import E_CONFIG, DocGenError
 from .ir import BlockNode, Heading, Text
 from .normalize import normalize_text
 from .parser.dfm import parse_dfm
+from .render.docx import render_docx
 from .render.html import render_html
 from .validate import validate_content
 
@@ -57,10 +58,19 @@ def _dump_ir(path: Path) -> list[BlockNode]:
     return blocks
 
 
-def _build(path: Path, output: Path, config_path: Path | None = None) -> int:
-    """DFM + config -> HTML 文件（第 4 周端到端链路）。"""
+def _build(
+    path: Path,
+    output: Path,
+    config_path: Path | None = None,
+    fmt: str | None = None,
+) -> int:
+    """DFM + config -> HTML 或 docx（完整版手册 §11）。
+
+    ``--format`` 缺省时按输出扩展名推断：``.docx`` -> Word，其余 -> HTML。
+    """
     blocks = parse_dfm(_read_source(path))
     config = load_config(config_path or (path.parent / "config.toml"))
+    target = _resolve_format(fmt, output)
 
     errors = validate_content(blocks, config, source=path)
     if errors:
@@ -68,13 +78,25 @@ def _build(path: Path, output: Path, config_path: Path | None = None) -> int:
             print(err, file=sys.stderr)
         return EXIT_CONTENT_ERROR
 
-    document = render_html(blocks, config, title=_title_of(blocks, path))
     try:
-        output.write_text(document, encoding="utf-8")
+        if target == "docx":
+            render_docx(blocks, config, output, base_dir=path.parent)
+        else:
+            document = render_html(blocks, config, title=_title_of(blocks, path))
+            output.write_text(document, encoding="utf-8")
     except OSError as exc:
         raise DocGenError(E_CONFIG, f"无法写入输出文件: {output}: {exc}") from None
-    print(f"已生成 {output}（{len(blocks)} 个块级节点）")
+    print(f"已生成 {output}（{target}，{len(blocks)} 个块级节点）")
     return EXIT_OK
+
+
+def _resolve_format(fmt: str | None, output: Path) -> str:
+    if fmt:
+        normalized = fmt.strip().lower()
+        if normalized not in ("html", "docx"):
+            raise DocGenError(E_CONFIG, f"不支持的输出格式: {fmt}")
+        return normalized
+    return "docx" if output.suffix.lower() == ".docx" else "html"
 
 
 def _title_of(blocks: list[BlockNode], path: Path) -> str:
@@ -135,10 +157,17 @@ def _build_parser() -> argparse.ArgumentParser:
     dump_ir = sub.add_parser("dump-ir", help="解析 DFM 并输出 IR")
     dump_ir.add_argument("input", type=Path)
 
-    build = sub.add_parser("build", help="生成 HTML")
+    build = sub.add_parser("build", help="生成 HTML 或 docx")
     build.add_argument("input", type=Path)
     build.add_argument("-c", "--config", type=Path, default=None)
     build.add_argument("-o", "--output", type=Path, default=Path("output.html"))
+    build.add_argument(
+        "--format",
+        dest="fmt",
+        choices=("html", "docx"),
+        default=None,
+        help="输出格式（缺省按 -o 扩展名推断）",
+    )
 
     dump_styles = sub.add_parser("dump-styles", help="输出展开后的样式表")
     dump_styles.add_argument("-c", "--config", type=Path, required=True)
@@ -164,7 +193,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "dump-ir":
             _dump_ir(args.input)
         elif args.cmd == "build":
-            return _build(args.input, args.output, args.config)
+            return _build(args.input, args.output, args.config, args.fmt)
         elif args.cmd == "dump-styles":
             _dump_styles(args.config, args.raw)
         elif args.cmd == "check":

@@ -1,14 +1,17 @@
-# DocGen（剪枝版）
+# DocGen（剪枝版 + Word 后端）
 
-**DFM + TOML → HTML**：一个 config 驱动的纯文本排版编译器，保留 DocGen 的
-「解析 / IR / 渲染分离」架构，砍掉 Word/OOXML 复杂度。
+**DFM + TOML → HTML / Word**：一个 config 驱动的纯文本排版编译器。
+剪枝版（第 1~5 周）做 `DFM → IR → HTML`；完整版（Hard Version，12~19 周）在同一个 IR 上
+新增 Word 渲染后端。
 
 - 输入：`.md`（DFM 子集）+ `.toml`（样式表）
-- 输出：带样式的 HTML
+- 输出：`.html`（剪枝版）或 `.docx`（完整版）
 - 每个块级节点都带源行号，`docgen check --json` 用结构化错误报告问题
+- 渲染层只认 IR：HTML 是参照实现，Word 是第二个消费方
 
-> 当前进度：**第 1、2、3、4 周完成**（IR + DFM 解析 + config 继承 + 语义校验 + 诊断 + HTML 渲染
-> + `build` 端到端 + CI）；第 3 周只剩「金标准解析器」等可选项，第 5 周做文档/示例/覆盖率/打 tag。
+> 当前进度：剪枝版第 1~5 周完成（tag `v0.1`）；完整版 **W0 完成**
+> （`--format=docx` 端到端跑通、OOXML 探针 + 不变量测试、`docs/word.md`），
+> 后续按 W1~W6 推进（数学、编号/题注、表格/图片/脚注、分节/页眉页脚/目录、预设库）。
 
 ## 安装
 
@@ -39,8 +42,12 @@ docgen check input.md -c config.toml
 docgen check input.md -c config.toml --strict   # 追加诊断：E3001 未闭合、E2001 未知语言
 docgen check input.md -c config.toml --json
 
-# 生成带样式的 HTML（样式值全部来自 config）
+# 生成 HTML（样式值全部来自 config）
 docgen build input.md -c config.toml -o output.html
+
+# 生成 Word（完整版：按扩展名自动选择后端）
+docgen build input.md -c config.toml -o output.docx
+docgen build input.md -c config.toml -o output.docx --format docx
 ```
 
 退出码（手册 §10）：
@@ -138,19 +145,24 @@ src/docgen/
   config.py         # TOML 加载 / include 合并 / based_on 继承 / @ref 展开
   validate.py       # 语义校验：样式引用、图片路径 -> 内容错误列表
   diagnostics.py    # 诊断：未闭合标记 E3001、未知语言 E2001、围栏未配对 E4001
+  canonical.py      # 金标准交叉验证：IR 与 token 流归约成同一规范结构再比较
+  units.py          # 单位换算：12pt / 16px / 1.5em -> 磅
   parser/
     dfm.py          # DFM -> IR
     rules.py        # 自研行内标记：[[img:]] [[pagebreak]] [x]{.s} $math$
   render/
     html.py         # IR -> HTML（内联样式取 config 展开值）
     css.py          # 样式表 -> CSS 选择器规则
+    docx.py         # IR -> Word（完整版）
+    ooxml.py        # 所有 OxmlElement 构造与 OOXML 陷阱
+    template.py     # 母版加载、样式槽位、outlineLvl、updateFields
 tests/
   fixtures/         # minimal.md full.md minimal.toml pics/photo.png
   test_ir_snapshot.py test_ir_dataclass.py test_parser_errors.py
   test_normalize.py test_errors.py test_config.py test_validate.py
-  test_diagnostics.py test_html_probe.py test_cli.py
+  test_diagnostics.py test_crosscheck.py test_html_probe.py test_cli.py
 docs/
-  dfm.md config.md ir.md
+  dfm.md config.md ir.md crosscheck.md
 examples/
   minimal/ inherit/
 CHANGELOG.md
@@ -159,7 +171,7 @@ CHANGELOG.md
 ## 开发
 
 ```bash
-pytest                              # 159 项测试 + 覆盖率门槛 70%（当前 88%）
+pytest                              # 204 项测试 + 覆盖率门槛 70%（当前 86%）
 ruff check .                        # lint
 ruff format .                       # 格式化（line-length=100）
 mypy src tests                      # 严格模式
@@ -183,7 +195,11 @@ CI（[.github/workflows/ci.yml](.github/workflows/ci.yml)）在 Python 3.11 / 3.
 - DFM 子集与冲突规则：[docs/dfm.md](docs/dfm.md)
 - config schema（include / based_on / @ref / for=false）：[docs/config.md](docs/config.md)
 - IR 节点与不变量：[docs/ir.md](docs/ir.md)
+- 解析器金标准交叉验证：[docs/crosscheck.md](docs/crosscheck.md)
+- Word 后端与 OOXML 陷阱：[docs/word.md](docs/word.md)
 - 错误码：手册 §11 与 [src/docgen/errors.py](src/docgen/errors.py)
 - 版本变化：[CHANGELOG.md](CHANGELOG.md)
 - 可测试不变量：输出里的每个内联样式声明都等于 config 的展开值
   （[test_html_probe.py](tests/test_html_probe.py) 的 `test_every_inline_style_value_comes_from_config` 自动验证）
+- 解析器正确性：IR 与 markdown-it token 流的一次性归约结构等价
+  （[test_crosscheck.py](tests/test_crosscheck.py) 全量覆盖 `full.md`）

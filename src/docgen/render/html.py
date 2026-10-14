@@ -29,12 +29,15 @@ from ..ir import (
     ListBlock,
     ListItem,
     Math,
+    NamedBlock,
     PageBreak,
     Paragraph,
+    Ref,
     Styled,
     Table,
     Text,
     ThematicBreak,
+    Toc,
 )
 from .css import inline_style, render_css
 
@@ -121,7 +124,30 @@ def _render_block(
         return lines
     if isinstance(block, Table):
         return _render_table(block)
+    if isinstance(block, NamedBlock):
+        return _render_named_block(block, style_table, heading)
+    if isinstance(block, Toc):
+        return ['<nav class="toc">目录（构建 HTML 时由文档结构生成；Word 侧是 TOC 域）</nav>']
     assert_never(block)
+
+
+def _render_named_block(
+    block: NamedBlock, style_table: dict[str, dict[str, Any]], heading: int
+) -> list[str]:
+    """命名块：``<div class="名字">`` 包住内容；``id`` 来自 Pandoc 属性。"""
+    classes = [block.name]
+    extra = block.attributes.get("classes")
+    if extra:
+        classes.extend(extra.split())
+    attributes = f' class="{" ".join(classes)}"'
+    if block.attributes.get("id"):
+        attributes += f' id="{html.escape(block.attributes["id"], quote=True)}"'
+    lines = [f"<div{attributes}>"]
+    inner = render_blocks(block.content, style_table, heading).rstrip("\n")
+    if inner:
+        lines.extend(inner.split("\n"))
+    lines.append("</div>")
+    return lines
 
 
 def _render_list(
@@ -200,6 +226,9 @@ def _render_inline_node(node: InlineNode, style_table: dict[str, dict[str, Any]]
     if isinstance(node, Styled):
         body = _render_inline(node.content, style_table)
         return _render_styled(node.style_name, body, style_table)
+    if isinstance(node, Ref):
+        target = html.escape(node.target, quote=True)
+        return f'<a class="xref" href="#{target}">[{html.escape(node.target)}]</a>'
     assert_never(node)
 
 

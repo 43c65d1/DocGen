@@ -1,0 +1,189 @@
+config_version = "0.1"
+
+# ==========================================================================
+# 特性矩阵配置（配合 content.md）
+#
+# 设计原则：**每个特性都用一个肉眼可辨、且能被自动化断言的「信号值」**。
+# 产物一出，扫一眼就知道哪个特性失效，不必逐个反查 OOXML。
+#
+# 同一份配置同时服务两个后端：
+#   - Word 渲染读点号键 font.bold / font.color / font.size
+#   - HTML 渲染读扁平键 font_weight / font_style / font_size
+# ==========================================================================
+
+# ── 内置样式：**粗** / *斜* / ~~删~~ 映射到这三个名字 ─────────
+# 重要：Markdown 语法生成的是**内置样式名** strong / em / strike / sup / sub，
+# 不是自定义名。config 不声明它们 → 没有任何格式可应用（内容不会丢，但不会加粗）。
+[styles.strong]
+font.bold = true
+font_weight = "bold"
+
+[styles.em]
+font.italic = true
+font_style = "italic"
+
+[styles.strike]
+font.strike = true
+text_decoration = "line-through"
+
+[styles.sup]
+font.size = "8pt"
+font_size = "8pt"
+
+[styles.sub]
+font.size = "8pt"
+font_size = "8pt"
+
+# ── 行内格式：显式样式（供 [文字]{.名字} 使用）────────────────
+[styles.feature_bold]
+font.bold = true
+font_weight = "bold"
+
+[styles.feature_italic]
+font.italic = true
+font_style = "italic"
+
+[styles.feature_strike]
+font.strike = true
+text_decoration = "line-through"
+
+[styles.feature_underline]
+font.underline = true
+text_decoration = "underline"
+
+[styles.feature_color]
+font.color = "C00000"          # 醒目红：一眼可辨
+color = "#C00000"
+
+[styles.feature_small]
+font.size = "8pt"              # 明显偏小
+font_size = "8pt"
+
+[styles.feature_keyword]
+font.color = "0070C0"
+font.bold = true
+color = "#0070C0"
+font_weight = "bold"
+
+# 正文里 [关键字样式]{.keyword} 用的就是它（别名写法，便于就近对照）
+[styles.keyword]
+based_on = "feature_keyword"
+
+# ── 块级样式 ────────────────────────────────────────────────
+[styles.heading1]
+font.size = "18pt"
+font.bold = true
+font.color = "1F3864"
+font_size = "18pt"
+font_weight = "bold"
+color = "#1F3864"
+
+[styles.heading2]
+based_on = "heading1"
+font.size = "14pt"
+font.color = "2E5395"
+font_size = "14pt"
+color = "#2E5395"
+
+[styles.caption]
+font.size = "10.5pt"
+font.color = "666666"
+font_size = "10.5pt"
+color = "#666666"
+
+# ── 正文默认 ────────────────────────────────────────────────
+[document]
+font.name = "宋体"
+font.size = "11pt"
+line_spacing = 1.4
+font_family = "宋体, sans-serif"
+font_size = "11pt"
+line_height = "1.4"
+
+# 标题多级编号：默认开启（H1→1、H2→1.1）。设 false 可关闭；
+# 关掉后 outlineLvl 仍在，目录与导航窗格照常工作。
+heading_numbering = true
+
+# 标题缩进：编号自带缩进（默认 left=720 twips + hanging=360），所以一级标题不贴左。
+#   heading_indent = false         → 取消缩进，标题齐头
+#   heading_indent.left = "1cm"    → 自定义（支持 cm/mm/in/pt/px/twips）
+#   heading_indent.leftChars = 200 → 按字符（中文排版更直观）
+#   也可在 [styles.headingN] 里写 indent = false 只改某一级。
+# 本示例保持默认（不写该项），便于与其他特性对照。
+# heading_indent = false
+
+# 分隔线（---）的线段样式：single / double / dashed / dotted / wave …
+hr.style = "single"
+hr.color = "808080"
+hr.size = "6"
+
+# ── 输出与日志（见 docs/config.md）──────────────────────────
+[output]
+level = "warn"          # 终端阈值：log | warn | err | none（none 静默打印但保留退出码）
+logfile = ""            # 空 = 关闭；如 "run.log" 则覆盖写、头部含环境、尾部含退出码
+logfile_level = "log"   # 文件阈值，独立于终端（通常更详细）
+
+# ── 语义名 -> 样式名映射（默认同名；这里演示重定向）────────
+# 不写 [inline] 时 sup/strong/em/strike/sub 全都同名，行为与以前一致。
+[inline]
+sup = "sup_caret"       # 于是 ^x^ 改用 [styles.sup_caret]
+
+[styles.sup_caret]
+font.size = "7pt"
+font.color = "C00000"
+font_size = "7pt"
+color = "#C00000"
+
+# ── 代码块：基座 + 语言变体换色（可验证深合并是否生效）──────
+[code_block]
+font.name = "Consolas"
+font.size = "9pt"
+background = "F2F2F2"
+border = "BFBFBF"
+font_family = "Consolas, monospace"
+font_size = "9pt"
+
+# 信号值：python=绿、javascript=暗金。两者都必须出现，
+# 且颜色不能覆盖掉基座的 Consolas/9pt（验证深合并）。
+[code_block.python]
+font.color = "008000"
+color = "#008000"
+
+[code_block.javascript]
+font.color = "B8860B"
+color = "#B8860B"
+
+# ── 表格：三线表（**无竖线**，学术惯例）+ 列宽比例 + 重复表头 ──
+# style = "three_line"（默认，只有顶线/表头下线/底线）
+#       | "grid"（含竖线的全网格）
+#       | "none"（无框线）
+[table]
+style = "three_line"
+header_repeat = true
+col_widths = [3, 3, 4]
+
+# ── 图片 ────────────────────────────────────────────────────
+[image]
+width = "4cm"
+align = "center"
+
+# ── 分节 / 页码 / 页眉页脚 ──────────────────────────────────
+[[sections]]
+page.size = "A4"
+page.margin.top = 2.5
+page.margin.bottom = 2.5
+page.margin.left = 3.0
+page.margin.right = 2.5
+numbering.format = "upperRoman"
+cover = true
+
+[[sections]]
+page.size = "A4"
+page.margin.top = 2.0
+page.margin.bottom = 2.0
+page.margin.left = 2.5
+page.margin.right = 2.5
+numbering.format = "decimal"
+numbering.start = 1
+header.text = "DocGen 特性矩阵"
+footer.text = "第 PAGE 页"

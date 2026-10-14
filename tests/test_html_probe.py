@@ -162,6 +162,18 @@ def test_block_math_placeholder(tmp_path: Path) -> None:
     assert "E = mc^2" in out
 
 
+def test_named_block_renders_as_div(tmp_path: Path) -> None:
+    out = _render("\\begin{caption #fig:1}\n图 1 系统架构\n\\end{caption}\n", tmp_path)
+    assert '<div class="caption" id="fig:1">' in out
+    assert "图 1 系统架构" in out
+    assert "</div>" in out
+
+
+def test_named_block_keeps_classes(tmp_path: Path) -> None:
+    out = _render("\\begin{note .tip .wide}\n提示\n\\end{note}\n", tmp_path)
+    assert 'class="note tip wide"' in out
+
+
 def test_hard_break_becomes_br(tmp_path: Path) -> None:
     out = _render("第一行  \n第二行\n", tmp_path)
     assert "<br>" in out

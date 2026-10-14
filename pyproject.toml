@@ -6,10 +6,15 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "docgen"
 version = "0.1.0"
-description = "DFM -> IR -> HTML 剪枝版文档生成器"
+description = "DFM -> IR -> HTML/docx 文档生成器（剪枝版 + Word 后端）"
 requires-python = ">=3.11"
 dependencies = [
     "markdown-it-py>=3.0",
+    # 完整版（Hard Version）Word 后端
+    "python-docx>=1.1",
+    "lxml>=5.0",
+    # 数学：LaTeX -> MathML（再经 MML2OMML.XSL -> OMML）
+    "latex2mathml>=3.0",
 ]
 
 [project.optional-dependencies]
@@ -53,3 +58,13 @@ exclude = ["^/\\.(?:(?:venv|venv-dev|tmp|uv-cache|pytest-tmp|tmp-pytest|cache))/
 python_version = "3.12"
 strict = true
 exclude = ["^\\.(tmp|uv-cache|pytest-tmp|tmp-pytest|venv|venv-dev)/"]
+
+[[tool.mypy.overrides]]
+# python-docx 不带类型标注（types-docx 未发布）
+module = ["docx", "docx.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# lxml 的 stubs 是可选包，CI 不必装
+module = ["lxml", "lxml.*"]
+ignore_missing_imports = true

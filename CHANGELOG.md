@@ -1,18 +1,75 @@
 # Changelog
 
-本文件记录 DocGen（剪枝版）的对外可见变化。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
-版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+本文件记录 DocGen 的对外可见变化（剪枝版 + 完整版 Word 后端）。格式参考
+[Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循
+[语义化版本](https://semver.org/lang/zh-CN/)。
 
 ## [Unreleased]
 
+### 新增（完整版 W3：编号 / 题注 / 交叉引用）
+
+- **公式编号**：`\begin{equation #eq:main number=1}` → 无边框三列表格（左空 / 中公式 / 右编号），
+  编号带书签，可被 `[[ref:eq:main]]` 引用；无 `number` 时就是普通块级公式
+- **构建路径与母版路径共用槽位补齐**：`create_document()` 现在也会补 `TOC 1..9`、
+  多级编号、题注/脚注样式与 `updateFields`（此前只有 `build_template()` 补，
+  导致 `docgen build` 产出的文档缺这些槽位——由验收脚本发现并加回归测试）
+- **`sup`/`sub` 纳入内置样式名**：`H~2~O`、`E=mc^2^` 不再被 `check --strict` 误报 `E1003`
+- **示例升级**：`examples/minimal` 现在覆盖 W0~W3 全部特性（目录、双语法代码块、
+  题注、交叉引用、公式编号、上下标、分页），`check --strict` 通过、docx/html 均可构建
+- **DFM 新标记**：`[[ref:目标]]`（`Ref` 行内节点）、`[[toc]]`（`Toc` 块）；
+  `\begin{... #id}` 的 `#id` 作为引用目标（`NamedBlock.label`）
+- **题注**：带标签的 `caption`/`table`/`equation` 命名块渲染成
+  书签 + `SEQ 图 \* ARABIC` 编号域 + **Caption** 样式；题注按类型独立计数（图/表/公式）
+- **交叉引用**：`[[ref:fig:1]]` → `REF fig:1 \h` 域；HTML 侧渲染为 `#fig:1` 锚链接
+- **目录占位**：`[[toc]]` → `TOC \o "1-9" \h \z \u` 域（配合既有 `updateFields`）
+- **编号映射显式化**：`numbering.heading_numbering()` 把 `level -> (ilvl, HeadingN)` 写成一张表
+- **校验**：引用目标不存在 → `E5004`；标签重复 → `E4001`；`check --strict` 一并报告
+
+### 新增（完整版 W2：数学渲染）
+
+- **数学引擎**：`render/math.py` 把 LaTeX 经 `latex2mathml` → MathML → Office
+  `MML2OMML.XSL` → **OMML**（`m:oMath`），公式在 Word 里可编辑
+- `[math]` 配置：`engine = auto|xsl|plain`、`on_fail = plain|error`（`E5002`）、`xsl` 路径；
+  也可用环境变量 `DOCGEN_MML2OMML`；找不到 XSL 时自动降级，构建不会挂
+- 行内与块级公式共用引擎；块级公式居中且不带首行缩进
+- 公式测试集 40 条，转换通率 **40/40 = 100%**（手册验收 > 90%）
+- 修复确定性测试：比 `document.xml` 而不是 docx 字节（zip 时间戳不可比）
+
+### 新增（完整版 W1：基础渲染 + 母版槽位）
+
+- **上下标**（手册 §6.2.3）：`H~2~O` / `E=mc^2^`（Pandoc 单字符标记）与
+  `[上标]{.sup}` / `[下标]{.sub}`，Word 侧写 `w:vertAlign`
+- **母版构建**：`render/template_build.py` 幂等补齐 §14.1 槽位——`TOC 1..9` 样式、
+  多级标题编号（`numId=100`，`Heading1`→`1`、`Heading2`→`1.1`）、
+  `HeadingN` 的 `outlineLvl` 与 `numPr` 绑定、`updateFields`；
+  `tests/test_template.py` 断言全部槽位（CI 重建即验证）
+- 文档：`docs/word.md` 补母版与已实现清单；`docs/dfm.md` 补上下标语法
+
+### 新增（完整版 W0：最小 docx 链路）
+
+- **Word 后端**：`docgen build -o out.docx` 与 `--format=docx` 端到端可用
+- [render/ooxml.py](../src/docgen/render/ooxml.py)：所有 `OxmlElement` 构造集中一处，
+  处理手册 §17.1 的陷阱（四个 `rFonts`、`firstLineChars`、`beforeLines`/`afterLines`、
+  `outlineLvl`、`updateFields`）
+- [render/template.py](../src/docgen/render/template.py)：母版加载、样式槽位校验、
+  标题 `outlineLvl`、`updateFields`
+- [units.py](../src/docgen/units.py)：`12pt` / `16px` / `1.5em` / 纯数字 → 磅
+- **config 点号键**：`[document] font.name = "宋体"`、`[styles.x] font.bold = true`
+  （手册 §6.1 口径），展开后为嵌套表
+- **错误码扩展**：`E2010` keywords 非法、`E3002` `\begin` 名字不一致、
+  `E5002` 数学转换失败、`E5003` 分节配置、`E5004` 编号/引用不存在
+- **OOXML 语义探针**：`tests/test_ooxml_probe.py`（样式槽位、`outlineLvl`、
+  四个字体属性、`firstLineChars`、`updateFields`、分页符、表格边框、
+  config 值 == 输出属性的不变量、确定性、图片嵌入）
+- 文档：[docs/word.md](../docs/word.md)
+
 ### 计划中
 
-- 第 3 周可选：接入「金标准」解析器做交叉验证
-- 第 5 周可选：临时 HTML → Word 输出（严格限时一天，第二题开始时删除）
+- 遗留：剪枝版第 5 周可选的临时 HTML → Word 输出（已被正式 Word 后端取代，不再实现）
 
 ## [0.1.0] - 2026-10-10
 
-首个可交付版本：`DFM + TOML → HTML` 全链路可用，159 项测试、覆盖率 88%。
+首个可交付版本：`DFM + TOML → HTML` 全链路可用，182 项测试、覆盖率 89%。
 
 ### 新增
 
@@ -24,10 +81,12 @@
 - **语义校验**：样式引用不存在（`E1003`）、图片缺失（`E5001`）
 - **诊断**（`check --strict`）：未闭合标记（`E3001`）、未知代码语言（`E2001`）、
   代码围栏未配对（`E4001`）
+- **金标准交叉验证**：IR 与 markdown-it token 流的一次性归约做结构等价比较，
+  覆盖嵌套列表、引用嵌套、围栏语言、表格行列、公式与自研标记的归一
 - **渲染**：IR → HTML（内联样式取 config 展开值，文本与属性 HTML 转义）+ 确定性 CSS
 - **CLI**：`dump-ir`、`dump-styles [--raw]`、`check [--json] [--strict]`、`build`
 - **示例**：`examples/minimal`、`examples/inherit`
-- **文档**：`docs/dfm.md`、`docs/config.md`、`docs/ir.md`
+- **文档**：`docs/dfm.md`、`docs/config.md`、`docs/ir.md`、`docs/crosscheck.md`
 - **CI**：GitHub Actions 在 Python 3.11/3.12 上跑 ruff / mypy / pytest（覆盖率门槛 70%）
 
 ### 约定

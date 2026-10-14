@@ -31,9 +31,9 @@ from .errors import (
 CONFIG_VERSION = "0.1"
 MAX_INHERITANCE_DEPTH = 8
 
-#: 解析器会产生的内置样式名（**粗体** / *斜体* / ~~删除~~）。
+#: 解析器会产生的内置样式名（``**粗体**`` / ``*斜体*`` / ``~~删除~~`` / ``H~2~O`` / ``E=mc^2^``）。
 #: config 没声明它们时按空属性处理，保证「引用不存在的样式」不会误报。
-BUILTIN_STYLES = ("strong", "em", "strike")
+BUILTIN_STYLES = ("strong", "em", "strike", "sup", "sub")
 
 __all__ = [
     "BUILTIN_STYLES",
@@ -204,9 +204,13 @@ def build_style_table(config: Config) -> dict[str, Properties]:
     """
     renumbered, symbols = _expand(config)
     try:
-        return {name: _resolve_properties(renumbered[name], symbols) for name in sorted(renumbered)}
+        table: dict[str, Properties] = {
+            "document": _resolve_properties(config.document, symbols),
+            **{name: _resolve_properties(renumbered[name], symbols) for name in sorted(renumbered)},
+        }
     except _LinkError as err:
         raise DocGenError(err.code, err.message) from None
+    return table
 
 
 def build_style_tree(config: Config) -> Table:
@@ -250,7 +254,22 @@ def _expand(config: Config) -> tuple[dict[str, Properties], Table]:
 
 
 def _resolve_properties(properties: Properties, symbols: Table) -> Properties:
-    return {key: _resolve_ref(value, symbols, []) for key, value in sorted(properties.items())}
+    """展开一条样式/命名空间的属性；点号键展开成嵌套表。
+
+    点号键是手册 §6.1 的写法（``font.name`` / ``font.bold``），所以展开后的值
+    保持嵌套结构，渲染层按 ``properties["font"]["name"]`` 读取。
+    """
+    resolved: Properties = {}
+    for key, value in sorted(properties.items()):
+        target = resolved
+        parts = key.split(".")
+        for part in parts[:-1]:
+            child = target.setdefault(part, {})
+            if not isinstance(child, dict):
+                raise DocGenError(E_CONFIG, f"键冲突：{key} 与已有的 {part} 不能同时存在")
+            target = child
+        target[parts[-1]] = _resolve_ref(value, symbols, [])
+    return resolved
 
 
 def _style_names(config: Config) -> list[str]:

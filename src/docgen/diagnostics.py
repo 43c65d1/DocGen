@@ -107,9 +107,12 @@ def with_diagnostics(
     source: str | None = None,
     base_dir: Path | None = None,
 ) -> list[ContentError]:
-    """校验（样式/图片）+ 诊断（未闭合/未知语言/语法），按行号排序。"""
+    """校验（样式/图片/编号引用）+ 诊断（未闭合/未知语言/语法），按行号排序。"""
+    from .numbering import validate_numbering
+
     merged = [
         *validate_content(blocks, config, base_dir=base_dir),
+        *validate_numbering(blocks, config, source=source or ""),
         *scan_diagnostics(text, blocks),
     ]
     if source is not None:

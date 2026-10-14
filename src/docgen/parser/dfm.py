@@ -30,11 +30,14 @@ from ..ir import (
     Math,
     PageBreak,
     Paragraph,
+    Ref,
     Styled,
     Table,
     Text,
     ThematicBreak,
+    Toc,
 )
+from .begin_block import BEGIN_PLACEHOLDER, BeginBlock, extract_begin_blocks, parse_begin_block
 from .rules import register_rules
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -52,11 +55,16 @@ __all__ = ["parse_dfm"]
 
 
 def parse_dfm(text: str) -> list[BlockNode]:
-    """把 DFM 源文本解析成块级 IR 列表。"""
+    """把 DFM 源文本解析成块级 IR 列表。
+
+    先抽出 ``\\begin{...}`` 块（手册 §6.2.5 的双语法），再把剩余文本交给
+    markdown-it；``\\begin`` 区域被替换成同形占位行，所以行号与源文件一致。
+    """
+    prepared, begin_blocks = extract_begin_blocks(text)
     md = MarkdownIt("commonmark").enable("table").enable("strikethrough")
     register_rules(md)
-    tokens = md.parse(text)
-    return _blocks_in_range(tokens, 0, len(tokens))
+    tokens = md.parse(prepared)
+    return _blocks_in_range(tokens, 0, len(tokens), begin_blocks)
 
 
 # --------------------------------------------------------------------------
@@ -101,8 +109,15 @@ def _inline_to_ir(tokens: list[Token]) -> list[InlineNode]:
             stack[-1].append(Image(src=tok.content, alt=""))
         elif tok.type == "dfm_pagebreak":
             stack[-1].append(Break())
+        elif tok.type == "dfm_toc":
+            stack[-1].append(Ref(target="__toc__"))  # 段落内的 [[toc]] 按引用占位处理
+        elif tok.type == "dfm_ref":
+            stack[-1].append(Ref(target=tok.content))
         elif tok.type == "dfm_math":
             stack[-1].append(Math(latex=tok.content, display=_is_display(tok)))
+        elif tok.type == "dfm_script":
+            script = str((tok.meta or {}).get("script", "sup"))
+            stack[-1].append(Styled(content=[Text(tok.content)], style_name=script))
         elif tok.type == "dfm_styled_open":
             node = []
             stack[-1].append(Styled(content=node, style_name=_attr(tok, "style")))
@@ -128,6 +143,11 @@ def _is_pagebreak_only(tokens: list[Token]) -> bool:
     if not any(t.type == "dfm_pagebreak" for t in tokens):
         return False
     return all(t.type == "dfm_pagebreak" for t in tokens)
+
+
+def _sole_token_type(tokens: list[Token]) -> str | None:
+    """整段只有一个标记 token 时返回它的类型（用于升级成块级节点）。"""
+    return tokens[0].type if len(tokens) == 1 else None
 
 
 def _block_math(tokens: list[Token]) -> str | None:
@@ -157,7 +177,26 @@ def _line_of(token: Token, fallback: int = 0) -> int:
     return token.map[0] + 1 if token.map else fallback
 
 
-def _blocks_in_range(tokens: list[Token], start: int, end: int) -> list[BlockNode]:
+def _placeholder_index(inline_token: Token | None) -> int | None:
+    """识别预扫描留下的 ``\\begin`` 占位段落，返回块下标。"""
+    if inline_token is None:
+        return None
+    children = inline_token.children or []
+    if len(children) != 1 or children[0].type != "text":
+        return None
+    content = children[0].content.strip()
+    if not content.startswith(BEGIN_PLACEHOLDER):
+        return None
+    digits = content[len(BEGIN_PLACEHOLDER) :]
+    return int(digits) if digits.isdigit() else None
+
+
+def _blocks_in_range(
+    tokens: list[Token],
+    start: int,
+    end: int,
+    begin_blocks: list[BeginBlock] | None = None,
+) -> list[BlockNode]:
     """把 ``tokens[start:end]`` 里的顶层块级 token 转成 IR。"""
     blocks: list[BlockNode] = []
     i = start
@@ -173,7 +212,11 @@ def _blocks_in_range(tokens: list[Token], start: int, end: int) -> list[BlockNod
             )
             i += 3
         elif token.type == "paragraph_open":
-            blocks.append(_paragraph_block(token, tokens[i + 1]))
+            placeholder = _placeholder_index(tokens[i + 1])
+            if placeholder is not None and begin_blocks is not None:
+                blocks.append(parse_begin_block(begin_blocks[placeholder]))
+            else:
+                blocks.append(_paragraph_block(token, tokens[i + 1]))
             i += 3
         elif token.type in _LIST_OPEN:
             listed, i = _list_block(tokens, i, end)
@@ -210,8 +253,10 @@ def _paragraph_block(open_token: Token, inline_token: Token | None) -> BlockNode
         return Formula(latex=latex, source_line=source_line)
     if len(children) == 1 and children[0].type == "dfm_math" and _is_display(children[0]):
         return Formula(latex=children[0].content, source_line=source_line)
-    if _is_pagebreak_only(children):
+    if len(children) == 1 and children[0].type == "dfm_pagebreak":
         return PageBreak(source_line=source_line)
+    if len(children) == 1 and children[0].type == "dfm_toc":
+        return Toc(source_line=source_line)
 
     content = _inline_to_ir(children)
     if len(content) == 1 and isinstance(content[0], Image):

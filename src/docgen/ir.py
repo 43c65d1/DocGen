@@ -25,12 +25,15 @@ __all__ = [
     "ListBlock",
     "ListItem",
     "Math",
+    "NamedBlock",
     "PageBreak",
     "Paragraph",
+    "Ref",
     "Styled",
     "Table",
     "Text",
     "ThematicBreak",
+    "Toc",
 ]
 
 
@@ -85,7 +88,14 @@ class Break(Inline):
     """硬换行。"""
 
 
-InlineNode = Text | Styled | Code | Math | Link | Image | Break
+@dataclass(frozen=True, slots=True)
+class Ref(Inline):
+    """``[[ref:目标]]``：交叉引用（渲染成 Word 的 REF 域）。"""
+
+    target: str
+
+
+InlineNode = Text | Styled | Code | Math | Link | Image | Break | Ref
 
 
 # --------------------------------------------------------------------------
@@ -151,6 +161,27 @@ class PageBreak(Block):
 
 
 @dataclass(frozen=True, slots=True)
+class Toc(Block):
+    """``[[toc]]``：目录占位（渲染成 Word 的 TOC 域）。"""
+
+
+@dataclass(frozen=True, slots=True)
+class NamedBlock(Block):
+    """``\\begin{名字 属性} ... \\end{名字}``：命名块容器（题注、公式、摘要……）。
+
+    ``attributes`` 来自 Pandoc 属性语法（``{.class #id key=value}``），
+    解析成 ``{"classes": ..., "id": ..., 其它键: ...}``。``label`` 是 ``#id`` 的快捷取用，
+    供 ``[[ref:...]]`` 交叉引用；``name`` 不含 ``code:`` 前缀——``\\begin{code:lang}``
+    直接变成 :class:`CodeBlock`。
+    """
+
+    name: str
+    content: list["BlockNode"] = field(default_factory=list)
+    attributes: dict[str, str] = field(default_factory=dict)
+    label: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class BlockQuote(Block):
     content: list["BlockNode"]
 
@@ -171,6 +202,8 @@ BlockNode = (
     | ImageBlock
     | ThematicBreak
     | PageBreak
+    | NamedBlock
+    | Toc
     | BlockQuote
     | Table
 )

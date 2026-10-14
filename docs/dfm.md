@@ -33,13 +33,50 @@ DFM = DocGen Flavored Markdown。剪枝版只实现手册 §5.1 的子集，
 | `[[img:path]]`（行内） | `Image(src="path")` |
 | `[[pagebreak]]`（行内） | `Break()` |
 | `$x^2$` | `Math(latex="x^2", display=False)` |
+| `H~2~O` | `Styled(content=[Text("2")], style_name="sub")` |
+| `E=mc^2^` | `Styled(content=[Text("2")], style_name="sup")` |
+| `[上标]{.sup}` / `[下标]{.sub}` | `Styled(style_name="sup"/"sub")` |
 | 硬换行（行尾两空格或 `\`） | `Break()` |
+
+上下标是 Pandoc 风格的单字符标记：内容不能含空白或换行，
+`~~删除~~` 仍是删除线（双写留给 strikethrough），代码块与数学内不解析。
 
 粗体 / 斜体 / 删除线也统一表达为 `Styled`，**视觉由 config 的样式表决定**，
 解析器不写死任何颜色、字号或字体。
 
 代码围栏的 `lang` 会原样记进 `CodeBlock.language`；允许的语言见下文「诊断」。
 `$` 后紧跟数字或空白不当作数学（`价格 $5 元`、`$ $` 都是普通文本）。
+
+## 双语法：fence 与 `\begin`（完整版 §6.2.5）
+
+CommonMark 的 fence 长度规则对 LLM 不友好：内部含 ` ``` ` 或需要嵌套同类结构时，fence 会提前终止。
+所以 DFM 提供第二套语法，在交给 markdown-it 之前处理：
+
+````markdown
+```python
+print("hi")
+```
+
+\begin{code:python}
+print("hi")          <!-- 内部可以再出现 ``` -->
+\end{code:python}
+
+\begin{caption #fig:1 .wide}
+图 1 系统架构
+\end{caption}
+````
+
+| 规则 | 说明 |
+|---|---|
+| `\begin{code:lang}` / `\end{code:lang}` | 与 fence 等价的代码块，**内容原样保留**（内部不解析任何标记） |
+| `\begin{名字 属性}` / `\end{名字}` | 命名块容器（`caption`/`equation`/`abstract`…），内容按 DFM 继续解析、可嵌套 |
+| 属性 | Pandoc 语法：`{.class #id key=value}` → `{"classes": ..., "id": ..., ...}` |
+| 首尾名字 | 必须一致 → 否则 `E3002` |
+| 独占一行 | `\begin` 必须独占一行；夹在段落中间报 `E4001` |
+| 未闭合 | 缺 `\end` → `E3001` |
+| 转义 | `\\begin` 是字面文本 |
+
+**选择原则**：简单代码块用 fence；需要嵌套或内部含终止符时用 `\begin`。
 
 ## 冲突规则
 

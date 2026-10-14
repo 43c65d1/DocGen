@@ -10,14 +10,19 @@ def test_error_code_constants() -> None:
     assert errors.E_INHERITANCE_DEPTH == "E1002"
     assert errors.E_UNKNOWN_STYLE == "E1003"
     assert errors.E_UNKNOWN_LANGUAGE == "E2001"
+    assert errors.E_INVALID_KEYWORDS == "E2010"
     assert errors.E_UNCLOSED_MARKER == "E3001"
+    assert errors.E_BEGIN_MISMATCH == "E3002"
     assert errors.E_SYNTAX == "E4001"
     assert errors.E_CONFIG == "E5001"
+    assert errors.E_MATH_CONVERSION == "E5002"
+    assert errors.E_SECTION_CONFIG == "E5003"
+    assert errors.E_UNKNOWN_REF == "E5004"
 
 
 def test_all_error_codes_are_unique_and_well_formed() -> None:
     codes = [value for name, value in vars(errors).items() if name.startswith("E_")]
-    assert len(codes) == len(set(codes)) == 7
+    assert len(codes) == len(set(codes)) == 12
     assert all(len(code) == 5 and code[0] == "E" and code[1:].isdigit() for code in codes)
 
 

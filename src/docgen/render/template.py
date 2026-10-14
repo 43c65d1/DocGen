@@ -1,0 +1,133 @@
+"""母版处理（完整版手册 §7 / §14）。
+
+母版（Word 模板）只提供**结构与槽位**：样式 id、``outlineLvl``、多级编号骨架、
+页眉页脚占位。**一切格式值由引擎从 config 无条件写入**（手册 §5 铁律 2），
+所以母版里的值只是「默认值」，会被 config 覆盖。
+
+配置口径（手册 §6.1）：点号键，如 ``font.name``、``font.size``、``font.bold``、
+``line_spacing``；引擎按此读取，不再兼容下划线扁平键。
+
+W0 阶段用 python-docx 自带的默认模板作为最小母版，先跑通链路；
+真实 ``.dotx`` 解包入库（含 ``numbering.xml`` 多级编号、``TOC 1..9``）在后续阶段替换。
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from docx import Document as _Document
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+
+from ..config import Config
+from ..units import to_points
+from .ooxml import set_style_outline_level
+
+__all__ = ["TEMPLATE_VERSION", "create_document", "iter_styles"]
+
+#: 母版版本：随解包入库的模板一起提交，CI 可校验
+TEMPLATE_VERSION = "0.1"
+
+#: 必须存在的样式槽位（手册 §14.1）：母版缺任何一个都算不完整
+REQUIRED_STYLES = (
+    "Normal",
+    "Heading1",
+    "Heading2",
+    "Heading3",
+    "BodyText",
+    "Caption",
+    "TOC1",
+    "TOC9",
+)
+
+#: 标题样式名 -> python-docx 样式键
+HEADING_STYLE_NAMES = tuple(f"Heading{level}" for level in range(1, 10))
+
+
+def create_document(config: Config, template: Path | None = None) -> Any:
+    """创建 docx 文档：加载母版（或引擎默认母版）+ 补齐槽位 + 写入 ``[document]``。
+
+    **构建路径与母版构建路径共用同一套槽位补齐**：否则用引擎默认母版构建出来的
+    文档会缺少 ``TOC 1..9`` 样式与多级标题编号（题注样式同理），
+    而这两样正是 W3/W5 依赖的。
+    """
+    if template is not None:
+        document = _Document(str(template))
+    else:
+        document = _Document()
+        _extend_default_template(document)
+    apply_document_defaults(document, config)
+    return document
+
+
+def _extend_default_template(document: Any) -> None:
+    """给默认母版补齐 §14.1 槽位（幂等）：目录样式、多级编号、题注、updateFields。"""
+    from .template_build import add_heading_numbering, add_toc_styles, ensure_update_fields
+
+    add_toc_styles(document)
+    _ensure_caption_styles(document)
+    add_heading_numbering(document)
+    ensure_update_fields(document)
+
+
+def _ensure_caption_styles(document: Any) -> None:
+    """题注/脚注样式必须存在（``SEQ`` 域与脚注引用都依赖它们）。"""
+    for name in ("Caption", "FootnoteText", "FootnoteReference"):
+        if any(style.name == name for style in document.styles):
+            continue
+        style = document.styles.add_style(name, 1)  # 1 = paragraph style
+        style.base_style = document.styles["Normal"]
+        style.quick_style = True
+        style.hidden = False
+
+
+def apply_document_defaults(document: Any, config: Config) -> None:
+    """把 ``[document]`` 的字体/字号/行距写进 Normal 样式（正文继承它）。"""
+    settings = config.document
+    font = settings.get("font")
+    font = font if isinstance(font, dict) else {}
+    normal = _style_by_id(document, "Normal")
+
+    name = font.get("name", settings.get("font.name"))
+    size = font.get("size", settings.get("font.size"))
+    line_spacing = settings.get("line_spacing")
+    if name:
+        _set_style_fonts(normal, str(name))
+    if size is not None:
+        normal.font.size = to_points(size)
+    if line_spacing is not None:
+        normal.paragraph_format.line_spacing = float(line_spacing)
+
+    for level in range(1, 10):
+        style = _style_by_id(document, f"Heading{level}")
+        set_style_outline_level(style, level - 1)
+
+
+def _style_by_id(document: Any, style_id: str) -> Any:
+    """按 ``style_id`` 取样式。
+
+    python-docx 1.2 起「按 style_id 查找」已弃用，要按**样式名**查找；
+    这里通过 ``style_id -> style.name`` 反查一次，既明确又避免弃用警告。
+    """
+    styles = document.styles
+    for style in styles:
+        if style.style_id == style_id:
+            return styles[style.name]
+    raise KeyError(f"母版缺少样式: {style_id}")
+
+
+def _set_style_fonts(style: Any, name: str) -> None:
+    """样式级字体：四个 ``rFonts`` 属性一起写（缺 eastAsia 中文会回退）。"""
+    rpr = style.element.get_or_add_rPr()
+    fonts = rpr.find(qn("w:rFonts"))
+    if fonts is None:
+        fonts = OxmlElement("w:rFonts")
+        rpr.insert(0, fonts)
+    for attribute in ("w:ascii", "w:hAnsi", "w:eastAsia", "w:cs"):
+        fonts.set(qn(attribute), name)
+
+
+def iter_styles(document: Any) -> list[tuple[str, str]]:
+    """列出文档里的样式 ``(style_id, name)``，供母版校准与探针使用。"""
+    return [(style.style_id, style.name) for style in document.styles]

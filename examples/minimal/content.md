@@ -1,7 +1,10 @@
 # DocGen 演示文档
 
-这是一份用来验证 `DFM -> IR -> HTML` 链路的示例。段落里可以有 **粗体**、*斜体*、
-~~删除线~~、`inline code`，以及 [一个链接](https://example.com)。
+这份示例覆盖 **W0~W3 的全部特性**，用来验证 `DFM → IR → HTML / Word` 链路。
+段落里可以有 **粗体**、*斜体*、~~删除线~~、`inline code`、H~2~O、E=mc^2^，
+以及 [一个链接](https://example.com)。
+
+[[toc]]
 
 ## 样式引用
 
@@ -26,6 +29,13 @@ def add(a: int, b: int) -> int:
     return a + b
 ```
 
+\begin{code:markdown}
+内部可以出现 ``` 而不提前终止：
+```python
+print(1)
+```
+\end{code:markdown}
+
 ## 表格与数学
 
 | 语法 | IR 节点 |
@@ -39,6 +49,28 @@ $$
 \int_0^1 x \, dx = \frac{1}{2}
 $$
 
+带编号的公式（渲染成无边框三列表格，编号可用 `[[ref:eq:main]]` 引用）：
+
+\begin{equation #eq:main number=1}
+$$
+E = mc^2
+$$
+\end{equation}
+
+## 题注与交叉引用
+
+\begin{caption #fig:1}
+系统架构（图题注会自动编号）
+\end{caption}
+
+见图 [[ref:fig:1]]，另见式 [[ref:eq:main]]。
+
+\begin{table #tab:1}
+参数表
+\end{table}
+
+两个题注都带书签，正文里的引用是 Word 的 `REF` 域，编号变化时自动更新。
+
 ## 图片与分页
 
 [[img:pics/photo.png]]
@@ -46,4 +78,3 @@ $$
 [[pagebreak]]
 
 最后一页的收尾段落。
-

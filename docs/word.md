@@ -154,7 +154,7 @@ $$
 
 **W6 部分的实现**：`[output]` 输出与日志系统、`docgen bug-report`、
 `scripts/setup.sh`（自动选可用软件源）与 `scripts/package.sh`（打源码测试版）、
-四份面向使用者的文档（QUICKSTART / LIMITATIONS / FEEDBACK / BRANCHING）。
+三份面向使用者的文档（QUICKSTART / LIMITATIONS / FEEDBACK）。
 
 **仍未实现**：`docgen init --preset` 预设库、`docgen format`、
 视觉回归（LibreOffice headless 对比）、公式图片降级（matplotlib）。

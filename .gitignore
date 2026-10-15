@@ -20,6 +20,7 @@ htmlcov/
 # 打包产物
 dist/
 build/
+release/
 *.egg-info/
 
 # 编辑器/系统
@@ -39,4 +40,5 @@ examples/*/output.docx
 .tmp/
 .tmp-pytest/
 .pytest-tmp/
+.self-use/
 pytest-tmp/

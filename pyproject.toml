@@ -5,16 +5,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "docgen"
-# 测试版：PEP 440 的预发布写法，正式发版时去掉 .dev1/b1 之类的后缀即可
-version = "0.1.0"
-description = "DFM -> IR -> HTML/docx 文档生成器（剪枝版 + Word 后端）"
+version = "0.1.0b1"
+description = "DFM + TOML -> HTML / Word 文档生成器"
 requires-python = ">=3.11"
 dependencies = [
     "markdown-it-py>=3.0",
-    # 完整版（Hard Version）Word 后端
     "python-docx>=1.1",
     "lxml>=5.0",
-    # 数学：LaTeX -> MathML（再经 MML2OMML.XSL -> OMML）
+    # 数学：LaTeX -> MathML -> OMML（用 Word 自带的 MML2OMML.XSL）
     "latex2mathml>=3.0",
 ]
 
@@ -36,7 +34,7 @@ where = ["src"]
 pythonpath = ["src"]
 testpaths = ["tests"]
 tmp_path_retention_policy = "none"
-# 覆盖率门槛（手册 §12：> 70%）
+# 覆盖率门槛：低于 70% 直接失败
 addopts = "--cov=docgen --cov-report=term-missing --cov-fail-under=70"
 
 [tool.coverage.run]
@@ -52,19 +50,13 @@ exclude_lines = [
 
 [tool.ruff]
 line-length = 100
-# 沙箱内这些目录不可读：直接跳过，避免 ruff 扫描时刷权限警告
-# 外加：手册里含**契约代码**（dataclass 定义等），ruff format 会连 markdown 里的
-# python 代码块一起重排、改掉规格中的对齐——CI 跑 `ruff format --check .`，
-# 所以在这里显式排除，否则 CI 必红（实测踩到）。
-exclude = [
-    "^\\.(?:venv|venv-dev|tmp|uv-cache|pytest-tmp|tmp-pytest|cache)/",
-    "docs/development-manual.md",
-]
+# 该文档里含**作为规格的示例代码**，ruff format 会连 markdown 代码块一起重排、
+# 改掉规格中的对齐——那是规格，不是待格式化代码，所以排除。
+exclude = ["docs/development-manual.md"]
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
-exclude = ["^\\.(tmp|uv-cache|pytest-tmp|tmp-pytest|venv|venv-dev)/"]
 
 [[tool.mypy.overrides]]
 # python-docx 不带类型标注（types-docx 未发布）

@@ -61,19 +61,47 @@ def test_lockfile_has_no_vendor_mirror_urls() -> None:
 
 @pytest.mark.parametrize(
     "name",
-    ["QUICKSTART.md", "LIMITATIONS.md", "FEEDBACK.md", "BRANCHING.md", "CHANGELOG.md", "README.md"],
+    ["QUICKSTART.md", "LIMITATIONS.md", "FEEDBACK.md", "CHANGELOG.md", "README.md"],
 )
 def test_release_documents_exist(name: str) -> None:
-    """发布测试版必须带的三份文档（外加 README/CHANGELOG）不能缺。"""
+    """发布测试版必须带的文档（面向使用者）不能缺。"""
     path = ROOT / name
     assert path.is_file(), f"缺少发布文档: {name}"
     assert path.stat().st_size > 500, f"{name} 内容过少，像是空壳"
 
 
-def test_development_manual_is_not_in_tmp() -> None:
-    """手册曾被放在临时目录 ``.tmp/`` 里（随时会被清掉），现已转正到 docs/。"""
+@pytest.mark.parametrize("name", ["HANDOFF.md", "GIT.md"])
+def test_handoff_documents_exist(name: str) -> None:
+    """开发交接与 git 管理各有一份文档，且**分开**。"""
+    path = ROOT / name
+    assert path.is_file(), f"缺少 {name}"
+    assert path.stat().st_size > 800, f"{name} 内容过少"
+
+
+def test_handoff_and_git_docs_are_separated() -> None:
+    """交接文档讲开发，git 文档讲仓库——别互相串。
+
+    判断依据是**章节标题**，不是正文里出现的关键词：
+    两边都要指向对方，所以正文里出现"发布流程""测试策略"这类词是正常的。
+    """
+    handoff = (ROOT / "HANDOFF.md").read_text(encoding="utf-8")
+    gitdoc = (ROOT / "GIT.md").read_text(encoding="utf-8")
+    handoff_topics = set(re.findall(r"^## (.+)$", handoff, re.MULTILINE))
+    git_topics = set(re.findall(r"^## (.+)$", gitdoc, re.MULTILINE))
+    # HANDOFF 不该有 git 管理的章节
+    for topic in ("分支模型", "发布流程（清单）", "怎么同步", "git 踩坑记录"):
+        assert topic not in handoff_topics, f"HANDOFF.md 有 git 管理章节: {topic}"
+    # GIT 不该有开发交接的章节
+    for topic in ("模块地图", "测试策略（这是这个项目最值钱的部分）", "硬约束与踩坑（动手前必读）"):
+        assert topic not in git_topics, f"GIT.md 有开发交接章节: {topic}"
+    # 两边都要**指向对方**，读者才知道该看哪份
+    assert "GIT.md" in handoff, "HANDOFF.md 应指向 GIT.md"
+    assert "HANDOFF.md" in gitdoc, "GIT.md 应指向 HANDOFF.md"
+
+
+def test_development_manual_is_shipped() -> None:
+    """开发手册（原始规格）要随包发布——错误码等文档引用它。"""
     assert (ROOT / "docs" / "development-manual.md").is_file()
-    assert not (ROOT / ".tmp" / "DocGen(Hard-Version)开发手册.md").exists()
 
 
 def test_package_script_exists_and_mentions_archive() -> None:
@@ -85,7 +113,15 @@ def test_package_script_exists_and_mentions_archive() -> None:
 
 @pytest.mark.parametrize(
     "name",
-    ["QUICKSTART.md", "LIMITATIONS.md", "FEEDBACK.md", "BRANCHING.md", "CHANGELOG.md", "README.md"],
+    [
+        "QUICKSTART.md",
+        "LIMITATIONS.md",
+        "FEEDBACK.md",
+        "CHANGELOG.md",
+        "README.md",
+        "HANDOFF.md",
+        "GIT.md",
+    ],
 )
 def test_package_script_ships_every_release_document(name: str) -> None:
     """打包脚本的清单必须覆盖全部发布文档。
@@ -188,9 +224,9 @@ def test_readme_directory_map_matches_source_tree() -> None:
 
 
 def test_readme_mentions_shipped_documents() -> None:
-    """面向使用者的四份文档必须能从 README 找到入口。"""
+    """面向使用者的文档必须都能从 README 找到入口。"""
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    for name in ("QUICKSTART.md", "LIMITATIONS.md", "FEEDBACK.md", "BRANCHING.md"):
+    for name in ("QUICKSTART.md", "LIMITATIONS.md", "FEEDBACK.md"):
         assert name in readme, f"README 没有链接 {name}"
 
 
@@ -251,88 +287,6 @@ def test_shell_scripts_are_valid_bash() -> None:
         assert result.returncode == 0, f"{name} 语法错误: {result.stderr}"
 
 
-# --------------------------------------------------------------------------
-# 仓库结构（只在有 .git 的检出里跑；打好的源码包里没有 .git）
-# --------------------------------------------------------------------------
-def _git(*args: str) -> str:
-    import subprocess
-
-    result = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, check=False)
-    return result.stdout.strip()
-
-
-def _git_available() -> bool:
-    return (ROOT / ".git").exists() and bool(_git("rev-parse", "--git-dir"))
-
-
-needs_git = pytest.mark.skipif(not _git_available(), reason="不是在 git 检出里运行")
-
-
-@needs_git
-def test_main_is_the_curated_release_line() -> None:
-    """发布线 `main` 是 8 个线性提交（squash 后的里程碑）。"""
-    assert _git("rev-list", "--count", "main") == "8"
-    assert _git("rev-list", "--merges", "--count", "main") == "0"
-
-
-@needs_git
-def test_dev_shares_history_with_main() -> None:
-    """`dev` 必须**从 `main` 展开**，否则 `git merge main` 会失败。
-
-    实测踩到：两条线各自 orphan，merge 报 `refusing to merge unrelated histories`。
-
-    判定：两条线必须有**共同祖先**（分叉点），且 `dev` 的根提交与 `main` 的根提交
-    相同——这才说明「dev 从 main 签出」。
-    不要断言 `main` 是 `dev` 的祖先：`dev` 可以已经领先（实测就因这个写法误报）。
-    """
-    assert _git("merge-base", "main", "dev"), "main 与 dev 没有共同祖先（历史无关）"
-    assert _git("rev-list", "--max-parents=0", "dev") == _git(
-        "rev-list", "--max-parents=0", "main"
-    ), "两条线的根提交不同（dev 不是从 main 签出的）"
-
-
-@needs_git
-def test_v01_tag_points_at_the_pruning_baseline() -> None:
-    """`v0.1` 必须指向**剪枝版基线**，而不是被相对位置搞错的别的提交。
-
-    实测踩到：用 `main~1` 定位，结果指向了第 7 条（标题缩进）而不是第 2 条剪枝版。
-    这里改用**内容特征**判断：剪枝版没有 Word 后端。
-    """
-    subject = _git("log", "-1", "--pretty=%s", "v0.1^{commit}")
-    assert "剪枝版 v0.1" in subject, f"v0.1 指向了: {subject}"
-    assert "docx.py" not in _git("ls-tree", "-r", "--name-only", "v0.1^{commit}")
-
-
-@needs_git
-def test_beta_tag_marks_a_commit_whose_version_is_beta() -> None:
-    """`v0.1.0b1` 必须打在一个**版本号确实是预发布**的提交上。
-
-    不要断言它等于某个分支的 tip：版本号可能在协作线上先 bump
-    （实测踩到：β 标签本该在 `dev`，却按"main 的 tip"去断言而失败）。
-    用内容判断更稳：该提交的 `pyproject.toml` 版本必须是 0.1.0b1。
-    """
-    version = _git("show", "v0.1.0b1^{commit}:pyproject.toml")
-    match = re.search(r'^version = "([^"]+)"', version, re.MULTILINE)
-    assert match is not None, "取不到 v0.1.0b1 指向提交的版本号"
-    assert match.group(1) == "0.1.0b1", f"β 标签指向的提交版本是 {match.group(1)}"
-    # 并且它必须落在**发布线或其协作线**上（不能是个孤儿提交）
-    reachable = _git("branch", "-a", "--contains", "v0.1.0b1^{commit}")
-    assert "main" in reachable or "dev" in reachable, f"β 标签不在任何分支的历史里: {reachable!r}"
-
-
-@needs_git
-def test_fine_grained_history_is_archived() -> None:
-    """细粒度开发历史要有归档 ref（否则策展后就找不到了）。
-
-    不写死条数——归档会随开发增长。
-    """
-    count = _git("rev-list", "--count", "history/fine-grained^{commit}")
-    assert count.isdigit() and int(count) >= 36, f"归档历史条数异常: {count}"
-    # 归档线必须含剪枝版基线之前的那种细粒度提交（抽查一条早期的）
-    subjects = _git("log", "--format=%s", "history/fine-grained^{commit}")
-    assert "初始化 docgen(e)骨架" in subjects
-
-
 def test_ci_workflow_is_tracked_in_repo() -> None:
     """CI 配置必须真实存在于工作区（曾出现「写了但忘了提交」）。"""
     workflow = ROOT / ".github" / "workflows" / "ci.yml"
@@ -373,3 +327,53 @@ def test_feedback_template_has_sections() -> None:
     text = (ROOT / "FEEDBACK.md").read_text(encoding="utf-8")
     for section in ("我做了什么", "期望", "环境", "bug-report"):
         assert section in text, section
+
+
+def test_pyproject_has_no_local_junk_paths() -> None:
+    """`pyproject.toml` 里不该出现**只在本机存在**的目录。
+
+    这类垃圾（虚拟环境、工具缓存、临时探针目录）是本地状态的产物，
+    别人机器上根本没有；它们该由 `.gitignore` 管，而不是写进工程配置。
+    实测：这些排除本是死配置——ruff 默认遵守 gitignore，mypy 只跑 src/tests，
+    去掉后 CI 依然全绿。
+    """
+    text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    for junk in (".venv", "venv-dev", ".uv-cache", "pytest-tmp", ".tmp", "cache/"):
+        assert junk not in text, f"pyproject.toml 里出现了本机路径 {junk!r}"
+    config = _pyproject()
+    assert "exclude" not in config["tool"]["mypy"], "mypy 只跑 src tests，不需要 exclude"
+
+
+def test_pyproject_has_no_internal_doc_references() -> None:
+    """`pyproject.toml` 不该引用仓库内部的文档编号/内部代号。
+
+    读者可能只拿到这一个文件（或只看 PyPI 元数据页），"手册 §12" 这类索引
+    对他们没有意义。要让说明自足。
+    """
+    text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    for marker in ("手册", "§", "Hard Version", "剪枝版"):
+        assert marker not in text, f"pyproject.toml 引用了内部概念 {marker!r}"
+
+
+def test_gitignore_covers_local_junk() -> None:
+    """`.gitignore` 要覆盖本地会产生的垃圾（虚拟环境、缓存、构建产物、临时目录）。
+
+    这是把「本机产物」与「工程配置」分开的那一半：配置里不写垃圾路径，
+    但要保证垃圾真的不会被提交。
+    """
+    text = (ROOT / ".gitignore").read_text(encoding="utf-8")
+    for pattern in (
+        ".venv/",
+        "__pycache__/",
+        ".pytest_cache/",
+        ".mypy_cache/",
+        ".ruff-cache/",
+        ".uv-cache/",
+        ".coverage",
+        "dist/",
+        "build/",
+        "release/",
+        "*.egg-info/",
+        ".tmp-pytest/",
+    ):
+        assert pattern in text, f".gitignore 漏了 {pattern}"

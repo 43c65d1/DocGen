@@ -19,7 +19,7 @@
 - **新增发布物**：[scripts/package.sh](scripts/package.sh) 打源码测试版（tar.gz / zip）
 - **新增文档**：[QUICKSTART.md](QUICKSTART.md) 上手、
   [LIMITATIONS.md](LIMITATIONS.md) 已知限制清单（含「看着像 bug 其实不是」）、
-  [FEEDBACK.md](FEEDBACK.md) 反馈模板、[BRANCHING.md](BRANCHING.md) 分支约定
+  [FEEDBACK.md](FEEDBACK.md) 反馈模板
 - **同步一律 `--frozen`**：不带它的话，**换个软件源同步就会把 `uv.lock` 里
   500+ 处 URL 改写成那个源**（实测踩到）。`--frozen` 仍然按 `--index` 去镜像下载，
   只是不改锁文件。已加测试守住（`scripts/setup.sh` 的每条同步命令都要带 `--frozen`）
@@ -31,10 +31,6 @@
   files.pythonhosted.org 仍不通、镜像直连通——但这些都可能变）
   - 注：第一版脚本用「先探测再同步」两段式，结果探测本身依赖环境而**假失败**
     （`uv pip install --dry-run` 需要已存在的 venv），已改为直接同步 + 短超时换源
-- **踩坑记录（对维护者）**：本机直连 PyPI 不通，只能用镜像同步依赖；
-  但**绝不能用镜像跑 `uv lock`** —— 它会把 `uv.lock` 里 500+ 处 URL 全换成镜像地址
-  （已回滚）。改版本时手工改锁文件里 docgen 那一行即可，`uv sync` 认它。
-  已加两条测试守住：锁文件版本与 `pyproject.toml` 一致、锁文件不含镜像域名
 
 ### 新增（标题缩进可配）
 

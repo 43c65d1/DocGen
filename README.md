@@ -22,7 +22,7 @@
 > 👉 **新手上手**：[QUICKSTART.md](QUICKSTART.md)
 > **先看这个**：[LIMITATIONS.md](LIMITATIONS.md)（已知限制，含「看着像 bug 其实不是」）
 > **提反馈**：[FEEDBACK.md](FEEDBACK.md)
-> **分支约定**：[BRANCHING.md](BRANCHING.md)（`main` 发布线 / `dev` 协作线）
+> **要改代码**：[HANDOFF.md](HANDOFF.md)（架构、模块地图、测试策略、OOXML 硬约束）
 
 ## 安装
 
@@ -228,7 +228,8 @@ docs/
   dfm.md config.md ir.md crosscheck.md word.md development-manual.md
 examples/
   minimal/ inherit/ features/
-BRANCHING.md QUICKSTART.md LIMITATIONS.md FEEDBACK.md CHANGELOG.md
+QUICKSTART.md LIMITATIONS.md FEEDBACK.md HANDOFF.md CHANGELOG.md
+```
 ```
 
 ## 开发
@@ -245,9 +246,8 @@ CI（[.github/workflows/ci.yml](.github/workflows/ci.yml)）在 Python 3.11 / 3.
 
 ### 本地环境注意
 
-- **装依赖用 `bash scripts/setup.sh --dev`**：本机内外网状态会变化，脚本会依次尝试
-  镜像 / 直连 / 代理并选出当前可用的那个（见 [BRANCHING.md](BRANCHING.md) 与
-  [QUICKSTART.md](QUICKSTART.md)）。
+- **装依赖用 `bash scripts/setup.sh --dev`**：内外网状态会变化，脚本会依次尝试
+  镜像 / 直连 / 代理并选出当前可用的那个（详见 [QUICKSTART.md](QUICKSTART.md)）。
 - 同步一律带 `--frozen`：否则换个源会把 `uv.lock` 里所有 URL 改写成那个源。
 - ruff 缓存要用工作区内目录：`RUFF_CACHE_DIR=.ruff-cache`。
 
@@ -260,7 +260,6 @@ CI（[.github/workflows/ci.yml](.github/workflows/ci.yml)）在 Python 3.11 / 3.
 - 解析器金标准交叉验证：[docs/crosscheck.md](docs/crosscheck.md)
 - Word 后端与 OOXML 陷阱：[docs/word.md](docs/word.md)
 - 完整开发手册（原始规格）：[docs/development-manual.md](docs/development-manual.md)
-- 分支与发布流程：[BRANCHING.md](BRANCHING.md)
 - 错误码：手册 §11 与 [src/docgen/errors.py](src/docgen/errors.py)
 - 版本变化：[CHANGELOG.md](CHANGELOG.md)
 - 可测试不变量：输出里的每个内联样式声明都等于 config 的展开值
@@ -278,4 +277,4 @@ CI（[.github/workflows/ci.yml](.github/workflows/ci.yml)）在 Python 3.11 / 3.
 | [QUICKSTART.md](QUICKSTART.md) | 15 分钟上手 |
 | [LIMITATIONS.md](LIMITATIONS.md) | **已知限制**（含「看着像 bug 其实不是」） |
 | [FEEDBACK.md](FEEDBACK.md) | 反馈模板 |
-| [BRANCHING.md](BRANCHING.md) | `main` / `dev` 分支约定与发布流程 |
+| [HANDOFF.md](HANDOFF.md) | **开发交接**：架构、模块地图、测试策略、OOXML 硬约束与踩坑 |

@@ -199,9 +199,8 @@ uv run ruff format --check .
 uv run mypy src tests
 ```
 
-> 维护者注意：**别用镜像跑 `uv lock`** —— 它会把 `uv.lock` 里 500+ 处 URL 全改写成
-> 镜像地址（已踩过并回滚）。装依赖用镜像没问题；改版本只需手工改锁文件里
-> docgen 那一行，`uv sync` 认它。
+> 依赖同步建议始终带 `--frozen`：不带它的话，换个软件源会把 `uv.lock` 里
+> 所有 URL 改写成那个源。`--frozen` 仍会按 `--index` 去镜像下载，只是不动锁文件。
 
 ---
 

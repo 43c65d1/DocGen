@@ -21,7 +21,11 @@
 ## 2. 十分钟跑起来
 
 ```bash
-bash scripts/setup.sh --dev      # 自动挑一个当前可用的软件源（内外网状态会变）
+# 装依赖：按终端挑一个入口（三者等价，都会自动挑当前可用的软件源）
+bash scripts/setup.sh --dev      # Git Bash / macOS / Linux
+pwsh scripts/setup.ps1 --dev     # Windows PowerShell / pwsh
+scripts\setup.cmd --dev          # Windows cmd
+
 uv run pytest                    # 全绿即环境就绪
 uv run docgen --help             # 5 个子命令
 ```
@@ -180,7 +184,11 @@ ruff check . && ruff format --check . && mypy src tests && pytest
 ### 环境
 
 - 配套命令与缓存目录见 [README.md](README.md) 的"本地环境注意"；
-  网络源一律用 `scripts/setup.sh` 自动选，别写死。
+  网络源一律用 `scripts/setup.*` 自动选，别写死。
+- **脚本有三个平台变体**（`.sh` / `.ps1` / `.cmd`）做同一件事，改一个就要改另两个。
+  `test_release.py` 有断言逐个检查关键约束（候选来源、`--index`/`--proxy`、`--frozen`、
+  拒绝未知参数、`.cmd` 必须纯 ASCII）。`.cmd` 限定 ASCII 的原因：cmd.exe 按控制台
+  代码页读文件，中文注释会被读成乱码甚至当命令执行（实测踩到）。
 - 改版本号要动**三处**：`pyproject.toml`、`uv.lock` 里 docgen 那一行、
   `cli.py` 的兜底常量（测试会校验一致性）。
 

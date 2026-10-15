@@ -192,6 +192,85 @@ def test_setup_script_does_not_hardcode_one_conclusion() -> None:
         assert absolute not in text, absolute
 
 
+# --------------------------------------------------------------------------
+# 脚本的平台变体：bash / PowerShell / cmd 必须同步演化
+#
+# 三个入口做同一件事，所以关键约束要**逐个**检查——否则很容易改了 bash 忘了 pwsh，
+# 使用者恰好用另一个入口就踩空（实测：cmd 里的中文注释会被 cmd.exe 按控制台代码页
+# 读成乱码并当命令执行）。
+# --------------------------------------------------------------------------
+SCRIPTS = ROOT / "scripts"
+
+
+@pytest.mark.parametrize("name", ["setup.sh", "setup.ps1"])
+def test_setup_variants_share_the_same_contract(name: str) -> None:
+    """`setup.sh` 与 `setup.ps1` 必须遵守同一组约束。"""
+    text = (SCRIPTS / name).read_text(encoding="utf-8")
+    # 三个候选来源都要有：镜像、PyPI、代理
+    assert "tsinghua" in text, f"{name} 少了镜像候选"
+    assert "pypi.org" in text, f"{name} 少了 PyPI 候选"
+    assert "127.0.0.1:7897" in text, f"{name} 少了代理候选"
+    # 手动指定来源的出口
+    assert "--index" in text and "--proxy" in text, f"{name} 少了手动指定参数"
+    # --dev 开关（PowerShell 版用 -Dev/--dev，bash 版只有 --dev）
+    assert "dev" in text.lower(), f"{name} 少了 --dev"
+    # 未知参数要拒绝，不能静默忽略
+    assert "未知参数" in text, f"{name} 没有拒绝未知参数"
+
+
+@pytest.mark.parametrize("name", ["setup.ps1", "package.ps1"])
+def test_pwsh_variants_sync_frozen(name: str) -> None:
+    """PowerShell 版同步也要带 `--frozen`（不改写 uv.lock）。
+
+    bash 版早就有这条断言；pwsh 版必须一致，否则用 PowerShell 装一次
+    就把锁文件里的 URL 换成镜像地址了。
+    """
+    if name == "package.ps1":
+        pytest.skip("打包脚本不做依赖同步")
+    text = (SCRIPTS / name).read_text(encoding="utf-8")
+    assert "--frozen" in text, f"{name} 的同步没带 --frozen"
+
+
+@pytest.mark.parametrize("name", ["package.sh", "package.ps1"])
+def test_package_variants_share_the_same_contract(name: str) -> None:
+    """`package.sh` 与 `package.ps1` 必须产出同样的东西。"""
+    text = (SCRIPTS / name).read_text(encoding="utf-8")
+    # 两种归档都要出
+    assert "tar" in text and "zip" in text, f"{name} 少了归档格式"
+    # 版本号取自 pyproject.toml（唯一真源）
+    assert "pyproject.toml" in text, f"{name} 没从 pyproject 读版本"
+    # 打包自检：不该混进构建产物
+    assert "output.html" in text and "output.docx" in text, f"{name} 少了示例产物清理"
+    assert "__pycache__" in text, f"{name} 少了缓存清理"
+    # egg-info 是构建产物（.gitignore 里也有），必须排掉——
+    # 实测 bash 版曾把它打进包（pwsh 版按清单复制所以没带），两边要一致
+    assert "egg-info" in text, f"{name} 少了 egg-info 清理"
+
+
+@pytest.mark.parametrize("name", ["setup.cmd", "package.cmd"])
+def test_cmd_wrappers_exist_and_delegate(name: str) -> None:
+    """cmd 入口要薄：只是转发给同目录的 .ps1。"""
+    text = (SCRIPTS / name).read_text(encoding="utf-8")
+    ps1 = name.replace(".cmd", ".ps1")
+    assert ps1 in text, f"{name} 没有转发给 {ps1}"
+    assert "%~dp0" in text, f"{name} 应该用 %~dp0 定位同目录脚本"
+
+
+def test_cmd_files_are_ascii_only() -> None:
+    """`.cmd` 必须纯 ASCII。
+
+    实测踩到：cmd 文件里的中文注释会被 cmd.exe 按**控制台代码页**解读成乱码，
+    还可能被当成命令执行（报 `'的' is not recognized as an internal command`）。
+    所以 .cmd 里只写英文注释。
+    """
+    cmd_files = sorted(SCRIPTS.glob("*.cmd"))
+    assert cmd_files, "找不到任何 .cmd 文件"
+    for path in cmd_files:
+        raw = path.read_bytes()
+        non_ascii = [b for b in raw if b > 0x7F]
+        assert not non_ascii, f"{path.name} 含非 ASCII 字节（cmd 会读成乱码）"
+
+
 def test_readme_directory_map_matches_source_tree() -> None:
     """README 的目录结构里点名的每个模块都必须真实存在。
 

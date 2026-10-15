@@ -29,17 +29,26 @@ docgen build content.md -c config.toml -o out.docx
 
 ### 方式 A：一键装（推荐，会自动挑可用软件源）
 
+**按你的终端挑一行**（三个入口做同一件事）：
+
 ```bash
 cd docgen-0.1.0b1-src
-bash scripts/setup.sh --dev        # 只跑不开发的话去掉 --dev
+
+bash scripts/setup.sh --dev           # Git Bash / macOS / Linux
+# 或（Windows PowerShell / pwsh）
+pwsh scripts/setup.ps1 --dev
+# 或（Windows cmd）
+scripts\setup.cmd --dev
 ```
+
+只跑不开发的话去掉 `--dev`（它只是多装 pytest / ruff / mypy）。
 
 脚本会**依次尝试几个来源**（镜像直连 → PyPI 直连 → 本地代理 + PyPI → 代理 + 镜像），
 用真实同步验证，哪个通用哪个，成功后会告诉你是从哪个源装的。
 
 > **为什么要这么麻烦**：内外网状态会随时间变化——同一个索引，有时直连就通、
 > 有时必须走代理、有时只能换镜像。所以脚本不预设结论，运行期自己试。
-> 你也可以跳过自动逻辑，直接指定：
+> 你也可以跳过自动逻辑，直接指定（下面的 `setup` 换成你那个入口即可）：
 >
 > ```bash
 > bash scripts/setup.sh --dev --index https://pypi.tuna.tsinghua.edu.cn/simple
@@ -48,6 +57,9 @@ bash scripts/setup.sh --dev        # 只跑不开发的话去掉 --dev
 >
 > 脚本用的是 `uv sync --frozen`，**不会改动 `uv.lock`**——否则换个源同步就会把
 > 锁文件里所有 URL 换成那个源（已踩过）。手动跑 `uv sync` 时也建议加 `--frozen`。
+>
+> 三个入口的参数写法一致（`--dev` / `--index` / `--proxy`）；
+> PowerShell 版也接受惯用的 `-Dev` / `-Index` / `-Proxy`。
 
 ### 方式 B：用标准 venv + pip
 

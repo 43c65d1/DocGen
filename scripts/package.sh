@@ -39,14 +39,15 @@ done
 mkdir -p "$staging/$name/.github"
 cp -r .github/workflows "$staging/$name/.github/" 2>/dev/null || true
 
-# 清掉可能混进来的垃圾：缓存、示例的构建产物（跑示例就会重新生成，不该随包发）
+# 清掉可能混进来的垃圾：缓存、构建产物、示例的构建产物（跑一次就会重新生成，不该随包发）
 find "$staging/$name" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
+find "$staging/$name" -name '*.egg-info' -type d -prune -exec rm -rf {} + 2>/dev/null || true
 find "$staging/$name" \( -name '*.pyc' -o -name '.coverage' \) -delete 2>/dev/null || true
 rm -f "$staging/$name"/examples/*/output.html "$staging/$name"/examples/*/output.docx
 
 # 自检：包里不该出现这些
 leaked="$(cd "$staging/$name" && find . \( -name '__pycache__' -o -name '*.pyc' -o -name 'output.html' \
-  -o -name 'output.docx' -o -name '.coverage' \) -print)"
+  -o -name 'output.docx' -o -name '.coverage' -o -name '*.egg-info' \) -print)"
 if [ -n "$leaked" ]; then
   echo "打包自检失败，以下内容不该进包：" >&2
   echo "$leaked" >&2

@@ -16,21 +16,27 @@
   `docs/development-manual.md` 里的**契约代码**（现已排除该文件）
 - **版本单一真源**：新增 `docgen.version_string()`，优先读已安装包元数据
   （`pyproject.toml` 是唯一真源），模块常量仅作未安装时的兜底，一致性由测试守住
-- **新增发布物**：[scripts/package.sh](scripts/package.sh) 打源码测试版（tar.gz / zip）
+- **新增发布物**：[scripts/package.sh](scripts/package.sh) 打源码测试版（tar.gz / zip），
+  另有 PowerShell / cmd 等价入口（`package.ps1` / `package.cmd`）
 - **新增文档**：[QUICKSTART.md](QUICKSTART.md) 上手、
   [LIMITATIONS.md](LIMITATIONS.md) 已知限制清单（含「看着像 bug 其实不是」）、
   [FEEDBACK.md](FEEDBACK.md) 反馈模板
 - **同步一律 `--frozen`**：不带它的话，**换个软件源同步就会把 `uv.lock` 里
   500+ 处 URL 改写成那个源**（实测踩到）。`--frozen` 仍然按 `--index` 去镜像下载，
-  只是不改锁文件。已加测试守住（`scripts/setup.sh` 的每条同步命令都要带 `--frozen`）
+  只是不改锁文件。已加测试守住（每条同步命令都要带 `--frozen`，bash 与 pwsh 版都查）
 - **网络来源不再写死**：内外网状态会随时间变化（现实因素），所以新增
-  [scripts/setup.sh](scripts/setup.sh)——依次尝试「镜像直连 → PyPI 直连 → 代理 + PyPI →
+  [scripts/setup.sh](scripts/setup.sh)（另有 `setup.ps1` / `setup.cmd` 两个等价入口）
+  ——依次尝试「镜像直连 → PyPI 直连 → 代理 + PyPI →
   代理 + 镜像」，**用真实同步判断可用性**，哪个成功用哪个，并支持 `--index` / `--proxy`
   手动指定。文档里不再出现「直连一定超时」这类会过期的断言
   （本机实测：直连 PyPI 与 files.pythonhosted.org 超时、代理下 pypi.org 通但
   files.pythonhosted.org 仍不通、镜像直连通——但这些都可能变）
   - 注：第一版脚本用「先探测再同步」两段式，结果探测本身依赖环境而**假失败**
     （`uv pip install --dry-run` 需要已存在的 venv），已改为直接同步 + 短超时换源
+- **脚本三平台入口**：`setup` / `package` 各有 `.sh`（Git Bash/macOS/Linux）、
+  `.ps1`（PowerShell）、`.cmd`（cmd）三个入口，做同一件事、参数写法一致。
+  `.cmd` 限定纯 ASCII——cmd.exe 按控制台代码页读文件，中文注释会被读成乱码
+  甚至当命令执行（实测踩到）。测试逐个变体检查关键约束，防"改了 bash 忘了 pwsh"
 
 ### 新增（标题缩进可配）
 

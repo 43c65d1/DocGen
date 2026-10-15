@@ -28,7 +28,10 @@
 
 ```bash
 # 推荐：自动挑一个当前可用的软件源（内外网状态会变，脚本运行期自己试）
-bash scripts/setup.sh --dev
+# 按你的终端挑一行，三个入口做同一件事：
+bash scripts/setup.sh --dev            # Git Bash / macOS / Linux
+pwsh scripts/setup.ps1 --dev           # Windows PowerShell / pwsh
+scripts\setup.cmd --dev                # Windows cmd
 ```
 
 或者手动（用标准 venv + pip）：
@@ -222,14 +225,13 @@ tests/
   test_table_enhancements.py test_w4_media.py test_w5_sections.py
   test_renderer_anomalies.py test_heading_and_footnotes.py test_release.py …
 scripts/
-  setup.sh          # 装依赖：自动挑一个当前可用的软件源（内外网状态会变）
-  package.sh        # 打「源码测试版」压缩包（tar.gz / zip）
+  setup.sh / setup.ps1 / setup.cmd      # 装依赖：自动挑一个当前可用的软件源
+  package.sh / package.ps1 / package.cmd # 打「源码测试版」压缩包（tar.gz / zip）
 docs/
   dfm.md config.md ir.md crosscheck.md word.md development-manual.md
 examples/
   minimal/ inherit/ features/
 QUICKSTART.md LIMITATIONS.md FEEDBACK.md HANDOFF.md CHANGELOG.md
-```
 ```
 
 ## 开发
@@ -246,8 +248,9 @@ CI（[.github/workflows/ci.yml](.github/workflows/ci.yml)）在 Python 3.11 / 3.
 
 ### 本地环境注意
 
-- **装依赖用 `bash scripts/setup.sh --dev`**：内外网状态会变化，脚本会依次尝试
-  镜像 / 直连 / 代理并选出当前可用的那个（详见 [QUICKSTART.md](QUICKSTART.md)）。
+- **装依赖用 `scripts/` 下的 setup 脚本**（`setup.sh` / `setup.ps1` / `setup.cmd`
+  三选一）：内外网状态会变化，脚本会依次尝试镜像 / 直连 / 代理并选出当前可用的那个
+  （详见 [QUICKSTART.md](QUICKSTART.md)）。
 - 同步一律带 `--frozen`：否则换个源会把 `uv.lock` 里所有 URL 改写成那个源。
 - ruff 缓存要用工作区内目录：`RUFF_CACHE_DIR=.ruff-cache`。
 

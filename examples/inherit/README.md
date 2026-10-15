@@ -39,5 +39,5 @@ font_weight = "bold"    # 继承 heading1
 ## 构建
 
 ```bash
-docgen build examples/inherit/content.md -c examples/inherit/config.toml -o examples/inherit/output.html
+docgen build examples/inherit/content.md -c examples/inherit/config.toml -o examples/inherit/output.docx
 ```

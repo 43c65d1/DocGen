@@ -7,8 +7,8 @@
 
 ## 1. 项目是什么
 
-`DFM + TOML → HTML / Word` 的排版编译器。核心主张：**样式全部来自 config，
-正文是纯文本**；解析与渲染严格分离，HTML 与 Word 是同一个 IR 上的两个后端。
+`DFM + TOML → Word` 的排版编译器。核心主张：**样式全部来自 config，
+正文是纯文本**；解析与渲染严格分离，渲染后端只消费 IR。
 
 规模参考（会变，用 `wc -l` / `pytest --co` 看当前值）：
 
@@ -48,10 +48,9 @@ content.md  ─┘        │
                       ▼
               语义校验（样式引用、图片路径）─► valid IR
                       ▼
-        ┌─────────────┴─────────────┐
-        ▼                           ▼
-  HTML 渲染                    Word 渲染（OOXML）
-  （参照实现）                  （母版/样式槽位 → 数学 → 编号 → 表格/图片/脚注 → 分节）
+                      ▼
+         Word 渲染（OOXML）
+         母版/样式槽位 → 数学 → 编号 → 表格/图片/脚注 → 分节
 ```
 
 代码依赖方向（**改动时要守住的边界**）：
@@ -69,8 +68,8 @@ render ──► ir + config（渲染层不认识解析器，也不回读源文�
 
 1. **解析 / IR / 渲染彻底分离**：渲染层只认 IR；解析器不写视觉属性
    （IR 里是 `Styled(style_name="strong")`，不是"加粗"）。
-2. **config 是唯一真源**：输出里每个样式属性的值都等于 config 的展开值
-   （[tests/test_html_probe.py](tests/test_html_probe.py) 有自动断言）。
+2. **config 是唯一真源**：config 里声明的每个样式值都必须真的到达产出
+   （[tests/test_config_source_of_truth.py](tests/test_config_source_of_truth.py) 自动断言）。
 3. **改渲染必须先看 IR 够不够用**：不够就先改 IR，不要在渲染里读源文本。
 
 ## 4. 模块地图
@@ -87,7 +86,6 @@ render ──► ir + config（渲染层不认识解析器，也不回读源文�
 | `validate.py` | 样式引用、图片路径校验；`[inline]` 映射链报错 | 加校验规则 |
 | `diagnostics.py` | 未闭合标记 / 未知语言 / 围栏未配对 | 加诊断 |
 | `numbering.py` | 标题/公式编号、题注与交叉引用映射 | 改编号逻辑 |
-| `render/html.py` `css.py` | HTML 后端（**参照实现**，改动最省事） | 加特性先在 HTML 侧试 |
 | `render/docx.py` | Word 后端主渲染器（最大的模块） | 加 Word 特性 |
 | `render/ooxml.py` | 所有 OOXML 元素构造 + **schema 顺序插入** | 加任何 OOXML 元素 |
 | `render/ooxml_check.py` | 结构不变量 + **官方 ECMA-376 XSD 校验** | 校验规则 |
@@ -108,12 +106,21 @@ render ──► ir + config（渲染层不认识解析器，也不回读源文�
 
 1. **先看 IR 够不够**。不够就加节点/字段（`ir.py`），补 [docs/ir.md](docs/ir.md)。
 2. **解析器**：在 `parser/` 里产出该 IR；`test_ir_snapshot.py` 会盯着快照。
-3. **HTML 后端先做**：它最简单，能确认 IR 设计没问题。
-4. **Word 后端**：用 `ooxml.py` 的 `insert_child()` 构造元素（**不要 `append`**，见 §7）。
+3. **渲染**：在 `render/docx.py` 里消费该 IR；用 `ooxml.py` 的 `insert_child()`
+   构造元素（**不要 `append`**，见 §7）。
+4. **config 键**：如果新特性有可配置项，先在 `config.py` 的键名清单里登记，
+   否则渲染层读不到（`test_config_source_of_truth.py` 会抓「config 写了不生效」）。
 5. **校验**：需要就加 `validate.py` / `ooxml_check.py` 的规则。
 6. **特性矩阵**：在 [examples/features/](examples/features/README.md) 加一行 + 独立信号值，
    并在 `test_feature_matrix.py` 加一条断言。**这是本项目定位失效点的主要手段**。
-7. **文档**：改对应的 `docs/*.md` 与 [CHANGELOG.md](CHANGELOG.md)。
+7. **OOXML 合法性**：过 `test_ooxml_schema.py`（官方 ECMA-376 XSD），
+   否则可能写出「Word 静默忽略」的属性/元素顺序。
+8. **文档**：改对应的 `docs/*.md` 与 [CHANGELOG.md](CHANGELOG.md)。
+
+> **关于曾经的 HTML 参照实现**：早期有一个 HTML 后端，用来在 IR 设计上快速试错
+> （「HTML 对了 Word 不对 → 问题在渲染层」）。它已移除——维护成本高于收益，
+> 且需求很少。现在判断问题位置靠 `dump-ir`（IR 对不对）+
+> `test_config_source_of_truth.py`（config 值到没到产出），不再需要第二个后端。
 
 ## 6. 测试策略（这是这个项目最值钱的部分）
 
@@ -218,7 +225,8 @@ ruff check . && ruff format --check . && mypy src tests && pytest
 
 - [ ] `bash scripts/setup.sh --dev` 成功，`uv run pytest` 全绿
 - [ ] 读过 §3 三条铁律与 §7 硬约束
-- [ ] 能说清 HTML 与 Word 两个后端的差异（前者是参照实现）
+- [ ] 能说清「渲染层只消费 IR，不读源文本」这条边界
+- [ ] 知道 config 里声明了样式却没生效时，先跑 `test_config_source_of_truth.py` 定位
 - [ ] 知道改特性要走 `examples/features` 特性矩阵 + `test_feature_matrix.py`
 - [ ] 知道验证 Word 产出要用 Word（不是 LibreOffice）
 - [ ] 知道版本号要改三处

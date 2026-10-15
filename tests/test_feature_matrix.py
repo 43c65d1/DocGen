@@ -19,7 +19,6 @@ import pytest
 from docgen.config import load_config
 from docgen.parser.dfm import parse_dfm
 from docgen.render.docx import render_docx_bytes
-from docgen.render.html import render_html
 from docgen.render.math import find_xsl
 from docgen.render.ooxml_check import validate_parts, validate_with_schema
 
@@ -267,12 +266,12 @@ def test_feature_matrix_is_schema_valid(parts: dict[str, bytes]) -> None:
 
 
 # --------------------------------------------------------------------------
-# HTML 侧同一份 config 也要生效
+# 链接目标也要落到产出里
 # --------------------------------------------------------------------------
-def test_html_uses_signal_colors() -> None:
-    """同一份 config 服务两个后端：HTML 侧也要出现信号色与实际链接。"""
-    config = load_config(FIXTURES / "config.toml")
-    markdown = (FIXTURES / "content.md").read_text(encoding="utf-8")
-    output = render_html(parse_dfm(markdown), config)
-    assert "#C00000" in output or "c00000" in output
-    assert "example.com/feature" in output
+def test_link_target_reaches_the_document(parts: dict[str, bytes]) -> None:
+    """链接的 URL 要真的进产出（关系部件），而不是只渲染了文字。
+
+    （原先是 HTML 侧的同名断言；HTML 后端移除后改到 docx 侧。）
+    """
+    rels = parts["word/_rels/document.xml.rels"].decode("utf-8")
+    assert "example.com/feature" in rels

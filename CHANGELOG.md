@@ -6,6 +6,32 @@
 
 ## [Unreleased]
 
+### 移除
+
+- **移除 HTML 后端**（`render/html.py` + `render/css.py`，共 449 行）。
+  它原本是 Word 后端的**参照实现**（「HTML 对了 Word 不对 → 问题在渲染层」），
+  但维护成本高于收益、需求很少，且它的测试面（28 项）比实际使用价值更大。
+  随之移除的还有 `test_html_probe.py`（28 项）与特性矩阵里的 HTML 用例。
+  - `docgen build --format html` 现在**明确报错**（不再静默产出 docx）；
+    默认输出改为 `output.docx`。
+  - **config 只认点号键**：`font_weight` / `font_size` / `color` 这类扁平键
+    不再有任何后端读取（写它们不报错、也不生效），见 [LIMITATIONS.md](LIMITATIONS.md) A5。
+  - 「config 是唯一真源」这条不变量**没有丢**：改由新的
+    [tests/test_config_source_of_truth.py](tests/test_config_source_of_truth.py) 在
+    **docx 侧**守（config 里声明的每个样式值都必须真的到达产出，且行内语义样式
+    必须落在正文 run 上，不能只躺在 styles.xml 里）。
+
+### 修复
+
+- **嵌套表里的 `@ref` 从不解析**：`[styles.body] font.size = "@document.font.size"`
+  这种写法解析不到（解析器只作用于顶层字符串值），字符串一路带到渲染层，
+  在单位换算里炸掉（`could not convert string to float`）。
+  `examples/minimal/config.toml` 正是这么写的。现在递归解析嵌套表。
+- **`[styles.body]` 的字体类属性不生效**：正文段落只被应用段落级的
+  `line_spacing` / `first_line_chars`，`font.color` / `font.name` / `font.size`
+  这些字符级属性没人读——「config 写了但不生效」这类最隐蔽的失效方式。
+  现在它们会写进 `Normal` 样式（正文继承它）。
+
 ### 测试版发布准备（0.1.0b1）
 
 - **工作区整理**：清掉缓存/构建产物（193MB → 19MB）；`.github/workflows/ci.yml` 此前

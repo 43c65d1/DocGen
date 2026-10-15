@@ -300,11 +300,18 @@ def test_readme_mentions_shipped_documents() -> None:
         assert name in readme, f"README 没有链接 {name}"
 
 
-def test_readme_describes_current_backends() -> None:
-    """README 必须同时描述两个后端——不能退回只讲 HTML 的旧版本。"""
+def test_readme_describes_current_output_format() -> None:
+    """README 必须描述**当前**产出格式（只有 Word）。
+
+    这条抓过两次过时：README 一度只讲 HTML（Word 后端还没写），
+    后来又同时讲两个后端（HTML 已移除）。
+    """
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert ".docx" in readme and ".html" in readme
+    assert ".docx" in readme, "README 应说明产出是 .docx"
     assert "ECMA-376" in readme, "应说明产出过官方 schema 校验"
+    # HTML 后端已移除：README 不该再把它当能力宣传
+    assert "→ HTML / Word" not in readme
+    assert "output.html" not in readme
     # 不该再把"剪枝版"当成项目现状的主标题
     assert not readme.startswith("# DocGen（剪枝版"), "标题还在用剪枝版的旧定位"
 

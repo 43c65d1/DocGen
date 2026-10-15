@@ -5,7 +5,7 @@
 ```bash
 docgen check examples/features/content.md -c examples/features/config.toml --strict
 docgen build examples/features/content.md -c examples/features/config.toml -o examples/features/output.docx
-docgen build examples/features/content.md -c examples/features/config.toml -o examples/features/output.html
+docgen build examples/features/content.md -c examples/features/config.toml -o examples/features/output.docx
 ```
 
 ## 为什么需要它

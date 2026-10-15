@@ -56,17 +56,21 @@ color = "#222"
 `[code_block]` 里的**点号键**（`font.name`）会被识别为「基座属性」而不是语言变体；
 语言变体只认 `[code_block.<语言>]` 这种表头写法。
 
-## 两个后端的键名
+## 键名：点号嵌套写法
 
-同一份 config 服务 HTML 与 Word，但两边读的键名不同：
+**只有一种读取形式**：点号键（解析后是嵌套表）：
 
-| 后端 | 键名风格 | 例 |
-|---|---|---|
-| Word | 点号键（解析后是嵌套表） | `font.bold` / `font.color` / `font.name` / `font.size` |
-| HTML | 扁平键 | `font_weight` / `color` / `font_family` / `font_size` |
+| 用途 | 例 |
+|---|---|
+| 字体 | `font.bold` / `font.color` / `font.name` / `font.size` / `font.italic` |
+| 段落 | `line_spacing` / `first_line_chars` / `alignment` |
+| 代码块 | `[code_block] background` / `border` |
 
-要两个后端都生效，两种键都要写（`examples/features/config.toml` 是范例）。
-HTML 侧遇到 `font` 这类嵌套表会跳过，不会产出 `font: {'bold': True}` 这种废声明。
+> ⚠️ **扁平键不会被读取**：`font_weight` / `font_style` / `font_size` /
+> `font_family` / `text_decoration` 这些是早期 HTML 后端的写法。
+> HTML 后端已移除，写它们**不会报错，但也不会生效**——没有后端去读。
+> 排查方式：`docgen dump-styles -c config.toml` 看实际展开值。
+> （`tests/test_config_source_of_truth.py` 守着「config 声明了就要到产出」。）
 
 ## `[output]`：输出与日志
 

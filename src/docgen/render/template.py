@@ -21,7 +21,7 @@ from docx import Document as _Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
-from ..config import Config
+from ..config import Config, build_style_table
 from ..units import to_points
 from .ooxml import set_style_outline_level
 
@@ -277,19 +277,62 @@ def _is_cjk(name: str) -> bool:
 
 
 def apply_document_defaults(document: Any, config: Config) -> None:
-    """把 ``[document]`` 的字体/字号/行距写进 Normal 样式（正文继承它）。"""
-    settings = config.document
-    font = settings.get("font")
-    font = font if isinstance(font, dict) else {}
+    """把 ``[document]`` 的字体/字号/行距写进 Normal 样式（正文继承它）。
+
+    ``[styles.body]`` 的**字体类**属性也写进 Normal——正文段落继承它，
+    与 ``[document]`` 走同一套机制。先取 document、再用 body 覆盖
+    （样式比文档默认更具体）。
+
+    为什么在此之前 body 的字体不生效：正文段落只被应用了 ``line_spacing`` /
+    ``first_line_chars``（段落级），``font.color`` 这类字符级属性没人读，
+    于是「config 写了但不生效」——正是本项目最隐蔽的失效方式。
+
+    取值**必须读 ``build_style_table`` 的展开结果**：``config.styles`` 里还留着
+    未解析的 ``@ref``（如 ``@document.font.size``），直接用会拿到字符串，
+    然后在单位换算里炸掉。展开表也正是渲染层 ``state.styles`` 用的那一份。
+    """
+    table = build_style_table(config)
+    resolved_doc = table.get("document", {})
+    doc_settings: dict[str, Any] = resolved_doc if isinstance(resolved_doc, dict) else {}
+    raw_body = table.get("body", {})
+    body: dict[str, Any] = raw_body if isinstance(raw_body, dict) else {}
+    body_font = body.get("font")
+    body_font = body_font if isinstance(body_font, dict) else {}
+    doc_font = doc_settings.get("font")
+    doc_font = doc_font if isinstance(doc_font, dict) else {}
     normal = _style_by_id(document, "Normal")
 
-    name = font.get("name", settings.get("font.name"))
-    size = font.get("size", settings.get("font.size"))
-    line_spacing = settings.get("line_spacing")
+    def pick(key: str) -> Any:
+        """按 body-font → document-font 取值（都用展开后的值）。
+
+        不在展开表里出现的键（如扁平键）也兼容一层：渲染层对 `[styles.*]`
+        同样接受扁平写法，这里保持一致。
+        """
+        for nested, flat in ((body_font, body), (doc_font, doc_settings)):
+            if key in nested:
+                return nested[key]
+            dotted = f"font.{key}"
+            if dotted in flat:
+                return flat[dotted]
+        return None
+
+    name = pick("name")
+    size = pick("size")
+    color = pick("color")
+    bold = pick("bold")
+    italic = pick("italic")
+    line_spacing = body.get("line_spacing", doc_settings.get("line_spacing"))
+
     if name:
         _set_style_fonts(normal, str(name))
     if size is not None:
         normal.font.size = to_points(size)
+    if color:
+        normal.font.color.rgb = _rgb(str(color))
+    if bold is not None:
+        normal.font.bold = bool(bold)
+    if italic is not None:
+        normal.font.italic = bool(italic)
     if line_spacing is not None:
         normal.paragraph_format.line_spacing = float(line_spacing)
 
@@ -297,6 +340,13 @@ def apply_document_defaults(document: Any, config: Config) -> None:
         style = _style_by_id(document, f"Heading{level}")
         set_style_outline_level(style, level - 1)
         _apply_style_indent(style, config, level)
+
+
+def _rgb(value: str) -> Any:
+    """``color`` 写 ``111111`` 或 ``#111111`` 都接受（OOXML 里不带 ``#``）。"""
+    from docx.shared import RGBColor
+
+    return RGBColor.from_string(value.lstrip("#").upper())
 
 
 def _apply_style_indent(style: Any, config: Config, level: int) -> None:

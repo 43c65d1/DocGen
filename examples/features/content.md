@@ -8,7 +8,7 @@
 ```bash
 docgen check examples/features/content.md -c examples/features/config.toml --strict
 docgen build examples/features/content.md -c examples/features/config.toml -o examples/features/output.docx
-docgen build examples/features/content.md -c examples/features/config.toml -o examples/features/output.html
+docgen build examples/features/content.md -c examples/features/config.toml -o examples/features/output.docx
 ```
 
 ## 行内格式（每行一个特性）

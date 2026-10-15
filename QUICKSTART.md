@@ -1,7 +1,7 @@
 # DocGen 快速上手（测试版）
 
 > 面向**拿到源码包试用的同学**。目标：15 分钟内从零到打出第一份 `.docx`。
-> 本项目是「纯文本 + 样式表 → HTML / Word」的排版编译器，**不要求安装到系统**，
+> 本项目是「纯文本 + 样式表 → Word 文档」的排版编译器，**不要求安装到系统**，
 > 也不需要 PyPI / wheel。
 
 ---
@@ -153,7 +153,7 @@ uv run docgen build content.md -c config.toml -o out.docx
 | 命令 | 用途 |
 |---|---|
 | `docgen check <in.md> -c <cfg>` | 校验内容与 config（样式引用、图片路径）。`--strict` 追加诊断；`--json` 输出结构化错误 |
-| `docgen build <in.md> -c <cfg> -o <out>` | 生成文档。按 `-o` 扩展名选后端（`.docx` → Word，其余 → HTML） |
+| `docgen build <in.md> -c <cfg> -o <out>` | 生成 `.docx`（Word 文档，可继续编辑） |
 | `docgen dump-ir <in.md>` | 打印解析出的 IR（带源行号），**排查解析问题第一步** |
 | `docgen dump-styles -c <cfg>` | 打印展开后的样式表（继承/`@ref` 都解析完），**排查样式没生效第一步** |
 | `docgen bug-report --output r.txt` | 打包环境 + config 摘要，反馈问题时附上这个文件 |
@@ -168,15 +168,9 @@ uv run docgen build content.md -c config.toml -o out.docx
 
 1. **`dump-ir`** —— 语法有没有被正确识别？（比如 `**粗体**` 是否解析成了 `Styled`)
 2. **`dump-styles`** —— 值有没有正确展开？（`based_on` 继承、`@ref` 引用都在这步解析）
-3. **两个后端键名不同**！这是**最容易踩的坑**：
-
-   | 后端 | 键名风格 | 例 |
-   |---|---|---|
-   | Word | 点号键（嵌套） | `font.bold` / `font.color` / `font.name` |
-   | HTML | 扁平键 | `font_weight` / `color` / `font_family` |
-
-   只写 `font.bold` 时 **HTML 不会加粗**；只写 `font_weight` 时 **Word 不会加粗**。
-   要两个后端都生效就得两种键都写（`examples/features/config.toml` 是范例）。
+3. **键名要用 Word 那一套**：点号嵌套键（`font.bold` / `font.color` / `font.name`）。
+   扁平键（`font_weight` / `color`）是早期 HTML 后端的写法，**已移除**——
+   写了不会报错，但也不会生效（目前也没有对应后端去读它）。
 4. **内置样式名**：`**粗体**` 用的是 `strong`，不是你自己起的名字。
    可引用名：`strong` / `em` / `strike` / `sup` / `sub`（想改名用 `[inline]` 映射）。
 

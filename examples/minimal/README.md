@@ -1,13 +1,13 @@
 # DocGen 示例
 
-这个示例演示「DFM + config → HTML / Word」的**完整链路**：从解析、校验到两个后端产出，
+这个示例演示「DFM + config → Word / Word」的**完整链路**：从解析、校验到两个后端产出，
 覆盖大部分特性类别（想看"每个特性独立一行、失效即可见"的对照表，用
 [../features/](../features/README.md)）：
 
 ```bash
 docgen check examples/minimal/content.md -c examples/minimal/config.toml --strict
 docgen build examples/minimal/content.md -c examples/minimal/config.toml -o examples/minimal/output.docx
-docgen build examples/minimal/content.md -c examples/minimal/config.toml -o examples/minimal/output.html
+docgen build examples/minimal/content.md -c examples/minimal/config.toml -o examples/minimal/output.docx
 ```
 
 ## 文件
@@ -16,7 +16,7 @@ docgen build examples/minimal/content.md -c examples/minimal/config.toml -o exam
 |---|---|
 | [content.md](content.md) | DFM 内容：标题、段落、列表、引用、代码块（fence 与 `\begin{code}`）、表格、上下标、行内/块级/编号公式、题注、交叉引用、目录、图片、分页 |
 | [config.toml](config.toml) | 样式表：`[document]` 全局值、`[styles.*]` 内容样式、`[code_block]` 代码块样式 |
-| `output.docx` / `output.html` | 构建产物（未入库，用上面的命令生成） |
+| `output.docx` / `output.docx` | 构建产物（未入库，用上面的命令生成） |
 
 ## 产物里可以看到什么
 

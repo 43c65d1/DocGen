@@ -302,3 +302,39 @@ def test_style_objects_keep_name_and_parent(base_config: Path) -> None:
     config = load_config(base_config)
     assert config.styles["heading2"].name == "heading2"
     assert config.styles["body"].based_on is None
+
+
+def test_ref_inside_a_nested_table_is_resolved(tmp_path: Path) -> None:
+    """`@ref` 出现在**嵌套表**里也要解析（点号键展开后是嵌套结构）。
+
+    实测踩到：`[styles.body] font.size = "@document.font.size"` 原先解析不到——
+    解析器只作用于顶层字符串值，嵌套表里的字符串被原样放行，渲染层于是拿到
+    `"@document.font.size"` 字面量，在单位换算里炸掉
+    （`could not convert string to float: '@document.font.size'`）。
+    """
+    path = _write(
+        tmp_path,
+        "config.toml",
+        'config_version = "0.1"\n\n'
+        "[document]\n"
+        'font.size = "12pt"\n'
+        "\n"
+        "[styles.body]\n"
+        'font.size = "@document.font.size"\n'
+        'font.color = "333333"\n',
+    )
+    body = build_style_table(load_config(path))["body"]
+    assert body["font"]["size"] == "12pt", "嵌套表里的 @ref 没被解析"
+    assert body["font"]["color"] == "333333", "普通值不该被解析逻辑碰坏"
+
+
+def test_ref_inside_a_nested_table_that_is_unknown_still_errors(tmp_path: Path) -> None:
+    """嵌套表里的坏引用同样要报错，不能静默留成字面量。"""
+    path = _write(
+        tmp_path,
+        "config.toml",
+        'config_version = "0.1"\n\n[styles.body]\nfont.size = "@document.nope"\n',
+    )
+    with pytest.raises(errors.DocGenError) as caught:
+        build_style_table(load_config(path))
+    assert caught.value.code == errors.E_UNKNOWN_STYLE

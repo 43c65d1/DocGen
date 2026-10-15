@@ -1,17 +1,18 @@
 # Word（docx）后端
 
-完整版（Hard Version）在剪枝版地基上新增的渲染后端。**IR 与 config 都不变**：
-同一份 IR，HTML 渲染器是参照，Word 只是第二个消费方（手册 §2.3）。
+**唯一的渲染后端**。DFM + config → IR → OOXML（`.docx`），Word 里可继续编辑。
+
+> 早期另有一个 HTML 后端，用作 IR 设计的参照实现（「HTML 对了 Word 不对 →
+> 问题在渲染层」）。它已移除：维护成本高于收益、需求很少。现在只有这一条渲染路径。
 
 ## 用法
 
 ```bash
-# 按输出扩展名自动选择后端
+# 默认产出 .docx
 docgen build input.md -c config.toml -o output.docx
 
-# 显式指定格式
+# 显式指定格式（目前只接受 docx）
 docgen build input.md -c config.toml -o output.docx --format docx
-docgen build input.md -c config.toml -o output.html --format html
 ```
 
 退出码与剪枝版一致：`0` 成功、`1` 内容错误、`2` 配置/文件错误。
@@ -103,7 +104,7 @@ xsl = 'C:\...\MML2OMML.XSL'   # 可选；也可用环境变量 DOCGEN_MML2OMML
 |---|---|
 | 标题多级编号 | 母版 `numId=100`；映射显式化在 [`numbering.heading_numbering()`](../src/docgen/numbering.py)：`level → (ilvl, HeadingN)` |
 | 题注 | `\begin{caption #fig:1}` / `\begin{table #tab:1}` / `\begin{equation #eq:1}` → 书签 + `SEQ 图 \* ARABIC` 域 + **Caption** 样式 |
-| 交叉引用 | `[[ref:fig:1]]` → `REF fig:1 \h` 域（域结果即题注编号，`\h` 带超链接）；HTML 侧是 `#fig:1` 锚链接 |
+| 交叉引用 | `[[ref:fig:1]]` → `REF fig:1 \h` 域（域结果即题注编号，`\h` 带超链接） |
 | 目录占位 | `[[toc]]` → `TOC \o "1-9" \h \z \u` 域；`settings.xml` 已带 `updateFields`，打开自动填充 |
 | 题注编号 | 按类型独立计数（图 1、图 2、表 1…），由 `SEQ` 域在 Word 里递增 |
 | 校验 | 引用目标不存在 → `E5004`；标签重复 → `E4001`（`check --strict` 一并报告） |

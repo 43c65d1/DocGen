@@ -4,7 +4,9 @@
 """
 
 import argparse
+import io
 import json
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -45,15 +47,18 @@ def _help_of(argv: list[str], monkeypatch: pytest.MonkeyPatch) -> str:
     return buf.getvalue()
 
 
-def test_root_help_mentions_both_backends(monkeypatch: pytest.MonkeyPatch) -> None:
-    """`--help` 的**说明段**必须点明 HTML 和 Word 两个后端。"""
+def test_root_help_mentions_the_word_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`--help` 的**说明段**必须点明产出是 Word（docx）。
+
+    这条抓过一次真实过时：description 还写着「DFM + TOML -> HTML」。
+    断言要看**说明段**，不能全文找词——`out.docx` 出现在示例里，
+    全文匹配会掩盖说明段本身没提的事（最初那版测试就是这么写坏的）。
+    """
     out = _help_of([], monkeypatch)
-    # 只看 usage 行之后、第一个小节之前的说明段（epilog 里的 out.docx 不算）
     description = out.split("usage:", 1)[1].split("\n\n", 1)[1].split("options:")[0]
-    assert "HTML" in description and "Word" in description, (
-        f"帮助说明段没提两个后端：{description!r}"
-    )
-    assert "docx" in description, "说明段应点出 docx"
+    assert "Word" in description, f"帮助说明段没提 Word：{description!r}"
+    assert "docx" in description, f"帮助说明段没提 docx：{description!r}"
+    assert "HTML" not in description, "HTML 后端已移除，说明段不该再提它"
 
 
 def test_root_help_documents_exit_codes(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -214,18 +219,20 @@ def test_check_missing_config_exits_2(tmp_path: Path, capsys: pytest.CaptureFixt
     assert "E5001" in capsys.readouterr().err
 
 
-def test_build_writes_html_end_to_end(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_build_writes_docx_end_to_end(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """端到端：DFM + config -> .docx，内容真的进了 document.xml。"""
     source = tmp_path / "doc.md"
     source.write_text("# 文档标题\n\n正文 **粗体**\n\n[[pagebreak]]\n", encoding="utf-8")
-    output = tmp_path / "out.html"
+    output = tmp_path / "out.docx"
     assert main(["build", str(source), "-c", CONFIG, "-o", str(output)]) == 0
+    assert output.read_bytes()[:2] == b"PK"  # docx 是 zip 包
 
-    document = output.read_text(encoding="utf-8")
-    assert document.startswith("<!DOCTYPE html>")
-    assert "<title>文档标题</title>" in document
-    assert "<h1" in document and "文档标题" in document
-    assert "<strong" in document
-    assert '<hr class="pagebreak">' in document
+    with zipfile.ZipFile(io.BytesIO(output.read_bytes())) as archive:
+        document = archive.read("word/document.xml").decode("utf-8")
+    assert "文档标题" in document
+    assert "正文" in document
+    assert "Heading1" in document  # 标题走标题样式
+    assert "w:br" in document or "lastRenderedPageBreak" in document  # 分页符落地
     assert "已生成" in capsys.readouterr().out
 
 
@@ -234,7 +241,7 @@ def test_build_reports_content_errors_and_writes_nothing(
 ) -> None:
     source = tmp_path / "doc.md"
     source.write_text("[x]{.nope}\n", encoding="utf-8")
-    output = tmp_path / "out.html"
+    output = tmp_path / "out.docx"
     assert main(["build", str(source), "-c", CONFIG, "-o", str(output)]) == 1
     assert not output.exists()
     assert "E1003" in capsys.readouterr().err
@@ -252,7 +259,7 @@ def test_build_defaults_config_next_to_source(tmp_path: Path) -> None:
     )
     source = tmp_path / "doc.md"
     source.write_text("# 标题\n", encoding="utf-8")
-    output = tmp_path / "out.html"
+    output = tmp_path / "out.docx"
     assert main(["build", str(source), "-o", str(output)]) == 0
     assert output.is_file()
 
@@ -260,7 +267,6 @@ def test_build_defaults_config_next_to_source(tmp_path: Path) -> None:
 def test_build_docx_by_extension_writes_word_file(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """完整版：-o 是 .docx 时自动走 Word 后端。"""
     source = tmp_path / "doc.md"
     source.write_text("# 标题\n\n正文 **粗体**\n", encoding="utf-8")
     output = tmp_path / "out.docx"
@@ -278,12 +284,22 @@ def test_build_docx_with_explicit_format(tmp_path: Path) -> None:
     assert output.read_bytes()[:2] == b"PK"
 
 
-def test_build_html_format_still_works(tmp_path: Path) -> None:
+def test_build_default_output_is_docx(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """不传 -o 时默认产出 output.docx（不再有 HTML 兜底）。"""
+    monkeypatch.chdir(tmp_path)
     source = tmp_path / "doc.md"
     source.write_text("# 标题\n", encoding="utf-8")
-    output = tmp_path / "out.html"
-    assert main(["build", str(source), "-c", CONFIG, "-o", str(output)]) == 0
-    assert output.read_text(encoding="utf-8").startswith("<!DOCTYPE html>")
+    assert main(["build", str(source), "-c", CONFIG]) == 0
+    assert (tmp_path / "output.docx").read_bytes()[:2] == b"PK"
+
+
+def test_build_rejects_html_which_is_no_longer_supported(tmp_path: Path) -> None:
+    """HTML 后端已移除：`--format html` 必须**明确报错**，不能静默产出 docx。"""
+    source = tmp_path / "doc.md"
+    source.write_text("# 标题\n", encoding="utf-8")
+    with pytest.raises(SystemExit) as caught:
+        main(["build", str(source), "-o", "out.html", "--format", "html"])
+    assert caught.value.code == 2
 
 
 def test_build_rejects_unknown_format(tmp_path: Path) -> None:

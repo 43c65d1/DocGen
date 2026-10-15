@@ -31,13 +31,12 @@ from pathlib import Path
 from .config import Config, build_style_tree, load_config, render_table
 from .diagnostics import with_diagnostics
 from .errors import E_CONFIG, DocGenError
-from .ir import BlockNode, Heading, Text
+from .ir import BlockNode
 from .ir import Table as TableBlock
 from .normalize import normalize_text
 from .output import DEFAULT_FILE_LEVEL, SECRET_HINTS, Output
 from .parser.dfm import parse_dfm
 from .render.docx import render_docx
-from .render.html import render_html
 from .validate import validate_content
 
 EXIT_OK = 0
@@ -126,15 +125,16 @@ def _build(
     config_path: Path | None = None,
     fmt: str | None = None,
 ) -> int:
-    """DFM + config -> HTML 或 docx（完整版手册 §11）。
+    """DFM + config -> docx（完整版手册 §11）。
 
-    ``--format`` 缺省时按输出扩展名推断：``.docx`` -> Word，其余 -> HTML。
+    只产出 Word（``.docx``）。``--format`` 目前只接受 ``docx``，
+    传别的值会明确报错（历史上支持过 HTML，已移除）。
     """
     source = _read_source(path)
     blocks = parse_dfm(source)
     config = load_config(config_path or (path.parent / "config.toml"))
     _apply_output_config(config)
-    target = _resolve_format(fmt, output)
+    target = _resolve_format(fmt)
     _warn_table_default(config, blocks)
 
     errors = validate_content(blocks, config, source=path)
@@ -144,33 +144,25 @@ def _build(
         return EXIT_CONTENT_ERROR
 
     try:
-        if target == "docx":
-            render_docx(blocks, config, output, base_dir=path.parent)
-        else:
-            document = render_html(blocks, config, title=_title_of(blocks, path))
-            output.write_text(document, encoding="utf-8")
+        render_docx(blocks, config, output, base_dir=path.parent)
     except OSError as exc:
         raise DocGenError(E_CONFIG, f"无法写入输出文件: {output}: {exc}") from None
     _OUTPUT.results(f"已生成 {output}（{target}，{len(blocks)} 个块级节点）")
     return EXIT_OK
 
 
-def _resolve_format(fmt: str | None, output: Path) -> str:
+def _resolve_format(fmt: str | None) -> str:
+    """输出格式：目前只有 docx。
+
+    保留这个函数是为了让 ``--format`` 的**校验与报错**有唯一入口——
+    传错值时给出明确信息，而不是静默产出别的东西。
+    """
     if fmt:
         normalized = fmt.strip().lower()
-        if normalized not in ("html", "docx"):
-            raise DocGenError(E_CONFIG, f"不支持的输出格式: {fmt}")
+        if normalized != "docx":
+            raise DocGenError(E_CONFIG, f"不支持的输出格式: {fmt}（目前只支持 docx）")
         return normalized
-    return "docx" if output.suffix.lower() == ".docx" else "html"
-
-
-def _title_of(blocks: list[BlockNode], path: Path) -> str:
-    """HTML 标题：首个一级标题，否则用文件名。"""
-    for block in blocks:
-        if isinstance(block, Heading) and block.level == 1:
-            title = "".join(node.content for node in block.content if isinstance(node, Text))
-            return title or path.stem
-    return path.stem
+    return "docx"
 
 
 def _dump_styles(config_path: Path, raw: bool = False) -> None:
@@ -298,15 +290,14 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="docgen",
         description=(
-            "DFM + TOML -> HTML / Word 文档生成器\n"
-            "样式全部来自 config，正文是纯文本；同一份内容可输出 HTML 或 docx。"
+            "DFM + TOML -> Word 文档生成器\n"
+            "样式全部来自 config，正文是纯文本；产出 .docx（Word 可继续编辑）。"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "示例：\n"
             "  docgen check  examples/minimal/content.md -c examples/minimal/config.toml --strict\n"
             "  docgen build  examples/minimal/content.md -c examples/minimal/config.toml -o out.docx\n"
-            "  docgen build  examples/minimal/content.md -o out.html\n"
             "  docgen dump-styles -c examples/minimal/config.toml\n"
             "  docgen bug-report -c examples/minimal/config.toml\n"
             "\n"
@@ -329,7 +320,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     dump_ir.add_argument("input", type=Path, help="DFM 源文件（Markdown 子集）")
 
-    build = sub.add_parser("build", help="生成 HTML 或 docx")
+    build = sub.add_parser("build", help="生成 docx（Word）")
     build.add_argument("input", type=Path, help="DFM 源文件（Markdown 子集）")
     build.add_argument(
         "-c", "--config", type=Path, default=None, help="config.toml（缺省用内置默认样式）"
@@ -338,15 +329,15 @@ def _build_parser() -> argparse.ArgumentParser:
         "-o",
         "--output",
         type=Path,
-        default=Path("output.html"),
-        help="输出文件（缺省 output.html；扩展名决定格式）",
+        default=Path("output.docx"),
+        help="输出文件（缺省 output.docx）",
     )
     build.add_argument(
         "--format",
         dest="fmt",
-        choices=("html", "docx"),
+        choices=("docx",),
         default=None,
-        help="输出格式（缺省按 -o 扩展名推断）",
+        help="输出格式（目前只支持 docx）",
     )
 
     dump_styles = sub.add_parser("dump-styles", help="输出展开后的样式表")

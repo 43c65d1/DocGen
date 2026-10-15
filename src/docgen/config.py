@@ -464,7 +464,19 @@ def _declaration(name: str, config: Config) -> Table | None:
 
 
 def _resolve_ref(value: Any, symbols: Table, stack: list[str]) -> Any:
-    """``@a.b.c`` 解析为实际值；支持链式引用。"""
+    """``@a.b.c`` 解析为实际值；支持链式引用。
+
+    **递归**处理嵌套表：``@ref`` 可以出现在任何层级。
+    实测踩到：``[styles.body].font.size = "@document.font.size"`` 里的引用
+    原先**解析不到**——解析器只作用于顶层的字符串值，嵌套表里的字符串被
+    原样放行，于是渲染层拿到 ``"@document.font.size"`` 这种字面量，
+    在单位换算里炸掉（``could not convert string to float``）。
+    这类「config 写了但不生效/到渲染层才炸」的问题正是要避免的。
+    """
+    if isinstance(value, dict):
+        return {key: _resolve_ref(item, symbols, stack) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_resolve_ref(item, symbols, stack) for item in value]
     if not isinstance(value, str) or not value.startswith("@"):
         return value
 

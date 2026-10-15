@@ -1,11 +1,10 @@
 # DocGen
 
-**DFM + TOML → HTML / Word**：一个 config 驱动的纯文本排版编译器。
-写两个纯文本文件（正文 + 样式表），产出样式完全由 config 决定的 `.html` 或 `.docx`。
+**DFM + TOML → Word**：一个 config 驱动的纯文本排版编译器。
+写两个纯文本文件（正文 + 样式表），产出样式完全由 config 决定的 `.docx`。
 
 - 输入：`.md`（DFM 子集）+ `.toml`（样式表）
-- 输出：`.html`（参照后端，纯 Python）或 `.docx`（Word 后端，直接产出 OOXML）
-- 两个后端共享同一个 IR：HTML 是参照实现，Word 是第二个消费方
+- 输出：`.docx`（直接产出 OOXML，Word 里可继续编辑）
 - 每个块级节点都带源行号；`docgen check --json` 输出结构化错误
 - 产出过**官方 ECMA-376 XSD** 校验，专抓「Word 静默忽略」的错误
 
@@ -63,16 +62,13 @@ docgen check input.md -c config.toml
 docgen check input.md -c config.toml --strict   # 追加诊断：E3001 未闭合、E2001 未知语言
 docgen check input.md -c config.toml --json
 
-# 生成 HTML（样式值全部来自 config）
-docgen build input.md -c config.toml -o output.html
-
-# 生成 Word（完整版：按扩展名自动选择后端）
+# 生成 Word 文档（样式值全部来自 config）
 docgen build input.md -c config.toml -o output.docx
 docgen build input.md -c config.toml -o output.docx --format docx
 
 # 输出控制（全局开关放在子命令前）：只影响终端，不影响 [output] logfile
-docgen -q build input.md -c config.toml -o out.html          # 终端只出 err
-docgen -v build input.md -c config.toml -o out.html          # 终端出 log 级
+docgen -q build input.md -c config.toml -o out.docx          # 终端只出 err
+docgen -v build input.md -c config.toml -o out.docx          # 终端出 log 级
 docgen -v --logfile run.log build input.md -c config.toml    # 同时写日志文件
 
 # 出问题时的出口：打包环境 + config 摘要 + 退出码
@@ -156,18 +152,16 @@ content.md  ─┘        │
                       ▼
               语义校验（样式引用、图片路径）─► valid IR
                       ▼
-        ┌─────────────┴─────────────┐
-        ▼                           ▼
-  HTML 渲染                    Word 渲染（OOXML）
-  （纯 Python + 内联样式）      ├─ 母版/样式槽位（template, template_build）
-        │                       ├─ 数学 LaTeX→MathML→OMML（math）
-        ▼                       ├─ 编号/题注/交叉引用（numbering）
-   output.html                  ├─ 表格/图片/脚注（docx, footnotes, ooxml）
-                                ├─ 分节/页码/页眉页脚/封面（sections）
-                                └─ 产出用官方 ECMA-376 XSD 自校验（ooxml_check）
-                                        │
-                                        ▼
-                                   output.docx
+              Word 渲染（OOXML）
+              ├─ 母版/样式槽位（template, template_build）
+              ├─ 数学 LaTeX→MathML→OMML（math）
+              ├─ 编号/题注/交叉引用（numbering）
+              ├─ 表格/图片/脚注（docx, footnotes, ooxml）
+              ├─ 分节/页码/页眉页脚/封面（sections）
+              └─ 产出用官方 ECMA-376 XSD 自校验（ooxml_check）
+                      │
+                      ▼
+                 output.docx
 ```
 
 **三条铁律**：解析 / IR / 渲染彻底分离；唯一真源是 config；输出中每个样式属性都等于 config 声明值。
@@ -180,7 +174,7 @@ cli ──► parser ──► ir
  │        └──► config ──► validate
  ├──► output（日志/分流/logfile，不依赖渲染）
  └──► normalize
-render ──► ir + config（内联样式来自 config 展开值）
+render ──► ir + config（样式值来自 config 展开值）
            render/docx ──► ir + config + template + ooxml + numbering + math + sections + footnotes
 ```
 
@@ -204,7 +198,6 @@ src/docgen/
     rules.py        # 行内规则与 wiki 白名单（img: / ref: / fn: / pagebreak / toc）
     begin_block.py  # \begin{...} 双语法与命名块
   render/
-    html.py  css.py # HTML 后端（参照实现）
     docx.py         # Word 后端主渲染器
     ooxml.py        # 所有 OxmlElement 构造与 OOXML 陷阱（schema 顺序插入）
     ooxml_check.py  # 官方 ECMA-376 XSD 硬校验 + 结构不变量
@@ -219,7 +212,7 @@ tests/
   schemas/          # 官方 ECMA-376 XSD（校验产出合法性）
   test_ir_snapshot.py test_parser_errors.py test_normalize.py test_errors.py
   test_config.py test_validate.py test_diagnostics.py test_crosscheck.py
-  test_html_probe.py test_cli.py test_output.py test_output_and_inline.py
+  test_config_source_of_truth.py test_cli.py test_output.py test_output_and_inline.py
   test_feature_matrix.py test_ooxml_schema.py test_ooxml_validity.py
   test_template.py test_math.py test_numbering.py test_formula_numbering.py
   test_table_enhancements.py test_w4_media.py test_w5_sections.py
@@ -266,7 +259,7 @@ CI（[.github/workflows/ci.yml](.github/workflows/ci.yml)）在 Python 3.11 / 3.
 - 错误码：手册 §11 与 [src/docgen/errors.py](src/docgen/errors.py)
 - 版本变化：[CHANGELOG.md](CHANGELOG.md)
 - 可测试不变量：输出里的每个内联样式声明都等于 config 的展开值
-  （[test_html_probe.py](tests/test_html_probe.py) 的 `test_every_inline_style_value_comes_from_config` 自动验证）
+  （[test_config_source_of_truth.py](tests/test_config_source_of_truth.py) 自动验证）
 - 解析器正确性：IR 与 markdown-it token 流的一次性归约结构等价
   （[test_crosscheck.py](tests/test_crosscheck.py) 全量覆盖 `full.md`）
 - **OOXML 合法性**：产出的 document.xml / footnotes.xml 过官方 ECMA-376 XSD

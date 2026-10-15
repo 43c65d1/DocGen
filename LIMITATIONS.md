@@ -41,12 +41,13 @@
 - 复制到别的软件里可能变成空白而不是横线。
 - 样式可配：`[document] hr.style` / `hr.color` / `hr.size`。
 
-### A5. Word 与 HTML 的键名**不一样**
+### A5. 扁平键不会被读取（早期 HTML 后端的写法）
 
-这是**最容易踩的坑**：Word 用点号嵌套键（`font.bold`），HTML 用扁平键（`font_weight`）。
+本项目只产出 Word，键名用**点号嵌套键**（`font.bold` / `font.color` / `font.name`）。
 
-- 只写一种 → 另一个后端静默不生效（不会报错）。
-- **怎么办**：两种都写。`examples/features/config.toml` 是范例。
+- 写扁平键（`font_weight` / `color` / `font_family` / `font_size`）**不会报错，
+  但也不会生效**——没有后端再去读它。移除 HTML 后端后，这是最容易误用的一处。
+- **怎么办**：统一用点号键；`docgen dump-styles -c config.toml` 能看到实际读到的值。
 
 ### A6. `level = "none"` 会连正常输出一起吞掉
 
@@ -75,8 +76,8 @@
 | B8 | **上标/下标字号靠 Word** | `w:vertAlign` 自带缩放；`[styles.sup]` 的字号只在显式 `[文字]{.sup}` 写法上完全可控 |
 | B9 | **图片只读本地文件** | 支持 png/jpg/jpeg/gif/svg/webp/bmp；不支持远程 URL 下载 |
 | B10 | **无多列排版、无文本框、无艺术字** | 明确不做 |
-| B11 | **无 PDF 直接输出** | 只能出 `.docx` / `.html`；要 PDF 请用 Word「另存为」或 LibreOffice 转换 |
-| B12 | **HTML 后端的目录只是占位** | `[[toc]]` 在 Word 侧是真正的 TOC 域（会自动填充）；HTML 侧只输出一个 `<nav>` 占位，不生成条目 |
+| B11 | **无 PDF 直接输出** | 只能出 `.docx`；要 PDF 请用 Word「另存为」或 LibreOffice 转换 |
+| B12 | **无 HTML 输出** | 早期有一个 HTML 参照后端，已移除（维护成本高、需求少）。现在只产出 Word |
 
 ---
 
@@ -108,10 +109,9 @@ Word 打开时可能提示缺少某个字体（例如 `Courier`）。
 |---|---|
 | 测试 | 全绿，覆盖率 **≈89%**（门槛 70%）；具体条数会随开发变化，跑 `pytest` 看当前值 |
 | 静态检查 | `ruff check` / `ruff format --check` / `mypy --strict` 全绿 |
-| OOXML 合法性 | 用**官方 ECMA-376 XSD** 校验产出（`tests/schemas/`），能抓出「Word 静默忽略」的错误 |
-| CI | `.github/workflows/ci.yml` 已写好（py3.11/3.12 矩阵），但仓库**尚未配置远端**，所以还没在 CI 上跑过；本地已逐条复刻通过 |
+| OOXML 合法性 | 用**官方 ECMA-376 XSD** 校验产出（`tests/schemas/`），能抓出「Word 静默忽略」的错误 | |
 | 平台 | 主要在 **Windows** 上开发验证；Linux/macOS 未实测 |
-| 网络 | **内外网状态会变**：装依赖请用 `scripts/` 下的 setup 脚本（`.sh` / `.ps1` / `.cmd` 按终端选），它会自动挑当前可用的源（镜像 / 直连 / 代理）。不要照抄文档里的某个源当永久结论 |
+| 网络 | **网状态自适应**：装依赖请用 `scripts/` 下的 setup 脚本（`.sh` / `.ps1` / `.cmd` 按终端选），它会自动挑当前可用的源（镜像 / 直连 / 代理）。 |
 | 版本 | 测试版，**接口与 config 键可能变**；不保证向后兼容 |
 
 ---

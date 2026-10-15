@@ -294,7 +294,26 @@ def _parse_level_or_default(value: object, fallback: str) -> str:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="docgen", description="DFM + TOML -> HTML")
+    # RawDescriptionHelpFormatter：epilog 里的示例要保留手动换行，不能被重排
+    parser = argparse.ArgumentParser(
+        prog="docgen",
+        description=(
+            "DFM + TOML -> HTML / Word 文档生成器\n"
+            "样式全部来自 config，正文是纯文本；同一份内容可输出 HTML 或 docx。"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "示例：\n"
+            "  docgen check  examples/minimal/content.md -c examples/minimal/config.toml --strict\n"
+            "  docgen build  examples/minimal/content.md -c examples/minimal/config.toml -o out.docx\n"
+            "  docgen build  examples/minimal/content.md -o out.html\n"
+            "  docgen dump-styles -c examples/minimal/config.toml\n"
+            "  docgen bug-report -c examples/minimal/config.toml\n"
+            "\n"
+            "退出码：0 成功 / 1 内容错误 / 2 用法或 config 错误 / 130 被中断。\n"
+            "输出级别与 logfile 由 [output] 控制，也可用 -q/-v/--logfile 覆盖。"
+        ),
+    )
     # 全局输出开关：放在子命令前，如 `docgen -v build ...`
     parser.add_argument(
         "-q", "--quiet", action="store_true", help="终端只显示 err 级（诊断走 stderr）"
@@ -303,15 +322,25 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--logfile", type=Path, default=None, help="覆盖 [output] logfile（只影响文件）"
     )
-    sub = parser.add_subparsers(dest="cmd", required=True)
+    sub = parser.add_subparsers(dest="cmd", required=True, title="子命令")
 
-    dump_ir = sub.add_parser("dump-ir", help="解析 DFM 并输出 IR")
-    dump_ir.add_argument("input", type=Path)
+    dump_ir = sub.add_parser(
+        "dump-ir", help="解析 DFM 并输出 IR", description="解析 DFM 并输出 IR（JSON）"
+    )
+    dump_ir.add_argument("input", type=Path, help="DFM 源文件（Markdown 子集）")
 
     build = sub.add_parser("build", help="生成 HTML 或 docx")
-    build.add_argument("input", type=Path)
-    build.add_argument("-c", "--config", type=Path, default=None)
-    build.add_argument("-o", "--output", type=Path, default=Path("output.html"))
+    build.add_argument("input", type=Path, help="DFM 源文件（Markdown 子集）")
+    build.add_argument(
+        "-c", "--config", type=Path, default=None, help="config.toml（缺省用内置默认样式）"
+    )
+    build.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=Path("output.html"),
+        help="输出文件（缺省 output.html；扩展名决定格式）",
+    )
     build.add_argument(
         "--format",
         dest="fmt",
@@ -321,13 +350,17 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     dump_styles = sub.add_parser("dump-styles", help="输出展开后的样式表")
-    dump_styles.add_argument("-c", "--config", type=Path, required=True)
-    dump_styles.add_argument("--raw", action="store_true")
+    dump_styles.add_argument("-c", "--config", type=Path, required=True, help="config.toml（必需）")
+    dump_styles.add_argument(
+        "--raw", action="store_true", help="输出未经展开的原始样式表（含继承来源）"
+    )
 
     check = sub.add_parser("check", help="校验内容与 config")
-    check.add_argument("input", type=Path)
-    check.add_argument("-c", "--config", type=Path, default=None)
-    check.add_argument("--json", action="store_true", dest="as_json")
+    check.add_argument("input", type=Path, help="DFM 源文件（Markdown 子集）")
+    check.add_argument(
+        "-c", "--config", type=Path, default=None, help="config.toml（缺省用内置默认样式）"
+    )
+    check.add_argument("--json", action="store_true", dest="as_json", help="以 JSON 输出结果")
     check.add_argument(
         "--strict",
         action="store_true",
@@ -335,8 +368,13 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     bug = sub.add_parser("bug-report", help="打包环境与 config 摘要，便于报错反馈")
-    bug.add_argument("--output", type=Path, default=Path("docgen-bug-report.txt"))
-    bug.add_argument("-c", "--config", type=Path, default=None)
+    bug.add_argument(
+        "--output",
+        type=Path,
+        default=Path("docgen-bug-report.txt"),
+        help="报告写到哪个文件（缺省 docgen-bug-report.txt）",
+    )
+    bug.add_argument("-c", "--config", type=Path, default=None, help="一并写进报告的 config.toml")
 
     return parser
 

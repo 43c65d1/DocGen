@@ -3,6 +3,7 @@
 退出码：0 成功；1 内容错误（DocGenError）；2 配置/文件错误。
 """
 
+import argparse
 import json
 from pathlib import Path
 
@@ -21,6 +22,97 @@ def test_no_arguments_shows_usage_and_exits_2(capsys: pytest.CaptureFixture[str]
         main([])
     assert caught.value.code == 2
     assert "usage" in capsys.readouterr().err
+
+
+# --------------------------------------------------------------------------
+# `--help` 也是对外契约：它过时过——description 还写着「DFM + TOML -> HTML」，
+# 而 Word 后端早就有了。用户是从 `--help` 认识这个工具的，所以在这里锁住内容。
+#
+# 注意断言要**足够强**：最初写的版本用 `"Word" in out`，结果被 epilog 示例里的
+# `out.docx` 命中；检查参数说明用 `"config.toml" in out`，又被 `-c/--config`
+# 自己的 help 命中——两条都抓不到回归（已用"故意删掉 help 再跑"验证过）。
+# 所以改成直接检查 parser 结构。
+# --------------------------------------------------------------------------
+def _help_of(argv: list[str], monkeypatch: pytest.MonkeyPatch) -> str:
+    """拿到 parser 生成的帮助文本（不依赖 capsys，可重复调用）。"""
+    import io
+    import sys
+
+    buf = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", buf)
+    with pytest.raises(SystemExit):
+        main([*argv, "--help"])
+    return buf.getvalue()
+
+
+def test_root_help_mentions_both_backends(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`--help` 的**说明段**必须点明 HTML 和 Word 两个后端。"""
+    out = _help_of([], monkeypatch)
+    # 只看 usage 行之后、第一个小节之前的说明段（epilog 里的 out.docx 不算）
+    description = out.split("usage:", 1)[1].split("\n\n", 1)[1].split("options:")[0]
+    assert "HTML" in description and "Word" in description, (
+        f"帮助说明段没提两个后端：{description!r}"
+    )
+    assert "docx" in description, "说明段应点出 docx"
+
+
+def test_root_help_documents_exit_codes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """退出码是对外契约的一部分（脚本要按它判断），帮助里要说清。"""
+    out = _help_of([], monkeypatch)
+    assert "退出码" in out, "帮助里没有退出码说明"
+    # 取「退出码」后面那一行来查数字——不能全文找，否则别的数字会误命中
+    line = next(line for line in out.splitlines() if "退出码" in line)
+    for code in ("0", "1", "2", "130"):
+        assert code in line, f"退出码那一行没写 {code}：{line!r}"
+
+
+def test_root_help_has_runnable_examples(monkeypatch: pytest.MonkeyPatch) -> None:
+    """帮助里要给出可照抄的示例命令。"""
+    out = _help_of([], monkeypatch)
+    assert "示例" in out
+    assert "docgen check" in out and "docgen build" in out
+
+
+def _actions(parser: argparse.ArgumentParser) -> list[argparse.Action]:
+    """展开一个 parser 的全部子 parser 与其 action。"""
+    found: list[argparse.Action] = []
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            for sub in action.choices.values():
+                found.extend(sub._actions)
+    return found
+
+
+def test_every_argument_has_help_text() -> None:
+    """每个参数都要有说明。
+
+    实测：`dump-ir` / `dump-styles` / `check` / `bug-report` 的参数一度都没有 help，
+    帮助里只剩光秃秃的 `positional arguments: input`，等于没写。
+    这里直接查 parser 结构——比在帮助正文里找词可靠（找词会被别的 help 命中）。
+    """
+    from docgen.cli import _build_parser
+
+    parser = _build_parser()
+    missing: list[str] = []
+    # `cmd` 是 subparsers 的 dest（不是用户直接传的参数），不需要 help
+    skip = {"help", "cmd"}
+    for action in parser._actions:
+        if action.dest not in skip and not action.help:
+            missing.append(f"全局 {action.dest}")
+    for action in _actions(parser):
+        if action.dest not in skip and not action.help:
+            missing.append(str(action.dest))
+    assert not missing, f"这些参数没有 help 说明：{missing}"
+
+
+def test_subcommand_helps_describe_their_input() -> None:
+    """子命令的参数说明要说到点子上（源文件 / config），不能敷衍。"""
+    from docgen.cli import _build_parser
+
+    parser = _build_parser()
+    helps = {str(getattr(a, "dest", "")): (a.help or "") for a in _actions(parser)}
+    assert "DFM" in helps["input"], "input 的说明应点明是 DFM 源文件"
+    assert "config" in helps["config"].lower(), "config 的说明应点明是 config.toml"
 
 
 def test_dump_ir_succeeds_and_prints_ir(capsys: pytest.CaptureFixture[str]) -> None:

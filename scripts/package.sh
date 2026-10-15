@@ -32,7 +32,7 @@ mkdir -p "$staging/$name"
 
 for item in src tests docs examples scripts \
             README.md CHANGELOG.md QUICKSTART.md LIMITATIONS.md FEEDBACK.md \
-            HANDOFF.md GIT.md \
+            HANDOFF.md \
             pyproject.toml uv.lock .gitignore; do
   [ -e "$item" ] && cp -r "$item" "$staging/$name/"
 done

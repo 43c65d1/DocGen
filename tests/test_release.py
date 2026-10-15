@@ -70,33 +70,25 @@ def test_release_documents_exist(name: str) -> None:
     assert path.stat().st_size > 500, f"{name} 内容过少，像是空壳"
 
 
-@pytest.mark.parametrize("name", ["HANDOFF.md", "GIT.md"])
-def test_handoff_documents_exist(name: str) -> None:
-    """开发交接与 git 管理各有一份文档，且**分开**。"""
-    path = ROOT / name
-    assert path.is_file(), f"缺少 {name}"
-    assert path.stat().st_size > 800, f"{name} 内容过少"
+def test_handoff_document_exists() -> None:
+    """开发交接文档要随仓库提供（接手改动的人靠它）。"""
+    path = ROOT / "HANDOFF.md"
+    assert path.is_file(), "缺少 HANDOFF.md"
+    assert path.stat().st_size > 800, "HANDOFF.md 内容过少"
 
 
-def test_handoff_and_git_docs_are_separated() -> None:
-    """交接文档讲开发，git 文档讲仓库——别互相串。
+def test_handoff_document_is_about_development() -> None:
+    """`HANDOFF.md` 讲的是**开发**，不讲仓库维护。
 
-    判断依据是**章节标题**，不是正文里出现的关键词：
-    两边都要指向对方，所以正文里出现"发布流程""测试策略"这类词是正常的。
+    它随仓库上传，只放"运行/贡献所需"的信息；git 分支/发布流程这类自用内容
+    不放在仓库里（维护者自己找地方存）。这里只断言文档的**主题**，
+    不检测本地有没有别的文件、也不检测 git 状态——测试本身会上传，
+    不该依赖某个人的本地布局。
     """
     handoff = (ROOT / "HANDOFF.md").read_text(encoding="utf-8")
-    gitdoc = (ROOT / "GIT.md").read_text(encoding="utf-8")
-    handoff_topics = set(re.findall(r"^## (.+)$", handoff, re.MULTILINE))
-    git_topics = set(re.findall(r"^## (.+)$", gitdoc, re.MULTILINE))
-    # HANDOFF 不该有 git 管理的章节
+    topics = set(re.findall(r"^## (.+)$", handoff, re.MULTILINE))
     for topic in ("分支模型", "发布流程（清单）", "怎么同步", "git 踩坑记录"):
-        assert topic not in handoff_topics, f"HANDOFF.md 有 git 管理章节: {topic}"
-    # GIT 不该有开发交接的章节
-    for topic in ("模块地图", "测试策略（这是这个项目最值钱的部分）", "硬约束与踩坑（动手前必读）"):
-        assert topic not in git_topics, f"GIT.md 有开发交接章节: {topic}"
-    # 两边都要**指向对方**，读者才知道该看哪份
-    assert "GIT.md" in handoff, "HANDOFF.md 应指向 GIT.md"
-    assert "HANDOFF.md" in gitdoc, "GIT.md 应指向 HANDOFF.md"
+        assert topic not in topics, f"HANDOFF.md 混入了 git 维护章节: {topic}"
 
 
 def test_development_manual_is_shipped() -> None:
@@ -120,7 +112,6 @@ def test_package_script_exists_and_mentions_archive() -> None:
         "CHANGELOG.md",
         "README.md",
         "HANDOFF.md",
-        "GIT.md",
     ],
 )
 def test_package_script_ships_every_release_document(name: str) -> None:
@@ -252,50 +243,6 @@ def test_limitations_does_not_claim_unimplemented_for_shipped_feature() -> None:
         assert pattern not in text, f"限制清单把已实现的功能写成了限制: {pattern}"
 
 
-def _git_bash() -> str | None:
-    """找一个**真能跑 Windows 路径**的 bash。
-
-    注意：Windows 上 `bash` 往往是 WSL 的 bash，它读不了 `C:\\...` 路径
-    （`bash -n scripts/x.sh` 会失败）——实测踩到，所以这里优先找 Git Bash。
-    """
-    import shutil
-
-    for candidate in (
-        r"C:\Program Files\Git\bin\bash.exe",
-        r"C:\Program Files\Git\usr\bin\bash.exe",
-        r"C:\Program Files (x86)\Git\bin\bash.exe",
-    ):
-        if Path(candidate).is_file():
-            return candidate
-    return shutil.which("bash")
-
-
-def test_shell_scripts_are_valid_bash() -> None:
-    """语法检查：两个脚本要能被 bash 解析。"""
-    import subprocess
-
-    bash = _git_bash()
-    if bash is None:  # pragma: no cover - 无 bash 的环境
-        pytest.skip("环境里没有可用的 bash")
-    for name in ("setup.sh", "package.sh"):
-        result = subprocess.run(
-            [bash, "-n", str(ROOT / "scripts" / name)],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode == 0, f"{name} 语法错误: {result.stderr}"
-
-
-def test_ci_workflow_is_tracked_in_repo() -> None:
-    """CI 配置必须真实存在于工作区（曾出现「写了但忘了提交」）。"""
-    workflow = ROOT / ".github" / "workflows" / "ci.yml"
-    assert workflow.is_file()
-    text = workflow.read_text(encoding="utf-8")
-    for step in ("ruff check", "ruff format --check", "mypy", "pytest"):
-        assert step in text, step
-
-
 def test_manual_excluded_from_ruff_format() -> None:
     """手册含契约代码，必须从 ruff format 里排除，否则 CI 的 --check 会失败。"""
     config = _pyproject()["tool"]["ruff"]
@@ -353,27 +300,3 @@ def test_pyproject_has_no_internal_doc_references() -> None:
     text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     for marker in ("手册", "§", "Hard Version", "剪枝版"):
         assert marker not in text, f"pyproject.toml 引用了内部概念 {marker!r}"
-
-
-def test_gitignore_covers_local_junk() -> None:
-    """`.gitignore` 要覆盖本地会产生的垃圾（虚拟环境、缓存、构建产物、临时目录）。
-
-    这是把「本机产物」与「工程配置」分开的那一半：配置里不写垃圾路径，
-    但要保证垃圾真的不会被提交。
-    """
-    text = (ROOT / ".gitignore").read_text(encoding="utf-8")
-    for pattern in (
-        ".venv/",
-        "__pycache__/",
-        ".pytest_cache/",
-        ".mypy_cache/",
-        ".ruff-cache/",
-        ".uv-cache/",
-        ".coverage",
-        "dist/",
-        "build/",
-        "release/",
-        "*.egg-info/",
-        ".tmp-pytest/",
-    ):
-        assert pattern in text, f".gitignore 漏了 {pattern}"

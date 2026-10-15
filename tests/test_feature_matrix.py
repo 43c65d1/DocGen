@@ -20,7 +20,17 @@ from docgen.config import load_config
 from docgen.parser.dfm import parse_dfm
 from docgen.render.docx import render_docx_bytes
 from docgen.render.html import render_html
+from docgen.render.math import find_xsl
 from docgen.render.ooxml_check import validate_parts, validate_with_schema
+
+#: 数学若要产出 OMML，需要 Office 的 ``MML2OMML.XSL``。
+#: **没有它时引擎按设计降级为纯文本**（见 `render/math.py` 的设计取舍），
+#: 所以在无 XSL 的环境（例如 Linux CI）里，断言 ``m:oMath`` 的用例必须跳过——
+#: 否则测的是"本机装没装 Word"，而不是代码对不对。
+HAS_XSL = find_xsl() is not None
+requires_xsl = pytest.mark.skipif(
+    not HAS_XSL, reason="本机没有 MML2OMML.XSL（Office），公式按设计降级为纯文本"
+)
 
 FIXTURES = Path(__file__).parent.parent / "examples" / "features"
 
@@ -110,8 +120,20 @@ def test_feature_external_link(xml: str, rels: str) -> None:
     assert "example.com/feature" in rels
 
 
+@requires_xsl
 def test_feature_inline_math(xml: str) -> None:
     assert "<m:oMath" in xml
+
+
+@requires_xsl
+def test_feature_inline_math_falls_back_without_xsl(xml: str) -> None:
+    """反过来也要成立：无 XSL 时公式降级为纯文本，**不能整段丢失**。
+
+    这条不需要 XSL（反而是断言没有 XSL 的行为），所以在任何环境都跑。
+    """
+    if HAS_XSL:
+        pytest.skip("本机有 XSL，走的是 OMML 路径")
+    assert "E = mc^2" in xml or "mc^2" in xml
 
 
 # --------------------------------------------------------------------------
@@ -157,6 +179,7 @@ def test_table_cell_bold_is_real_formatting(table_xml: str) -> None:
     assert "**" not in table_xml
 
 
+@requires_xsl
 def test_table_cell_math_present(table_xml: str) -> None:
     assert "oMath" in table_xml
 

@@ -15,7 +15,15 @@ from docgen.errors import E_UNKNOWN_STYLE
 from docgen.ir import Code, Paragraph, Styled, Table, Text
 from docgen.parser.dfm import parse_dfm
 from docgen.render.docx import render_docx_bytes
+from docgen.render.math import find_xsl
 from docgen.validate import validate_content
+
+#: 公式产出 OMML 需要 Office 的 ``MML2OMML.XSL``；没有它时按设计降级为纯文本
+#: （见 `render/math.py`），所以相关断言在无 XSL 的环境（Linux CI）跳过。
+HAS_XSL = find_xsl() is not None
+requires_xsl = pytest.mark.skipif(
+    not HAS_XSL, reason="本机没有 MML2OMML.XSL（Office），公式按设计降级为纯文本"
+)
 
 BASE = 'config_version = "0.1"\n'
 
@@ -255,11 +263,24 @@ def test_inline_mapping_covers_all_semantic_names(tmp_path: Path) -> None:
 
 
 def test_cell_inline_code_keeps_other_formatting(tmp_path: Path) -> None:
-    """单元格里的代码底纹不应该把粗体/公式挤掉。"""
+    """单元格里的代码底纹不应该把粗体挤掉（与公式无关，任何环境都跑）。"""
     document = _document_xml(tmp_path, "| 语法 | 值 |\n| --- | --- |\n| **粗** `code` | $x^2$ |\n")
     table = re.search(r"<w:tbl>.*?</w:tbl>", document, re.DOTALL)
     assert table is not None
     assert "<w:b/>" in table.group(0)
+    assert "F2F2F2" in table.group(0)
+
+
+@requires_xsl
+def test_cell_inline_code_keeps_math(tmp_path: Path) -> None:
+    """同一格里代码底纹与公式**共存**。
+
+    公式只在有 ``MML2OMML.XSL`` 时才产出 OMML，所以这条单独拆出来并加跳过条件；
+    底纹与粗体的断言留在上面那条（不依赖 XSL）。
+    """
+    document = _document_xml(tmp_path, "| 语法 | 值 |\n| --- | --- |\n| **粗** `code` | $x^2$ |\n")
+    table = re.search(r"<w:tbl>.*?</w:tbl>", document, re.DOTALL)
+    assert table is not None
     assert "oMath" in table.group(0)
     assert "F2F2F2" in table.group(0)
 

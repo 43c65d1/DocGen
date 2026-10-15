@@ -22,7 +22,15 @@ import pytest
 from docgen.config import load_config
 from docgen.parser.dfm import parse_dfm
 from docgen.render.docx import render_docx_bytes
+from docgen.render.math import find_xsl
 from docgen.render.ooxml_check import SCHEMA_DIR, validate_parts, validate_with_schema
+
+#: 无 ``MML2OMML.XSL`` 时公式按设计降级为纯文本，产物里不会有 ``m:`` 命名空间
+#: （见 `render/math.py`）。依赖 OMML 的断言要在这种环境跳过。
+HAS_XSL = find_xsl() is not None
+requires_xsl = pytest.mark.skipif(
+    not HAS_XSL, reason="本机没有 MML2OMML.XSL（Office），公式按设计降级为纯文本"
+)
 
 FIXTURES = Path(__file__).parent.parent / "examples" / "minimal"
 
@@ -101,8 +109,13 @@ def test_root_has_no_stray_namespaces() -> None:
         assert prefix not in xml, f"根元素残留 {prefix}"
 
 
+@requires_xsl
 def test_root_keeps_namespaces_that_are_used() -> None:
-    """用到的前缀必须保留（否则内容会带一堆局部声明或直接损坏）。"""
+    """用到的前缀必须保留（否则内容会带一堆局部声明或直接损坏）。
+
+    这条依赖公式产出 OMML（才需要 ``xmlns:m``），所以无 XSL 时跳过；
+    ``xmlns:m`` 的保留逻辑由 ``test_root_has_no_stray_namespaces`` 的反向断言兜住。
+    """
     xml = _document_xml("正文 $x^2$\n\n[[img:pics/photo.png]]\n").decode("utf-8")
     for prefix in ("xmlns:w=", "xmlns:m=", "xmlns:wp=", "xmlns:a=", "xmlns:pic="):
         assert prefix in xml, f"缺少 {prefix}"

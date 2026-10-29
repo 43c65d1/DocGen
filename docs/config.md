@@ -66,6 +66,50 @@ color = "#222"
 | 段落 | `line_spacing` / `first_line_chars` / `alignment` |
 | 代码块 | `[code_block] background` / `border` |
 
+### `alignment`：段落对齐
+
+`[document] alignment` 是**默认值**，`[styles.body] alignment` / `[styles.headingN] alignment`
+覆盖它。注意它是默认值：只设 `[document]` 时**标题也会跟着对齐**。
+
+| 写法 | 产出 |
+|---|---|
+| `left` / `start` | `w:jc w:val="left"` |
+| `right` / `end` | `w:jc w:val="right"` |
+| `center` / `centre` | `w:jc w:val="center"` |
+| `justify` / `both` | `w:jc w:val="both"` |
+| 其它任何值 | 退回左对齐（不报错——对齐是纯外观，写错不该让整篇构建失败） |
+
+**逐段对齐 / 缩进**：DFM 没有块级样式语法，但 `[文字]{.样式名}` 的样式里若写了
+`alignment` 或 `first_line_chars`，会作用到**它所在的段落**。封面署名行这类需求：
+
+```toml
+[styles.body]
+first_line_chars = 200      # 正文首行缩进 2 字符
+
+[styles.signature]
+first_line_chars = 0        # 署名行不缩进
+alignment = "center"
+```
+
+```markdown
+[学号：5120242907　姓名：官畅宇　班级：软件2406]{.signature}
+```
+
+只认这两个段落级键；间距等其它段落属性仍由正文段落统一管理。
+
+### 题注：`[styles.caption]`
+
+题注段落用的是 Word 内置 `Caption` 样式，所以 `[styles.caption]` 的**字体类**
+属性（`font.name` / `font.size` / `font.color` / `font.bold` …）会写进该样式，
+题注文字与编号一起生效。同理 `[styles.body]` 的字体类属性写进 `Normal`。
+
+### 有序列表编号
+
+每个有序列表是**独立列表**，各自从 1 开始（Markdown 里两个列表就是两个列表，
+Word 里也这样）。嵌套的有序列表同样独立计数。
+实现上每个列表分配一个 `w:num` 实例，复用 `List Number` 样式的 `abstractNum`
+（外观不变，只换计数器）。
+
 > ⚠️ **扁平键不会被读取**：`font_weight` / `font_style` / `font_size` /
 > `font_family` / `text_decoration` 这些是早期 HTML 后端的写法。
 > HTML 后端已移除，写它们**不会报错，但也不会生效**——没有后端去读。

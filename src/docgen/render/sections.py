@@ -15,6 +15,10 @@ cover = true                  # 可选，页面垂直居中（封面）
 
 约定：**每个节独立设置页眉页脚**（``is_linked_to_previous = False``），
 否则 Word 会把上一节的内容继承过来——手册 §17.1 明确点名的坑。
+
+**内容怎么分到各节**：正文里写 ``[[sectionbreak]]`` 就切到下一节。没有分节标记时
+沿用旧行为（开头一次性建好所有节，内容都在最后一节）——这时 ``cover = true``
+只表示「这一节页面垂直居中」，不会凭空塞进内容。
 """
 
 from __future__ import annotations
@@ -24,7 +28,7 @@ from typing import Any
 from docx.enum.section import WD_SECTION_START
 from docx.shared import Cm
 
-__all__ = ["apply_sections", "page_sizes"]
+__all__ = ["SectionController", "apply_sections", "page_sizes"]
 
 #: 纸张尺寸（厘米）：Word 常用几种
 page_sizes: dict[str, tuple[float, float]] = {
@@ -48,29 +52,69 @@ NUMBER_FORMATS = {
 _W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 
 
-def apply_sections(document: Any, sections: list[dict[str, Any]]) -> list[Any]:
-    """按配置设置文档分节，返回处理过的 section 列表。
+def apply_sections(
+    document: Any, sections: list[dict[str, Any]], *, lazy: bool = False
+) -> SectionController:
+    """按配置设置文档分节，返回控制器（``lazy`` 决定是否按需建节）。"""
+    return SectionController(document, sections, lazy=lazy)
 
-    第 1 条配置作用于文档**已有**的节；后续每条新建一节（``nextPage``）。
+
+class SectionController:
+    """按 ``[[sections]]`` 配置管理文档的节。
+
+    **为什么要控制器**：早期实现一上来就把所有节建好，于是内容只能落进最后一节，
+    前面几节都是空页——``cover = true`` 就变成「一页空白封面」（实测反馈）。
+
+    现在的行为：
+
+    - ``lazy=True``（内容里有 ``[[sectionbreak]]``）：只先套用第 1 节配置，
+      遇到分节标记再建下一节，内容因此能分到正确的节里；
+    - ``lazy=False``（旧行为）：一次性建好所有节，保持既有文档不被打乱；
+    - 渲染结束时若还有没用到的配置，补成空节——配置不该被静默忽略。
     """
-    if not sections:
-        return list(document.sections)
 
-    handled: list[Any] = []
-    existing = list(document.sections)
+    def __init__(self, document: Any, specs: list[dict[str, Any]], *, lazy: bool = False) -> None:
+        self.document = document
+        self.specs = specs
+        self.sections: list[Any] = []
+        self._index = -1
+        self._document_sections = list(document.sections)
+        if not specs:
+            return
+        self._apply(0)
+        if not lazy:
+            for _ in range(1, len(specs)):
+                self._append()
 
-    for index, spec in enumerate(sections):
+    def advance(self) -> bool:
+        """``[[sectionbreak]]``：切到下一节配置。没有更多配置时返回 ``False``。"""
+        if self._index + 1 >= len(self.specs):
+            return False
+        self._append()
+        return True
+
+    def finish(self) -> None:
+        """渲染结束：把未用到的配置补成空节（保证节数 = 配置条数）。"""
+        while self._index + 1 < len(self.specs):
+            self._append()
+
+    def _apply(self, index: int) -> Any:
+        self._index = index
         if index == 0:
-            section = existing[0]
+            section = self._document_sections[0]
         else:
-            section = document.add_section(WD_SECTION_START.NEW_PAGE)
+            section = self.document.add_section(WD_SECTION_START.NEW_PAGE)
+        spec = self.specs[index]
         _apply_page(section, spec)
         _apply_numbering(section, spec)
         _apply_cover(section, spec)
         _apply_header_footer(section, spec)
         _drop_rsids(section)
-        handled.append(section)
-    return handled
+        self.sections.append(section)
+        return section
+
+    def _append(self) -> Any:
+        return self._apply(self._index + 1)
 
 
 def _apply_page(section: Any, spec: dict[str, Any]) -> None:

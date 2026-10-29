@@ -6,6 +6,36 @@
 
 ## [Unreleased]
 
+### 修复（试用人反馈的 6 条，逐条用 Word COM 实证）
+
+- **① `[styles.caption]` 完全不起作用**：题注段落用内置 `Caption` 样式，config 的
+  字体/字号/颜色没人写进去。
+  现在它们写进 `Caption` 样式（与 `[styles.body]` → `Normal` 同一套机制）；
+  同时把母版自带的「加粗 + 主题蓝 4F81BD + 9pt」**中性化**——没声明就不该自带强调色。
+  Word 复核：题注 `Color=C00000`、`Size=10.5`、非加粗 ✅
+- **② 标题 `font.name` 缺 `w:eastAsia`**：Word 对中文字符取 `eastAsia`，只写
+  ascii/hAnsi/cs 时 `font.name = "黑体"` 对中文是**空操作**。
+  现在 run 级会写 `eastAsia`；代码块/行内代码除外（等宽字体无中文字形，留给样式链）。
+- **③ `alignment` 从未生效**：`docs/config.md` 早把它列为段落键，产物里却
+  **一处 `w:jc` 都没有**。现在 `[document] alignment` 作默认，
+  `[styles.body]` / `[styles.headingN]` 覆盖；标题也能居中。
+  支持 `left/right/center/justify(=both)`，非法值退回左对齐（纯外观，不中断构建）。
+- **④ Heading 样式定义仍是主题蓝**：只写 run 级时，Word 样式面板与「新敲一个标题」
+  仍回主题色。现在 `[styles.headingN]` 的字体/字号/颜色/加粗同时写进**样式定义**，
+  并清掉 `themeColor` / `*Theme` 主题属性（它们优先级高于显式值）。
+- **⑤ 有序列表跨小节连续编号**：所有列表段落只挂 `List Number` 样式，
+  编号来自样式自带的单个 `numId` → 全文共用计数器（第二个列表显示 3.、4.）。
+  现在每个有序列表分配独立 `w:num`，且带 `lvlOverride/startOverride`——
+  实测**只换 numId 不够**，Word 对共用 `abstractNum` 的多个实例默认接着数。
+  嵌套有序列表同样各自计数。Word 复核：第二段列表回到 1.、2. ✅
+- **⑥ `cover = true` 配多节时封面是空页**：分节原先在渲染前一次性建好，
+  内容只能落进最后一节。
+  新增 `[[sectionbreak]]` 标记（`SectionBreak` IR 节点）让内容能分到前面的节：
+  写封面内容 → `[[sectionbreak]]` → 正文。不写标记时仍是旧行为，
+  但文档里明确说明 `cover = true` 只做垂直居中、不会凭空产生内容。
+  Word 复核：封面节含标题/署名、`vAlign=center`、`UpperRoman`；
+  正文节 `top`、`Arabic` 从 1、有页眉页脚 ✅
+
 ### 移除
 
 - **移除 HTML 后端**（`render/html.py` + `render/css.py`，共 449 行）。

@@ -60,6 +60,20 @@
 
 - **怎么办**：`docgen dump-styles -c config.toml` 看注册了哪些变体。
 
+### A8. `cover = true` 不会自己产生封面内容
+
+`cover` 只表示「这一节页面垂直居中」，不会把正文挪进封面节。
+
+- 配了 `[[sections]]` 但正文里**没写 `[[sectionbreak]]`** 时，所有内容落进最后一节，
+  前面的节只有空页——看起来像「一页空白封面」。
+- **怎么办**：封面内容 → 一行 `[[sectionbreak]]` → 正文。见
+  [docs/word.md](docs/word.md) 的「分节 / 页码 / 页眉页脚」。
+
+### A9. `[document] alignment` 会连标题一起对齐
+
+`alignment` 是**默认值**，`[styles.body]` / `[styles.headingN]` 可覆盖。
+想「标题居中、正文左对齐」就显式写正文那一条，不要只设 `[document]`。
+
 ---
 
 ## B. 暂不支持

@@ -90,7 +90,7 @@ render ──► ir + config（渲染层不认识解析器，也不回读源文�
 | `render/ooxml.py` | 所有 OOXML 元素构造 + **schema 顺序插入** | 加任何 OOXML 元素 |
 | `render/ooxml_check.py` | 结构不变量 + **官方 ECMA-376 XSD 校验** | 校验规则 |
 | `render/template.py` `template_build.py` | 母版槽位、样式、字体表、编号定义 | 改母版/样式 |
-| `render/sections.py` | 分节 / 页面设置 / 页码 / 页眉页脚 / 封面 | 改版式 |
+| `render/sections.py` | 分节（`[[sectionbreak]]` 按需建节）/ 页面设置 / 页码 / 页眉页脚 / 封面 | 改版式 |
 | `render/math.py` | LaTeX → MathML → OMML | 改公式 |
 | `render/footnotes.py` | 脚注部件生成与注入 | 改脚注 |
 | `units.py` | 长度/字号单位换算（cm/mm/in/pt/px ↔ twips/EMU） | 改单位 |

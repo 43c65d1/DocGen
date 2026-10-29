@@ -149,7 +149,13 @@ def _drop_macro_styles(document: Any) -> list[str]:
 
 
 def _ensure_caption_styles(document: Any) -> None:
-    """题注/脚注样式必须存在（``SEQ`` 域与脚注引用都依赖它们）。"""
+    """题注/脚注样式必须存在（``SEQ`` 域与脚注引用都依赖它们）。
+
+    同时把母版自带的 ``Caption`` **中性化**：python-docx 默认母版的题注是
+    「加粗 + 主题蓝 ``4F81BD`` + 9pt」，与「config 是唯一真源」冲突——
+    没声明 ``[styles.caption]`` 时，题注不该自带一套没人要的强调色。
+    清掉颜色/加粗/字号后它继承 ``Normal``（= 正文外观），config 再覆盖。
+    """
     for name in ("Caption", "FootnoteText", "FootnoteReference"):
         if any(style.name == name for style in document.styles):
             continue
@@ -157,6 +163,23 @@ def _ensure_caption_styles(document: Any) -> None:
         style.base_style = document.styles["Normal"]
         style.quick_style = True
         style.hidden = False
+    _neutralise_caption_style(document)
+
+
+def _neutralise_caption_style(document: Any) -> None:
+    """去掉母版 ``Caption`` 的强调外观（颜色/加粗/字号），让它跟正文一致。"""
+    from docx.oxml.ns import qn
+
+    for style in document.styles:
+        if style.name != "Caption":
+            continue
+        rpr = style.element.find(qn("w:rPr"))
+        if rpr is None:
+            return
+        for name in ("w:b", "w:bCs", "w:color", "w:sz", "w:szCs"):
+            for element in rpr.findall(qn(name)):
+                rpr.remove(element)
+        return
 
 
 #: 代码块等场景的等宽字体（与 docx.py 的 DEFAULT_MONO_FONT 一致）
@@ -277,15 +300,19 @@ def _is_cjk(name: str) -> bool:
 
 
 def apply_document_defaults(document: Any, config: Config) -> None:
-    """把 ``[document]`` 的字体/字号/行距写进 Normal 样式（正文继承它）。
+    """把 config 的字体/字号/行距写进**载体样式**（正文继承它们）。
 
-    ``[styles.body]`` 的**字体类**属性也写进 Normal——正文段落继承它，
-    与 ``[document]`` 走同一套机制。先取 document、再用 body 覆盖
-    （样式比文档默认更具体）。
+    两条映射（语义样式 → Word 内置样式）：
 
-    为什么在此之前 body 的字体不生效：正文段落只被应用了 ``line_spacing`` /
-    ``first_line_chars``（段落级），``font.color`` 这类字符级属性没人读，
-    于是「config 写了但不生效」——正是本项目最隐蔽的失效方式。
+    | config | Word 样式 | 因为 |
+    |---|---|---|
+    | ``[document]`` + ``[styles.body]`` | ``Normal`` | 正文段落默认继承它 |
+    | ``[styles.caption]`` | ``Caption`` | 题注段落用 ``style="Caption"`` |
+
+    为什么必须这么写：正文/题注段落本身只带段落级属性（``line_spacing`` /
+    ``first_line_chars``），``font.color`` 这类字符级属性没有 run 去承载。
+    只把值读进 config 而没人写进样式，就是「config 写了但不生效」——
+    本项目最隐蔽的失效方式（实测踩到：``[styles.caption]`` 完全没作用）。
 
     取值**必须读 ``build_style_table`` 的展开结果**：``config.styles`` 里还留着
     未解析的 ``@ref``（如 ``@document.font.size``），直接用会拿到字符串，
@@ -296,50 +323,88 @@ def apply_document_defaults(document: Any, config: Config) -> None:
     doc_settings: dict[str, Any] = resolved_doc if isinstance(resolved_doc, dict) else {}
     raw_body = table.get("body", {})
     body: dict[str, Any] = raw_body if isinstance(raw_body, dict) else {}
-    body_font = body.get("font")
-    body_font = body_font if isinstance(body_font, dict) else {}
-    doc_font = doc_settings.get("font")
-    doc_font = doc_font if isinstance(doc_font, dict) else {}
+
     normal = _style_by_id(document, "Normal")
+    # body 覆盖 document（样式比文档默认更具体）
+    _apply_font_properties(normal, doc_settings)
+    _apply_font_properties(normal, body)
+    line_spacing = body.get("line_spacing", doc_settings.get("line_spacing"))
+    if line_spacing is not None:
+        normal.paragraph_format.line_spacing = float(line_spacing)
+
+    # 题注：段落用的是内置 Caption 样式，所以把 config 写在样式上
+    raw_caption = table.get("caption", {})
+    caption = raw_caption if isinstance(raw_caption, dict) else {}
+    if caption:
+        caption_style = _style_or_none(document, "Caption")
+        if caption_style is not None:
+            _apply_font_properties(caption_style, caption)
+
+    for level in range(1, 10):
+        style = _style_by_id(document, f"Heading{level}")
+        set_style_outline_level(style, level - 1)
+        _apply_style_indent(style, config, level)
+        # 标题的**样式定义**也要吃 config：只写 run 级的话，Word 样式面板与
+        # 「新敲一个标题」仍是母版的主题蓝（实测反馈），与「config 唯一真源」矛盾。
+        heading_props = table.get(f"heading{level}")
+        if isinstance(heading_props, dict) and heading_props:
+            _apply_font_properties(style, heading_props)
+
+
+def _apply_font_properties(style: Any, properties: dict[str, Any]) -> None:
+    """把一组（已展开的）样式属性里的**字体类**值写进 Word 样式。
+
+    同时接受点号键展开出的嵌套表（``{"font": {...}}``）与扁平键（``font.name``），
+    与渲染层 :func:`docx._apply_run_style` 的取值口径一致。
+    """
+    nested = properties.get("font")
+    nested = nested if isinstance(nested, dict) else {}
 
     def pick(key: str) -> Any:
-        """按 body-font → document-font 取值（都用展开后的值）。
-
-        不在展开表里出现的键（如扁平键）也兼容一层：渲染层对 `[styles.*]`
-        同样接受扁平写法，这里保持一致。
-        """
-        for nested, flat in ((body_font, body), (doc_font, doc_settings)):
-            if key in nested:
-                return nested[key]
-            dotted = f"font.{key}"
-            if dotted in flat:
-                return flat[dotted]
-        return None
+        if key in nested:
+            return nested[key]
+        return properties.get(f"font.{key}")
 
     name = pick("name")
     size = pick("size")
     color = pick("color")
     bold = pick("bold")
     italic = pick("italic")
-    line_spacing = body.get("line_spacing", doc_settings.get("line_spacing"))
+    underline = pick("underline")
+    strike = pick("strike")
 
     if name:
-        _set_style_fonts(normal, str(name))
+        _set_style_fonts(style, str(name))
     if size is not None:
-        normal.font.size = to_points(size)
-    if color:
-        normal.font.color.rgb = _rgb(str(color))
-    if bold is not None:
-        normal.font.bold = bool(bold)
-    if italic is not None:
-        normal.font.italic = bool(italic)
-    if line_spacing is not None:
-        normal.paragraph_format.line_spacing = float(line_spacing)
+        style.font.size = to_points(size)
+        # szCs：复杂文种字号。只写 w:sz 时中文在部分场景不跟随
+        from .ooxml import insert_child
 
-    for level in range(1, 10):
-        style = _style_by_id(document, f"Heading{level}")
-        set_style_outline_level(style, level - 1)
-        _apply_style_indent(style, config, level)
+        points = to_points(size)
+        insert_child(style.element.get_or_add_rPr(), "w:szCs", **{"w:val": str(int(points.pt * 2))})
+    if color:
+        style.font.color.rgb = _rgb(str(color))
+        # 主题色优先级高于显式值：不清掉 themeColor，颜色等于没设
+        color_element = style.element.find(f"{qn('w:rPr')}/{qn('w:color')}")
+        if color_element is not None:
+            for theme in ("w:themeColor", "w:themeShade", "w:themeTint"):
+                color_element.attrib.pop(qn(theme), None)
+    if bold is not None:
+        style.font.bold = bool(bold)
+    if italic is not None:
+        style.font.italic = bool(italic)
+    if underline is not None:
+        style.font.underline = bool(underline)
+    if strike is not None:
+        style.font.strike = bool(strike)
+
+
+def _style_or_none(document: Any, style_id: str) -> Any:
+    """按 id 取样式；不存在返回 ``None``（自定义母版可能没有该槽位）。"""
+    try:
+        return _style_by_id(document, style_id)
+    except KeyError:  # pragma: no cover - 依赖 python-docx 的异常类型
+        return None
 
 
 def _rgb(value: str) -> Any:
@@ -393,12 +458,19 @@ def _style_by_id(document: Any, style_id: str) -> Any:
 
 
 def _set_style_fonts(style: Any, name: str) -> None:
-    """样式级字体：四个 ``rFonts`` 属性一起写（缺 eastAsia 中文会回退）。"""
+    """样式级字体：四个 ``rFonts`` 属性一起写（缺 eastAsia 中文会回退）。
+
+    还要**清掉主题字体属性**（``w:asciiTheme`` 等）：OOXML 里主题属性优先于
+    显式值，留着它们会让 ``font.name = "黑体"`` 只对外文生效、
+    样式面板也仍显示主题字体（实测反馈）。
+    """
     rpr = style.element.get_or_add_rPr()
     fonts = rpr.find(qn("w:rFonts"))
     if fonts is None:
         fonts = OxmlElement("w:rFonts")
         rpr.insert(0, fonts)
+    for theme in ("w:asciiTheme", "w:hAnsiTheme", "w:eastAsiaTheme", "w:cstheme"):
+        fonts.attrib.pop(qn(theme), None)
     for attribute in ("w:ascii", "w:hAnsi", "w:eastAsia", "w:cs"):
         fonts.set(qn(attribute), name)
 

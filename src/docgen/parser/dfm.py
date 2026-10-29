@@ -32,6 +32,7 @@ from ..ir import (
     PageBreak,
     Paragraph,
     Ref,
+    SectionBreak,
     Styled,
     Table,
     Text,
@@ -114,6 +115,9 @@ def _inline_to_ir(tokens: list[Token]) -> list[InlineNode]:
             stack[-1].append(Break())
         elif tok.type == "dfm_toc":
             stack[-1].append(Ref(target="__toc__"))  # 段落内的 [[toc]] 按引用占位处理
+        elif tok.type == "dfm_sectionbreak":
+            # 段落内的分节符没有意义（分节是块级动作），当作硬换行占位
+            stack[-1].append(Break())
         elif tok.type == "dfm_ref":
             stack[-1].append(Ref(target=tok.content))
         elif tok.type == "dfm_footnote":
@@ -260,6 +264,8 @@ def _paragraph_block(open_token: Token, inline_token: Token | None) -> BlockNode
         return Formula(latex=children[0].content, source_line=source_line)
     if len(children) == 1 and children[0].type == "dfm_pagebreak":
         return PageBreak(source_line=source_line)
+    if len(children) == 1 and children[0].type == "dfm_sectionbreak":
+        return SectionBreak(source_line=source_line)
     if len(children) == 1 and children[0].type == "dfm_toc":
         return Toc(source_line=source_line)
 
@@ -487,6 +493,8 @@ def _cell_text(inline: Token | None) -> str:
             pieces.append(f"${tok.content}$")
         elif tok.type == "dfm_pagebreak":
             pieces.append("[[pagebreak]]")
+        elif tok.type == "dfm_sectionbreak":
+            pieces.append("[[sectionbreak]]")
         elif tok.type == "dfm_image":
             pieces.append(f"[[img:{tok.content}]]")
     return "".join(pieces)

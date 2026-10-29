@@ -24,6 +24,7 @@ __all__ = [
     "CHILD_ORDER",
     "FONT_ATTRS",
     "HYPERLINK_RELATIONSHIP",
+    "allocate_list_num_id",
     "append_field",
     "append_omml",
     "append_text",
@@ -52,6 +53,7 @@ __all__ = [
     "repeat_table_header",
     "set_cell_alignment",
     "set_cell_width",
+    "set_list_numbering",
     "set_paragraph_alignment",
     "set_paragraph_border",
     "set_paragraph_indent",
@@ -120,6 +122,8 @@ CHILD_ORDER: dict[str, tuple[str, ...]] = {
     "w:tblBorders": _qnames("top start left bottom end right insideH insideV"),
     "w:tcBorders": _qnames("top start left bottom end right insideH insideV"),
     "w:pBdr": _qnames("top left bottom right between bar"),
+    # CT_NumPr：ilvl 必须在 numId 之前（顺序错了 Word 静默忽略编号）
+    "w:numPr": _qnames("ilvl numId numberingChange ins del"),
 }
 
 #: ``w:ind`` 的**属性**顺序（属性顺序对 XML 不敏感，这里表驱动只为输出确定性）
@@ -500,6 +504,90 @@ def set_paragraph_alignment(paragraph: Any, alignment: str) -> None:
     """段落对齐（图片常用）：``left`` / ``center`` / ``right``。"""
     ppr = paragraph._p.get_or_add_pPr()
     insert_child(ppr, "w:jc", **{"w:val": alignment})
+
+
+def set_list_numbering(paragraph: Any, *, num_id: int, level: int = 0) -> None:
+    """给列表段落绑定**具体的**编号实例：``w:numPr``（``ilvl`` + ``numId``）。
+
+    为什么要显式绑定：段落只挂 ``List Number`` 样式时，编号来自样式自带的
+    ``numId``，于是**全文所有有序列表共用一个计数**（第二个列表接着第一个数下去）。
+    每个列表各配一个 ``w:num``，才能各自从 1 开始。
+    """
+    ppr = paragraph._p.get_or_add_pPr()
+    num_pr = insert_child(ppr, "w:numPr")
+    insert_child(num_pr, "w:ilvl", **{"w:val": str(level)})
+    insert_child(num_pr, "w:numId", **{"w:val": str(num_id)})
+
+
+def allocate_list_num_id(document: Any) -> int | None:
+    """为**一个**有序列表分配独立的编号实例，返回新的 ``numId``。
+
+    复用 ``List Number`` 样式指向的 ``abstractNum``（外观不变），只追加一个新的
+    ``<w:num>``。**必须同时写 ``lvlOverride/startOverride``**：实测 Word 对
+    「多个 ``w:num`` 共用一个 ``abstractNum``」默认**接着数**（第 2 个列表从 3.
+    继续），只有显式 ``startOverride=1`` 才真正各自从 1 开始。
+
+    找不到样式/编号部件时返回 ``None``，调用方退回“只挂样式”的老行为。
+    """
+    try:
+        numbering = document.part.numbering_part.element
+    except (AttributeError, NotImplementedError):  # pragma: no cover - 无编号部件
+        return None
+
+    style_num_id: int | None = None
+    for style in document.styles:
+        if style.style_id != "ListNumber":
+            continue
+        for element in style.element.findall(".//" + qn("w:numId")):
+            raw = element.get(qn("w:val"))
+            if raw and raw.isdigit():
+                style_num_id = int(raw)
+                break
+        if style_num_id is not None:
+            break
+    if style_num_id is None:  # pragma: no cover - 默认模板一定有
+        return None
+
+    abstract_id: int | None = None
+    for num in numbering.findall(qn("w:num")):
+        if num.get(qn("w:numId")) != str(style_num_id):
+            continue
+        ref = num.find(qn("w:abstractNumId"))
+        raw = ref.get(qn("w:val")) if ref is not None else None
+        if raw and raw.isdigit():
+            abstract_id = int(raw)
+        break
+    if abstract_id is None:  # pragma: no cover - 默认模板一定有
+        return None
+
+    existing = [
+        int(num.get(qn("w:numId"), "0"))
+        for num in numbering.findall(qn("w:num"))
+        if (num.get(qn("w:numId")) or "").isdigit()
+    ]
+    new_id = max(existing, default=0) + 1
+    num = _element("w:num", **{"w:numId": str(new_id)})
+    num.append(_element("w:abstractNumId", **{"w:val": str(abstract_id)}))
+    for level in _abstract_num_levels(numbering, abstract_id):
+        override = _element("w:lvlOverride", **{"w:ilvl": str(level)})
+        override.append(_element("w:startOverride", **{"w:val": "1"}))
+        num.append(override)
+    numbering.append(num)
+    return new_id
+
+
+def _abstract_num_levels(numbering: Any, abstract_id: int) -> list[int]:
+    """``abstractNum`` 定义了哪几级（``w:lvl/@w:ilvl``）；找不到就退回 0..8。"""
+    for abstract in numbering.findall(qn("w:abstractNum")):
+        if abstract.get(qn("w:abstractNumId")) != str(abstract_id):
+            continue
+        levels = [
+            int(raw)
+            for lvl in abstract.findall(qn("w:lvl"))
+            if (raw := lvl.get(qn("w:ilvl"))) and raw.isdigit()
+        ]
+        return sorted(levels) if levels else list(range(9))
+    return list(range(9))  # pragma: no cover - 编号定义缺失时兜底
 
 
 def length_from_text(value: str) -> Any:

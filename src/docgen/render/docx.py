@@ -40,6 +40,7 @@ from ..ir import (
     PageBreak,
     Paragraph,
     Ref,
+    SectionBreak,
     Styled,
     Table,
     TableCell,
@@ -50,6 +51,7 @@ from ..ir import (
 from ..numbering import CAPTION_KINDS, caption_kind
 from .math import latex_to_omml, math_settings
 from .ooxml import (
+    allocate_list_num_id,
     append_field,
     append_omml,
     append_text,
@@ -70,6 +72,7 @@ from .ooxml import (
     repeat_table_header,
     set_cell_alignment,
     set_cell_width,
+    set_list_numbering,
     set_paragraph_alignment,
     set_paragraph_border,
     set_paragraph_indent,
@@ -159,26 +162,47 @@ def _build_document(
     base_dir: Path | None,
 ) -> tuple[Any, list[str], _RenderState]:
     document = create_document(config, template)
-    _apply_sections(document, config)
+    # 内容里有 [[sectionbreak]] 时按需建节，内容才能分进前面的节；
+    # 否则沿用旧行为（一次建好所有节）。
+    lazy = _has_section_break(blocks)
+    sections = _apply_sections(document, config, lazy=lazy)
     state = _RenderState(
         document=document,
         config=config,
         styles=build_style_table(config),
         base_dir=base_dir,
     )
+    state.sections = sections
     _render_blocks(state, blocks)
+    sections.finish()
     _ensure_update_fields(document)
     _normalise_root(document)
     return document, state.footnotes, state
 
 
-def _apply_sections(document: Any, config: Config) -> list[Any]:
+def _apply_sections(document: Any, config: Config, *, lazy: bool = False) -> Any:
     """``[[sections]]``：设置纸张/页边距/页码/页眉页脚（无配置时保持默认）。"""
     from .sections import apply_sections
 
     raw = config.extra.get("sections")
     specs = [item for item in raw if isinstance(item, dict)] if isinstance(raw, list) else []
-    return apply_sections(document, specs)
+    return apply_sections(document, specs, lazy=lazy)
+
+
+def _has_section_break(blocks: list[BlockNode]) -> bool:
+    """内容里有没有 ``[[sectionbreak]]``（含嵌套在命名块/引用里的）。"""
+    for block in blocks:
+        if isinstance(block, SectionBreak):
+            return True
+        children = getattr(block, "content", None)
+        if isinstance(children, list) and _has_section_break(children):
+            return True
+        items = getattr(block, "items", None)
+        if isinstance(items, list):
+            for item in items:
+                if _has_section_break(item.content):
+                    return True
+    return False
 
 
 def _normalise_root(document: Any) -> list[str]:
@@ -201,6 +225,7 @@ class _RenderState:
         "math_engine",
         "math_on_fail",
         "math_xsl",
+        "sections",
         "styles",
     )
 
@@ -217,6 +242,7 @@ class _RenderState:
         self.base_dir = base_dir
         self.doc_settings = dict(config.document)
         self.math_engine, self.math_on_fail, self.math_xsl = math_settings(config)
+        self.sections: Any = None
         self._bookmark_id = 1000
         self.footnotes: list[str] = []
         self.footnote_reference_maker: Any = None
@@ -226,6 +252,15 @@ class _RenderState:
     def next_bookmark_id(self) -> int:
         self._bookmark_id += 1
         return self._bookmark_id
+
+    def new_list_num_id(self) -> int | None:
+        """给一个有序列表分配**独立的**编号实例，让它从 1 开始。
+
+        逻辑在 :func:`ooxml.allocate_list_num_id`（要点：复用 ``List Number``
+        样式指向的 ``abstractNum`` 保住外观，只追加一个新的 ``w:num``）。
+        返回 ``None`` 时调用方退回“只挂样式”的老行为，构建不会失败。
+        """
+        return allocate_list_num_id(self.document)
 
 
 # --------------------------------------------------------------------------
@@ -255,6 +290,8 @@ def _render_block(state: _RenderState, block: BlockNode) -> None:
         _render_thematic_break(state)
     elif isinstance(block, PageBreak):
         _render_page_break(state)
+    elif isinstance(block, SectionBreak):
+        _render_section_break(state)
     elif isinstance(block, BlockQuote):
         _render_block_quote(state, block)
     elif isinstance(block, Table):
@@ -270,6 +307,11 @@ def _render_heading(state: _RenderState, block: Heading) -> None:
     # 用样式「名」（Heading 1）而不是 style_id：python-docx 1.2 起后者会告警
     paragraph = state.document.add_paragraph(style=f"Heading {level}")
     paragraph.paragraph_format.keep_with_next = True
+    # 对齐：``[styles.headingN] alignment`` 优先，``[document] alignment`` 兜底
+    properties = {**state.doc_settings, **state.styles.get(f"heading{level}", {})}
+    alignment = properties.get("alignment")
+    if alignment:
+        set_paragraph_alignment(paragraph, _normalise_alignment(str(alignment)))
     _render_inlines(state, paragraph, block.content, f"heading{level}")
 
 
@@ -277,6 +319,8 @@ def _apply_body_paragraph(state: _RenderState, paragraph: Any) -> None:
     """正文段落：把 body 样式与 ``[document]`` 的段落级属性写进去。
 
     document 的值作为兜底，body 样式覆盖它（config 只有一个真源，但层级不同）。
+    字体类属性不在这里写——它们进 ``Normal`` 样式（见
+    :func:`template.apply_document_defaults`），否则每个 run 都要重复一遍。
     """
     properties = {**state.doc_settings, **state.styles.get("body", {})}
     spacing = properties.get("line_spacing")
@@ -285,19 +329,62 @@ def _apply_body_paragraph(state: _RenderState, paragraph: Any) -> None:
     indent = properties.get("first_line_chars")
     if indent is not None:
         set_paragraph_indent(paragraph, first_line_chars=int(indent))
+    alignment = properties.get("alignment")
+    if alignment:
+        set_paragraph_alignment(paragraph, _normalise_alignment(str(alignment)))
+
+
+#: config 里常见的对齐写法 → OOXML ``w:jc`` 的取值
+ALIGNMENT_VALUES = {
+    "left": "left",
+    "start": "left",
+    "right": "right",
+    "end": "right",
+    "center": "center",
+    "centre": "center",
+    "justify": "both",
+    "both": "both",
+    "distribute": "distribute",
+}
+
+
+def _normalise_alignment(value: str) -> str:
+    """对齐值归一化：接受 ``justify`` 这类习惯写法，非法值退回 ``left``。
+
+    不抛错是有意的：对齐是纯外观，写错不该让整篇文档构建失败；
+    但也不静默丢弃——非法值按左对齐处理，并可通过 ``dump-styles`` 看到原值。
+    """
+    return ALIGNMENT_VALUES.get(value.strip().lower(), "left")
 
 
 def _render_list(state: _RenderState, block: ListBlock) -> None:
+    """渲染列表。
+
+    有序列表**每个列表一个独立编号实例**（``w:num``）：Markdown 里两个列表是两段
+    独立的列表，Word 里也应各自从 1 开始。原先所有段落共用 ``List Number`` 样式自带
+    的 ``numId``，于是全文连续编号（第 2 段列表接着第 1 段往下数）——这是缺陷，
+    不是设计。详见 ``_allocate_list_num_id``。
+    """
+    num_id = state.new_list_num_id() if block.ordered else None
     for item in block.items:
-        _render_list_item(state, item, ordered=block.ordered, level=0)
+        _render_list_item(state, item, ordered=block.ordered, level=0, num_id=num_id)
 
 
-def _render_list_item(state: _RenderState, item: ListItem, *, ordered: bool, level: int) -> None:
+def _render_list_item(
+    state: _RenderState,
+    item: ListItem,
+    *,
+    ordered: bool,
+    level: int,
+    num_id: int | None = None,
+) -> None:
     base = "List Number" if ordered else "List Bullet"
     style = base if level == 0 else f"{base} {min(level + 1, 3)}"
 
     first = item.content[0] if item.content else None
     paragraph = state.document.add_paragraph(style=style)
+    if ordered and num_id is not None:
+        set_list_numbering(paragraph, num_id=num_id, level=level)
     if isinstance(first, Paragraph):
         _render_inlines(state, paragraph, first.content, None)
     elif first is not None:
@@ -305,8 +392,16 @@ def _render_list_item(state: _RenderState, item: ListItem, *, ordered: bool, lev
 
     for block in item.content[1:]:
         if isinstance(block, ListBlock):
+            # 嵌套列表是**另一个**列表：有序时它也该从 1 开始
+            nested_num_id = state.new_list_num_id() if block.ordered else None
             for nested in block.items:
-                _render_list_item(state, nested, ordered=block.ordered, level=level + 1)
+                _render_list_item(
+                    state,
+                    nested,
+                    ordered=block.ordered,
+                    level=level + 1,
+                    num_id=nested_num_id,
+                )
         else:
             _render_block(state, block)
 
@@ -316,7 +411,8 @@ def _render_code_block(state: _RenderState, block: CodeBlock) -> None:
     paragraph = state.document.add_paragraph()
     set_paragraph_spacing(paragraph, line_spacing=1.0)
     run = paragraph.add_run(block.content.rstrip("\n"))
-    _apply_run_style(state, run, properties)
+    # eastAsia 留给样式链：等宽字体没有中文字形
+    _apply_run_style(state, run, properties, east_asia=False)
     if "font.name" not in properties and "font" not in properties:
         # 只设西文字体：把 eastAsia 留给样式链，否则代码块里的中文会掉字体
         apply_font(run, DEFAULT_MONO_FONT, east_asia=state.default_east_asia)
@@ -402,6 +498,14 @@ def _render_thematic_break(state: _RenderState) -> None:
 def _render_page_break(state: _RenderState) -> None:
     paragraph = state.document.add_paragraph()
     paragraph.add_run()._element.append(make_page_break())
+
+
+def _render_section_break(state: _RenderState) -> None:
+    """``[[sectionbreak]]``：切到 ``[[sections]]`` 的下一条配置。
+
+    分节标记比配置条数多时忽略多余标记（不报错——作者多写一个标记不该让构建失败）。
+    """
+    state.sections.advance()
 
 
 def _render_block_quote(state: _RenderState, block: BlockQuote) -> None:
@@ -827,7 +931,8 @@ def _render_inline_code(state: _RenderState, paragraph: Any, text: str) -> Any:
     """
     run = paragraph.add_run(text)
     properties = _code_properties(state, "")
-    _apply_run_style(state, run, properties)
+    # 行内代码同理：等宽字体不写 eastAsia，中文仍走正文字体
+    _apply_run_style(state, run, properties, east_asia=False)
     # 底纹优先级：config 的 inline_background > shading.fill > 引擎默认浅灰。
     # 默认值是为了「开了就有、且和代码块的 F5F5F5 略有区分」。
     # 想彻底关掉：config 写 inline_background = ""（空串不画底纹）。
@@ -863,11 +968,30 @@ def _render_styled(
     if properties:
         for run in paragraph.runs[start:]:
             _apply_run_style(state, run, properties)
+        # 段落级键也能通过行内样式表达：「署名行要居中且不缩进」这类需求，
+        # 逐段开关会让 DFM 语法变复杂，而 `[署名]{.signature}` 已经能指到样式名。
+        # 只认 alignment / first_line_chars —— 其余段落属性（间距等）仍归正文段落管。
+        _apply_inline_paragraph_style(paragraph, properties)
     if node.style_name in ("sup", "sub"):
         # 上下标与 config 样式**都要生效**：以前这里提前 return，config 里的
         # [styles.sup] / [styles.sub]（如字号）会被整段丢掉（实测踩到）
         for run in paragraph.runs[start:]:
             _set_vertical_align(run, "superscript" if node.style_name == "sup" else "subscript")
+
+
+def _apply_inline_paragraph_style(paragraph: Any, properties: dict[str, Any]) -> None:
+    """把行内样式里的**段落级**键写到所在段落（``alignment`` / ``first_line_chars``）。
+
+    为什么允许：正文段落统一套 ``first_line_chars``（中文首行缩进 2 字符），
+    但封面署名、图表标题这类段落需要 0 缩进或居中，而 DFM 没有块级样式语法。
+    ``[文字]{.样式名}`` 是唯一能「就近指到某个样式」的写法，所以让它承载这两个键。
+    """
+    alignment = properties.get("alignment")
+    if alignment:
+        set_paragraph_alignment(paragraph, _normalise_alignment(str(alignment)))
+    indent = properties.get("first_line_chars")
+    if indent is not None:
+        set_paragraph_indent(paragraph, first_line_chars=int(indent))
 
 
 def _set_vertical_align(run: Any, value: str) -> None:
@@ -892,10 +1016,22 @@ def _add_text_run(
         _apply_run_style(state, run, properties)
 
 
-def _apply_run_style(state: _RenderState, run: Any, properties: dict[str, Any]) -> None:
+def _apply_run_style(
+    state: _RenderState,
+    run: Any,
+    properties: dict[str, Any],
+    *,
+    east_asia: bool = True,
+) -> None:
     """把 config 的样式属性写进 run（只认已知字段，保证「config 驱动」）。
 
     支持两种取值写法：点号键展开成的嵌套表（``font.name``）与扁平键。
+
+    ``east_asia``：`font.name` 是否同时写 ``w:eastAsia``。
+    中文文档里**必须**写——Word 对 CJK 字符取的是 ``w:eastAsia``，
+    只写 ascii/hAnsi/cs 时 `font.name = "黑体"` 对中文是空操作（实测反馈）。
+    代码块/行内代码传 ``False``：等宽字体没有中文字形，eastAsia 要留给样式链，
+    否则代码块里的中文会掉字体。
     """
     from ..units import to_points
 
@@ -919,6 +1055,7 @@ def _apply_run_style(state: _RenderState, run: Any, properties: dict[str, Any]) 
         strike=bool(strike) if strike is not None else None,
         color=str(color) if color else None,
         underline=bool(underline) if underline is not None else None,
+        east_asia=str(name) if name and east_asia else None,
     )
 
 

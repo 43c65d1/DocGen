@@ -17,7 +17,9 @@ DFM = DocGen Flavored Markdown。剪枝版只实现手册 §5.1 的子集，
 | `---` 分隔线 | `ThematicBreak` |
 | `\|a\|b\|` 简单表格 | `Table(rows=[["a", "b"], ...])`（第一行是表头） |
 | 独立一行的 `[[img:path]]` | `ImageBlock(src="path")` |
-| 独立一行的 `[[pagebreak]]` | `PageBreak()`（HTML 里渲染为 `<hr class="pagebreak">`） |
+| 独立一行的 `[[pagebreak]]` | `PageBreak()`（分页符） |
+| 独立一行的 `[[toc]]` | `Toc()`（Word 的 TOC 域） |
+| 独立一行的 `[[sectionbreak]]` | `SectionBreak()`（切到下一个 `[[sections]]` 配置的新节） |
 | 独立成段的 `$$ ... $$` | `Formula(latex="...")` |
 
 ## 行内
@@ -32,6 +34,7 @@ DFM = DocGen Flavored Markdown。剪枝版只实现手册 §5.1 的子集，
 | `[文字]{.样式名}` | `Styled(content=[...], style_name="样式名")` |
 | `[[img:path]]`（行内） | `Image(src="path")` |
 | `[[pagebreak]]`（行内） | `Break()` |
+| `[[sectionbreak]]`（行内） | `Break()`（分节是块级动作，行内只当换行） |
 | `$x^2$` | `Math(latex="x^2", display=False)` |
 | `H~2~O` | `Styled(content=[Text("2")], style_name="sub")` |
 | `E=mc^2^` | `Styled(content=[Text("2")], style_name="sup")` |

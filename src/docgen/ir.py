@@ -30,6 +30,7 @@ __all__ = [
     "PageBreak",
     "Paragraph",
     "Ref",
+    "SectionBreak",
     "Styled",
     "Table",
     "TableCell",
@@ -179,6 +180,15 @@ class Toc(Block):
 
 
 @dataclass(frozen=True, slots=True)
+class SectionBreak(Block):
+    """``[[sectionbreak]]``：换到下一个 ``[[sections]]`` 配置描述的新节。
+
+    有了它，多节文档才能把内容分到前几节里（否则渲染器只能在开头一次性建节，
+    结果所有内容都落进最后一节、前面全是空页——实测反馈的「空白封面」）。
+    """
+
+
+@dataclass(frozen=True, slots=True)
 class NamedBlock(Block):
     """``\\begin{名字 属性} ... \\end{名字}``：命名块容器（题注、公式、摘要……）。
 
@@ -245,6 +255,7 @@ BlockNode = (
     | PageBreak
     | NamedBlock
     | Toc
+    | SectionBreak
     | BlockQuote
     | Table
 )

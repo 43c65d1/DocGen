@@ -42,6 +42,22 @@ first_line_chars = 200     # 首行缩进 2 字符
 展开后 `font.name` 变成嵌套结构（`{"font": {"name": "宋体"}}`），渲染层按此读取。
 `color` 写 `RRGGBB` 或 `#RRGGBB` 都接受（OOXML 里不带 `#`）。
 
+### 样式值写到哪：run / 样式定义 / 载体样式
+
+| config | 写到 | 为什么 |
+|---|---|---|
+| `[styles.body]` 字体类 | `Normal` 样式 | 正文段落默认继承它，不必每个 run 重复 |
+| `[styles.caption]` 字体类 | `Caption` 样式 | 题注段落挂的是内置 `Caption` |
+| `[styles.headingN]` 字体类 | **run** 与 `Heading N` 样式定义 | run 决定当前文字；样式定义决定 Word 样式面板与「新敲一个标题」 |
+| `[styles.<任意>]` 字体类 | run | `[文字]{.样式}` 这类行内用法 |
+
+两个容易踩的 Word 细节：
+
+- **中文取 `w:eastAsia`**：`font.name` 会同时写 ascii/hAnsi/eastAsia/cs。
+  代码块与行内代码是例外——等宽字体没有中文字形，`eastAsia` 留给样式链。
+- **主题属性优先于显式值**：母版的 Heading 带 `w:asciiTheme` / `w:color w:themeColor`，
+  不清掉的话「config 设了颜色/字体」实际不生效。写 config 时会一并清除。
+
 ## 模块划分
 
 | 模块 | 职责 |
@@ -272,9 +288,28 @@ header.text = "DocGen 报告"
 footer.text = "第 PAGE 页"         # PAGE 会变成页码域
 ```
 
+**内容怎么分到各节**：正文里写 `[[sectionbreak]]` 切到下一节。
+
+```markdown
+# 实验报告
+
+学号：…　姓名：…　班级：…
+
+[[sectionbreak]]
+
+# 一、实验目的
+```
+
+上面这份内容 + 上面的 config = 封面节（标题/署名，垂直居中、罗马页码、无页脚）
++ 正文节（Decimal 页码从 1、有页眉页脚）。
+
+> ⚠️ **不写 `[[sectionbreak]]` 时**沿用旧行为：一次性建好所有节，
+> 内容全部落在最后一节，前面是空页。这时 `cover = true` 只表示「这一节页面垂直居中」，
+> 不会凭空产生封面内容——早期就是这里让人以为「空白封面」是 bug。
+
 | 能力 | 实现 |
 |---|---|
-| 分节 | 第 1 条配置作用于已有节，其余 `add_section(nextPage)` |
+| 分节 | 第 1 条配置作用于已有节；有 `[[sectionbreak]]` 时按需建后续节 |
 | 页码 | `w:pgNumType` 的 `w:fmt` / `w:start`；页脚里的 `PAGE` 域 |
 | 页眉页脚 | 每节独立设置（`is_linked_to_previous = False`），避免继承错乱 |
 | 封面 | `sectPr` 的 `w:vAlign val="center"`（不是段落 spacing） |

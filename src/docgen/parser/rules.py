@@ -35,7 +35,8 @@ def rule_wiki(state: StateInline, silent: bool) -> bool:
         return False
 
     inner = src[state.pos + 2 : end]
-    if inner != "pagebreak" and inner != "toc" and not inner.startswith(("img:", "ref:", "fn:")):
+    keywords = ("pagebreak", "toc", "sectionbreak")
+    if inner not in keywords and not inner.startswith(("img:", "ref:", "fn:")):
         return False
 
     if silent:
@@ -45,6 +46,8 @@ def rule_wiki(state: StateInline, silent: bool) -> bool:
         token = Token("dfm_pagebreak", "", 0)
     elif inner == "toc":
         token = Token("dfm_toc", "", 0)
+    elif inner == "sectionbreak":
+        token = Token("dfm_sectionbreak", "", 0)
     elif inner.startswith("ref:"):
         token = Token("dfm_ref", "", 0)
         token.content = inner[len("ref:") :]

@@ -122,6 +122,26 @@ CHILD_ORDER: dict[str, tuple[str, ...]] = {
     "w:tblBorders": _qnames("top start left bottom end right insideH insideV"),
     "w:tcBorders": _qnames("top start left bottom end right insideH insideV"),
     "w:pBdr": _qnames("top left bottom right between bar"),
+    # CT_Settings：``w:updateFields`` 必须按 schema 顺序排（不能 append 到末尾，
+    # 否则严格按 schema 解析的实现会忽略它——那样 Word 也不会自动更新域）
+    "w:settings": _qnames(
+        "writeProtection view zoom removePersonalInformation removeDateAndTime doNotDisplayPageBoundaries "
+        "displayBackgroundShape printPostScriptOverText printFractionalCharacterWidth printFormsData embedTrueTypeFonts embedSystemFonts "
+        "saveSubsetFonts saveFormsData mirrorMargins alignBordersAndEdges bordersDoNotSurroundHeader bordersDoNotSurroundFooter "
+        "gutterAtTop hideSpellingErrors hideGrammaticalErrors activeWritingStyle proofState formsDesign "
+        "attachedTemplate linkStyles stylePaneFormatFilter stylePaneSortMethod documentType mailMerge "
+        "revisionView trackRevisions doNotTrackMoves doNotTrackFormatting documentProtection autoFormatOverride "
+        "styleLockTheme styleLockQFSet defaultTabStop autoHyphenation consecutiveHyphenLimit hyphenationZone "
+        "doNotHyphenateCaps showEnvelope summaryLength clickAndTypeStyle defaultTableStyle evenAndOddHeaders "
+        "bookFoldRevPrinting bookFoldPrinting bookFoldPrintingSheets drawingGridHorizontalSpacing drawingGridVerticalSpacing displayHorizontalDrawingGridEvery "
+        "displayVerticalDrawingGridEvery doNotUseMarginsForDrawingGridOrigin drawingGridHorizontalOrigin drawingGridVerticalOrigin doNotShadeFormData noPunctuationKerning "
+        "characterSpacingControl printTwoOnOne strictFirstAndLastChars noLineBreaksAfter noLineBreaksBefore savePreviewPicture "
+        "doNotValidateAgainstSchema saveInvalidXml ignoreMixedContent alwaysShowPlaceholderText doNotDemarcateInvalidXml saveXmlDataOnly "
+        "useXSLTWhenSaving saveThroughXslt showXMLTags alwaysMergeEmptyNamespace updateFields hdrShapeDefaults "
+        "footnotePr endnotePr compat docVars rsids attachedSchema "
+        "themeFontLang clrSchemeMapping doNotIncludeSubdocsInStats doNotAutoCompressPictures forceUpgrade captions "
+        "readModeInkLockDown smartTagType shapeDefaults doNotEmbedSmartTags decimalSymbol listSeparator "
+    ),
     # CT_NumPr：ilvl 必须在 numId 之前（顺序错了 Word 静默忽略编号）
     "w:numPr": _qnames("ilvl numId numberingChange ins del"),
 }

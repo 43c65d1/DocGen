@@ -24,6 +24,7 @@ __all__ = [
     "CAPTION_KINDS",
     "CaptionRef",
     "RefUse",
+    "baked_fields",
     "caption_counters",
     "caption_kind",
     "collect_labels",
@@ -152,6 +153,33 @@ def caption_counters(blocks: list[BlockNode]) -> dict[str, int]:
 def caption_number(blocks: list[BlockNode], label: str) -> int | None:
     """某个标签的题注序号（不存在返回 None）。"""
     return caption_counters(blocks).get(label)
+
+
+def baked_fields(blocks: list[BlockNode]) -> dict[str, str]:
+    """标签 -> **域缓存值**（写进 docx 里的字面结果）。
+
+    为什么需要：Word 打开文档时会按 ``updateFields`` 重算域，所以缓存值写错也
+    看不出来；但 WPS / Office 预览 / 网页版 / 任何按文本读的转换链路看到的
+    就是缓存值。原先所有域都写死 ``"1"``，于是整篇图号都显示「图 1」（实测反馈）。
+
+    - 题注（``captions``）：``SEQ 图`` 的结果 = 该类型内的序号；
+    - 编号公式：书签包住的是 ``(N)``，所以引用它的缓存值也带括号；
+    - 其它带 ``#id`` 的命名块：按题注序号。
+    """
+    counters = caption_counters(blocks)
+    baked: dict[str, str] = {}
+    for block in iter_blocks(blocks):
+        if not isinstance(block, NamedBlock) or not block.label:
+            continue
+        number = block.attributes.get("number")
+        if block.name == "equation":
+            # 编号公式的书签包住 ``(N)``；无 number 的公式没有编号，也没有书签，
+            # 不能凭空烘出一个数字来（引用它会由 REF 域自行重算/报错）
+            if number:
+                baked[block.label] = f"({number})"
+        elif block.label in counters:
+            baked[block.label] = str(counters[block.label])
+    return baked
 
 
 def validate_numbering(

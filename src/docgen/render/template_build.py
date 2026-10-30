@@ -27,7 +27,7 @@ from docx.oxml.ns import qn
 
 from ..config import Config
 from ..units import to_points
-from .ooxml import make_update_fields, set_style_outline_level
+from .ooxml import set_style_outline_level
 
 __all__ = [
     "HEADING_NUMBER_ID",
@@ -299,10 +299,16 @@ def _style_by_id(document: Any, style_id: str) -> Any:
 
 
 def ensure_update_fields(document: Any) -> None:
-    """``settings.xml`` 补 ``updateFields``（幂等）。"""
+    """``settings.xml`` 补 ``updateFields``（幂等）。
+
+    **按 schema 顺序插入**，不能 append：``CT_Settings`` 元素顺序固定，
+    排在错误位置时严格实现会忽略它——那样连 Word 都不会自动更新域。
+    """
+    from .ooxml import insert_child
+
     settings = document.settings.element
     if settings.find(f"{_W}updateFields") is None:
-        settings.append(make_update_fields())
+        insert_child(settings, "w:updateFields", **{"w:val": "true"})
 
 
 def template_bytes(config: Config | None = None) -> bytes:

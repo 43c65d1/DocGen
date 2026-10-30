@@ -173,6 +173,10 @@ def _build_document(
         base_dir=base_dir,
     )
     state.sections = sections
+    # 域缓存值：渲染时把真实编号写进产物，别指望查看器去更新域
+    from ..numbering import baked_fields
+
+    state.caption_fields = baked_fields(blocks)
     _render_blocks(state, blocks)
     sections.finish()
     _ensure_update_fields(document)
@@ -216,6 +220,7 @@ class _RenderState:
     __slots__ = (
         "_bookmark_id",
         "base_dir",
+        "caption_fields",
         "config",
         "default_east_asia",
         "doc_settings",
@@ -243,6 +248,7 @@ class _RenderState:
         self.doc_settings = dict(config.document)
         self.math_engine, self.math_on_fail, self.math_xsl = math_settings(config)
         self.sections: Any = None
+        self.caption_fields: dict[str, str] = {}
         self._bookmark_id = 1000
         self.footnotes: list[str] = []
         self.footnote_reference_maker: Any = None
@@ -597,7 +603,8 @@ def _render_caption(state: _RenderState, block: NamedBlock) -> None:
     append_field(
         paragraph,
         make_caption_field(label),
-        "1",
+        # 缓存值写**真实序号**：Word 会自动重算，但 WPS/预览/解包 XML 只认这个值
+        state.caption_fields.get(block.label, "1"),
         bookmark=block.label,
         bookmark_id=state.next_bookmark_id(),
     )
@@ -646,8 +653,17 @@ def _render_toc(state: _RenderState) -> None:
 
 
 def _render_ref(state: _RenderState, paragraph: Any, target: str) -> None:
-    """``[[ref:目标]]`` → ``REF 目标 \\h`` 域（域结果是题注编号）。"""
-    append_field(paragraph, make_reference_field(target), "1")
+    """``[[ref:目标]]`` → ``REF 目标 \\h`` 域（域结果是题注编号）。
+
+    缓存值取目标题注的真实编号（含前向引用：渲染前就算好了）。
+    算不出来时留**空**而不是 ``"1"``——写死 1 会让读者看到错误编号，
+    空结果至少不会撒谎，Word 打开时仍会按域指令重算。
+    """
+    append_field(
+        paragraph,
+        make_reference_field(target),
+        state.caption_fields.get(target, ""),
+    )
 
 
 def _render_footnote(state: _RenderState, paragraph: Any, text: str) -> None:
@@ -1097,9 +1113,14 @@ def _points(value: Any) -> float:
 
 
 def _ensure_update_fields(document: Any) -> None:
-    """settings.xml 补 ``updateFields``：Word 打开时自动更新目录/编号域。"""
-    from .ooxml import make_update_fields
+    """settings.xml 补 ``updateFields``：Word 打开时自动更新目录/编号域。
+
+    **必须按 schema 顺序插入**，不能 ``append`` 到末尾：``CT_Settings`` 的元素顺序
+    固定，排在错误位置时严格按 schema 解析的实现会直接忽略它——那种情况下连 Word
+    都不会自动更新域，读者看到的就全是缓存值（实测反馈点名的第二处问题）。
+    """
+    from .ooxml import insert_child
 
     settings = document.settings.element
     if settings.find(f"{_W_NS}updateFields") is None:
-        settings.append(make_update_fields())
+        insert_child(settings, "w:updateFields", **{"w:val": "true"})

@@ -6,6 +6,29 @@
 
 ## [Unreleased]
 
+### 修复（PowerShell 脚本兼容 5.1）
+
+- **`.ps1` 现在同时支持 Windows PowerShell 5.1 与 PowerShell 7**，不再需要装 pwsh。
+  两个实际障碍都修了：
+
+  - **编码**：脚本存成 UTF-8 **带 BOM**。5.1 读无 BOM 的 `.ps1` 会按系统 ANSI 代码页
+    解码（中文 Windows 是 936），中文注释/输出变乱码，甚至破坏引号导致语法错。
+    本机 ACP 恰好是 65001，所以这个问题只在别人机器上暴露。
+  - **tar.gz**：`package.ps1` 现在优先用 `%SystemRoot%\System32\tar.exe`（bsdtar），
+    并用 `--version` 校验。此前从 Git Bash/MSYS2 启动时 PATH 里 GNU tar 在前，
+    它把 `C:\...` 当远程主机名（`Cannot connect to C: resolve failed`），tar.gz 静默失败；
+    而 5.1 没有 .NET `TarFile` 兜底，结果只出 zip。
+  - 两个脚本都加了 `#Requires -Version 5.1`，用法示例里补了
+    `powershell -File scripts\setup.ps1 --dev`。
+
+- 新增 [scripts/README.md](scripts/README.md)：四个安装入口、两个 PowerShell 版本的
+  支持矩阵，以及 BOM / tar 这两处差异的原因。
+- 新增测试：`.ps1` 必须有 UTF-8 BOM、必须声明最低版本、`package.ps1` 必须优先用
+  System32 bsdtar；`.cmd` 仍必须纯 ASCII（不能带 BOM）。
+
+实测：PS 5.1 下 `package.ps1` 能出 tar.gz（135 条目）+ zip，`setup.ps1 --dev` 装好依赖、
+未知参数干净退出 2；pwsh 7 下同样通过。
+
 ### 新增（段落间距可配置）
 
 - **`space_before` / `space_after`**：`[document]` / `[styles.*]`（body、headingN、

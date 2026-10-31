@@ -271,6 +271,44 @@ def test_cmd_files_are_ascii_only() -> None:
         assert not non_ascii, f"{path.name} 含非 ASCII 字节（cmd 会读成乱码）"
 
 
+# --------------------------------------------------------------------------
+# Windows PowerShell 5.1 兼容（Win10/11 自带；用户不一定装 pwsh 7）
+# --------------------------------------------------------------------------
+PS_BOM = b"\xef\xbb\xbf"
+
+
+@pytest.mark.parametrize("name", ["setup.ps1", "package.ps1"])
+def test_ps1_files_have_utf8_bom(name: str) -> None:
+    """`.ps1` 必须带 UTF-8 BOM。
+
+    实测：Windows PowerShell 5.1 读**无 BOM** 的 .ps1 时按系统 ANSI 代码页解码。
+    中文 Windows 的 ACP 是 936，脚本里的中文会变成乱码，甚至破坏引号导致语法错；
+    本机 ACP 恰好是 65001，所以这个坑只在别人的机器上才暴露。
+    """
+    raw = (SCRIPTS / name).read_bytes()
+    assert raw.startswith(PS_BOM), f"{name} 没有 UTF-8 BOM，PS 5.1 下中文会乱码"
+    raw.removeprefix(PS_BOM).decode("utf-8")  # 去掉 BOM 后必须是合法 UTF-8
+
+
+@pytest.mark.parametrize("name", ["setup.ps1", "package.ps1"])
+def test_ps1_declares_minimum_powershell_version(name: str) -> None:
+    """脚本要声明最低版本：5.1 是 Win10/11 自带的那一版。"""
+    text = (SCRIPTS / name).read_text(encoding="utf-8-sig")
+    assert "#Requires -Version 5.1" in text, f"{name} 没声明最低 PowerShell 版本"
+
+
+def test_package_ps1_prefers_windows_bsdtar() -> None:
+    """`package.ps1` 必须优先用 System32 的 bsdtar。
+
+    实测踩到：从 Git Bash / MSYS2 启动时 PATH 里 GNU tar 在前，它把 `C:\\...`
+    当成远程主机名（`Cannot connect to C: resolve failed`），tar.gz 静默失败；
+    PowerShell 5.1 又没有 .NET 的 `TarFile` 兜底。
+    """
+    text = (SCRIPTS / "package.ps1").read_text(encoding="utf-8-sig")
+    assert "System32" in text, "没有优先用 %SystemRoot%\\System32\\tar.exe"
+    assert "bsdtar" in text, "没有校验 tar 是不是 bsdtar（GNU tar 不认 Windows 路径）"
+
+
 def test_readme_directory_map_matches_source_tree() -> None:
     """README 的目录结构里点名的每个模块都必须真实存在。
 

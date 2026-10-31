@@ -27,11 +27,15 @@
 
 ```bash
 # 推荐：自动挑一个当前可用的软件源（内外网状态会变，脚本运行期自己试）
-# 按你的终端挑一行，三个入口做同一件事：
-bash scripts/setup.sh --dev            # Git Bash / macOS / Linux
-pwsh scripts/setup.ps1 --dev           # Windows PowerShell / pwsh
-scripts\setup.cmd --dev                # Windows cmd
+# 按你的终端挑一行，四个入口做同一件事：
+bash scripts/setup.sh --dev                          # Git Bash / macOS / Linux
+pwsh scripts/setup.ps1 --dev                         # PowerShell 7
+powershell -File scripts\setup.ps1 --dev             # Windows PowerShell 5.1（Win10/11 自带）
+scripts\setup.cmd --dev                              # Windows cmd
 ```
+
+> `.ps1` 同时支持 PowerShell 5.1 与 7；细节（BOM、tar 选择）见
+> [scripts/README.md](scripts/README.md)。
 
 或者手动（用标准 venv + pip）：
 

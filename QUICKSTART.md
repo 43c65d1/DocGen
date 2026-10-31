@@ -35,8 +35,10 @@ docgen build content.md -c config.toml -o out.docx
 cd docgen-0.1.0b1-src
 
 bash scripts/setup.sh --dev           # Git Bash / macOS / Linux
-# 或（Windows PowerShell / pwsh）
+# 或（PowerShell 7）
 pwsh scripts/setup.ps1 --dev
+# 或（Windows PowerShell 5.1，Win10/11 自带，参数一样）
+powershell -File scripts\setup.ps1 --dev
 # 或（Windows cmd）
 scripts\setup.cmd --dev
 ```

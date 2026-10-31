@@ -21,10 +21,11 @@
 ## 2. 十分钟跑起来
 
 ```bash
-# 装依赖：按终端挑一个入口（三者等价，都会自动挑当前可用的软件源）
-bash scripts/setup.sh --dev      # Git Bash / macOS / Linux
-pwsh scripts/setup.ps1 --dev     # Windows PowerShell / pwsh
-scripts\setup.cmd --dev          # Windows cmd
+# 装依赖：按终端挑一个入口（等价，都会自动挑当前可用的软件源）
+bash scripts/setup.sh --dev                       # Git Bash / macOS / Linux
+pwsh scripts/setup.ps1 --dev                      # PowerShell 7
+powershell -File scripts\setup.ps1 --dev          # Windows PowerShell 5.1
+scripts\setup.cmd --dev                           # Windows cmd
 
 uv run pytest                    # 全绿即环境就绪
 uv run docgen --help             # 5 个子命令
@@ -194,8 +195,14 @@ ruff check . && ruff format --check . && mypy src tests && pytest
   网络源一律用 `scripts/setup.*` 自动选，别写死。
 - **脚本有三个平台变体**（`.sh` / `.ps1` / `.cmd`）做同一件事，改一个就要改另两个。
   `test_release.py` 有断言逐个检查关键约束（候选来源、`--index`/`--proxy`、`--frozen`、
-  拒绝未知参数、`.cmd` 必须纯 ASCII）。`.cmd` 限定 ASCII 的原因：cmd.exe 按控制台
-  代码页读文件，中文注释会被读成乱码甚至当命令执行（实测踩到）。
+  拒绝未知参数、`.cmd` 必须纯 ASCII、`.ps1` 必须带 UTF-8 BOM 且声明 `#Requires -Version 5.1`）。
+  - `.cmd` 限定 ASCII：cmd.exe 按控制台代码页读文件，中文注释会被读成乱码甚至当命令执行（实测踩到）。
+  - `.ps1` 必须带 **UTF-8 BOM**：Windows PowerShell 5.1 读无 BOM 的脚本按系统 ANSI
+    代码页解码（中文 Windows 是 936），中文会乱码甚至语法错。**编辑 .ps1 后要复查 BOM**
+    （有些编辑器/工具会把它写掉，测试会拦住）。
+  - `package.ps1` 必须优先用 `%SystemRoot%\System32\tar.exe`（bsdtar）：PATH 里若
+    Git Bash/MSYS2 在前，`tar` 是 GNU tar，它把 `C:\...` 当远程主机名，tar.gz 会失败。
+  详见 [scripts/README.md](scripts/README.md)。
 - 改版本号要动**三处**：`pyproject.toml`、`uv.lock` 里 docgen 那一行、
   `cli.py` 的兜底常量（测试会校验一致性）。
 

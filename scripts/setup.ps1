@@ -1,4 +1,4 @@
-#!/usr/bin/env pwsh
+﻿#!/usr/bin/env pwsh
 # 一键装依赖：依次尝试若干来源，**用真实同步来判断可用性**，哪个成功就用哪个。
 #
 # 这是 scripts/setup.sh 的 PowerShell 版（Windows 上不必装 Git Bash）。
@@ -14,6 +14,9 @@
 #   pwsh scripts/setup.ps1 --dev --index <URL>   # 手动指定来源，跳过自动尝试
 #   pwsh scripts/setup.ps1 --dev --proxy <URL>
 #
+# Windows PowerShell 5.1 用同样参数：
+#   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\setup.ps1 --dev
+#
 # 说明：不用 "先探测再同步" 那种两段式——探测（如 uv pip install --dry-run）本身
 # 就依赖环境，容易假失败（实测踩到）。这里直接同步，靠短超时快速失败、换下一个来源。
 #
@@ -24,6 +27,9 @@
 # 为什么手工解析参数而不用 param()：实测 pwsh 里 `--dev` **不会**绑到 `[switch]$Dev`
 # 上，而是被当成位置参数的值喂给下一个 string 形参（`--index` 会收到 `--dev`），
 # 于是静默走错分支。为了与 bash 版的 `--dev` 写法一致，这里自己解析 $args。
+#
+# 兼容 Windows PowerShell 5.1 与 PowerShell 7（见 scripts/README.md）。
+#Requires -Version 5.1
 $ErrorActionPreference = 'Stop'
 
 $Dev = $false

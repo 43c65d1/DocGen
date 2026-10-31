@@ -35,6 +35,7 @@ DFM = DocGen Flavored Markdown。剪枝版只实现手册 §5.1 的子集，
 | `[[img:path]]`（行内） | `Image(src="path")` |
 | `[[pagebreak]]`（行内） | `Break()` |
 | `[[sectionbreak]]`（行内） | `Break()`（分节是块级动作，行内只当换行） |
+| `[[diag:右上;左下]]` | `DiagonalHeader(upper="右上", lower="左下")`（表格单元格里的斜线表头；用 `;` 分隔） |
 | `$x^2$` | `Math(latex="x^2", display=False)` |
 | `H~2~O` | `Styled(content=[Text("2")], style_name="sub")` |
 | `E=mc^2^` | `Styled(content=[Text("2")], style_name="sup")` |
@@ -124,5 +125,6 @@ print("hi")          <!-- 内部可以再出现 ``` -->
 
 ## 剪枝版不做
 
-多级编号、题注、交叉引用、目录、脚注、复杂表格（合并/斜线表头）、数学渲染
+多级编号、题注、交叉引用、目录、脚注、**合并单元格的表格语法**、数学渲染
 （HTML 只占位或 MathJax）、`\begin{...}` 命名块、Word/OOXML —— 都留给第二题。
+（斜线表头已有：单元格里写 `[[diag:右上;左下]]`，见 §行内。）

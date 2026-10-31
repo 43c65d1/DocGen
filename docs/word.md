@@ -230,10 +230,36 @@ $$
 | `three_line`（**默认**） | 顶线 + 表头下线 + 底线，**无竖线、无内部横线**（学术三线表） |
 | `grid` | 四周框线 + 全部内部横竖线 |
 | `none` | 完全无框线 |
+| `custom` | 逐边指定（`[table.edges]`），默认全无 |
 
 看到「只有表头上下和整表上下有框线」时，那是 `three_line` 的**设计如此**；
-要竖线请显式设 `style = "grid"`。见
-[examples/features/content.md](../examples/features/content.md) 的两种样式对照。
+要竖线请显式设 `style = "grid"`，或 `custom` 逐边打开。
+
+### 表格线的粗细、颜色、行间横线
+
+```toml
+[table]
+style = "grid"
+line_size = "1pt"          # 1pt = sz 8（1/8 磅单位）
+line_color = "000000"
+
+# 或者逐边（style = "custom"）
+[table]
+style = "custom"
+line_size = "1pt"
+edges = { top = "single", bottom = "single", left = "none", right = "none", insideH = "single", insideV = "none" }
+
+# 每行底部一条横线（模拟行分隔线）
+[table]
+style = "none"
+row_lines = true           # 或 row_lines = "dashed"
+```
+
+- 表格级 `CT_TblBorders` 的每条边都支持 `val` / `sz` / `color`，只是之前只写了 `val`。
+- **行横线**只能写成单元格底边（`w:tcBorders/w:bottom`）——Word 没有「行分隔线」概念。
+- **斜线**只有单元格级元素（`w:tcBorders/tl2br`）：DFM 里写
+  `| [[diag:年份;项目]] | … |`（分隔符 `;`，不能用 `|`），渲染成「斜线 + 右上/左下两段文字」。
+  `CT_TcBorders` 是 sequence，`tl2br` 必须排在 `bottom` 之后——顺序错了 Word 静默丢线。
 
 ### 标题自动编号（可关）
 

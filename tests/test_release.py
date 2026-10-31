@@ -77,6 +77,57 @@ def test_handoff_document_exists() -> None:
     assert path.stat().st_size > 800, "HANDOFF.md 内容过少"
 
 
+@pytest.mark.parametrize("name", ["docs/cheatsheet.md", "docs/manual.md"])
+def test_reference_documents_exist(name: str) -> None:
+    """速查表与语义手册是用户查字段的主要入口，不能缺。"""
+    path = ROOT / name
+    assert path.is_file(), f"缺少 {name}"
+    assert path.stat().st_size > 1500, f"{name} 内容过少"
+
+
+def test_cheatsheet_covers_every_config_namespace() -> None:
+    """速查表要覆盖**所有** config 段——少一段，用户就得翻手册。
+
+    新增配置段时如果忘了加快捷表，这条会失败。
+    """
+    text = (ROOT / "docs" / "cheatsheet.md").read_text(encoding="utf-8")
+    for section in (
+        "[document]",
+        "[styles.",
+        "[inline]",
+        "[code_block]",
+        "[table]",
+        "[image]",
+        "[[sections]]",
+        "[output]",
+        "[math]",
+    ):
+        assert section in text, f"速查表少了 {section}"
+
+
+def test_cheatsheet_lists_all_markers() -> None:
+    """语法标记也要齐全（新增标记时同步）。"""
+    text = (ROOT / "docs" / "cheatsheet.md").read_text(encoding="utf-8")
+    for marker in (
+        "[[img:",
+        "[[pagebreak]]",
+        "[[sectionbreak]]",
+        "[[toc]]",
+        "[[ref:",
+        "[[fn:",
+        "[[diag:",
+        "\\begin{caption",
+        "\\begin{equation",
+    ):
+        assert marker in text, f"速查表少了标记 {marker}"
+
+
+def test_readme_links_reference_documents() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "docs/cheatsheet.md" in readme
+    assert "docs/manual.md" in readme
+
+
 def test_handoff_document_is_about_development() -> None:
     """`HANDOFF.md` 讲的是**开发**，不讲仓库维护。
 

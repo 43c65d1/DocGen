@@ -98,6 +98,27 @@ space_after = "0.5 line"
 
 **图片**：`[image] space_before` / `space_after` 直接作用于图片所在的段落。
 
+### 表格线：`[table] style` / `line_*` / `edges` / `row_lines`
+
+```toml
+[table]
+style = "three_line"            # three_line / grid / none / custom
+line_style = "single"           # single / double / dashed / dotted / none
+line_size = "1pt"               # 1pt / 0.5pt / 8px（转 1/8 磅）
+line_color = "000000"           # 000000 / 999999 / auto
+row_lines = false               # true 或线型：每行底部一条横线
+edges = { ... }                 # 仅 style = "custom"：逐边线型
+```
+
+- `edges` 可用的边：`top` `left` `bottom` `right` `insideH` `insideV`；
+  未写的边默认 `none`。写错边名报 `E5001`。
+- `line_size` / `line_color` 对预设（`grid` / `three_line`）与 `custom` 都生效。
+- **斜线表头**：单元格里写 `[[diag:右上;左下]]`（分隔符 `;`），
+  渲染成 `w:tcBorders/tl2br` + 两段文字（右上右对齐、左下左对齐）。
+- 表格与正文的间距仍用 `[table] space_before` / `space_after`（写到相邻段落）。
+
+> 完整字段表见 [cheatsheet.md](cheatsheet.md)，默认效果与边界见 [manual.md](manual.md)。
+
 行内样式（`[文字]{.样式名}`）的样式里也能写这四个段落级键
 （`alignment` / `first_line_chars` / `space_before` / `space_after`），作用于所在段落。
 

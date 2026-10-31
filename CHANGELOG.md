@@ -24,6 +24,17 @@
 Word 实测：`line_size = "1pt"` → 线宽 8（1/8 磅）；`edges` 逐边生效；
 斜线表头单元格 `DiagonalDown = single`，两段文字对齐正确。
 
+### 新增（速查表与语义手册）
+
+- 新增 [docs/cheatsheet.md](docs/cheatsheet.md)：一页速查——最常用 config、
+  字段总表、语法标记、单位、CLI、错误码、不写 config 时的默认效果。
+- 新增 [docs/manual.md](docs/manual.md)：语义手册细节版——默认值来源、覆盖层级、
+  边界情况、常见任务配方。默认值都是程序化采集的真实值
+  （母版 11pt / 1.15 行距 / 标题 14-13-11pt / 三线表等）。
+- README / HANDOFF / docs/config.md / docs/dfm.md / docs/word.md / LIMITATIONS 同步：
+  补表格线字段、`[[diag:]]` 标记、B15（行高/按厘米列宽/逐格边框/合并语法仍不支持）。
+- 测试：文档守卫（速查表覆盖所有配置段与语法标记、README 链接、文档存在）。
+
 ### 修复（PowerShell 脚本兼容 5.1）
 
 - **`.ps1` 现在同时支持 Windows PowerShell 5.1 与 PowerShell 7**，不再需要装 pwsh。

@@ -274,6 +274,8 @@ CI（[.github/workflows/ci.yml](.github/workflows/ci.yml)）在 Python 3.11 / 3.
 
 | 文档 | 用途 |
 |---|---|
+| [docs/cheatsheet.md](docs/cheatsheet.md) | **速查表**：写什么 → 用哪个 config 字段（一页） |
+| [docs/manual.md](docs/manual.md) | **语义手册**：每种元素的默认效果、覆盖层级、边界 |
 | [QUICKSTART.md](QUICKSTART.md) | 15 分钟上手 |
 | [LIMITATIONS.md](LIMITATIONS.md) | **已知限制**（含「看着像 bug 其实不是」） |
 | [FEEDBACK.md](FEEDBACK.md) | 反馈模板 |

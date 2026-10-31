@@ -101,6 +101,8 @@ render ──► ir + config（渲染层不认识解析器，也不回读源文�
 
 - 语法：[docs/dfm.md](docs/dfm.md)　IR：[docs/ir.md](docs/ir.md)
 - 配置：[docs/config.md](docs/config.md)　Word/OOXML：[docs/word.md](docs/word.md)
+- **用户视角的默认效果与字段**：[docs/cheatsheet.md](docs/cheatsheet.md)（速查）、
+  [docs/manual.md](docs/manual.md)（细节）——改行为时这两份要同步改，否则用户文档先失真。
 - 原始规格（**决策基线**）：[docs/development-manual.md](docs/development-manual.md)
 
 ## 5. 怎么改一个特性（推荐顺序）

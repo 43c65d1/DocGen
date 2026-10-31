@@ -6,6 +6,24 @@
 
 ## [Unreleased]
 
+### 新增（表格线可配 + 斜线表头）
+
+- **表格线不再只有三个预设**：新增
+  `[table] line_style` / `line_size` / `line_color`（线型/粗细/颜色）、
+  `style = "custom"` + `edges = { top = "single", ... }`（逐边）、
+  `row_lines = true`（每行底部横线，模拟行分隔线）。
+  底层：`CT_TblBorders` / `CT_TcBorders` 的每条边现在都写 `val`/`sz`/`color`，
+  之前只写 `val`，线宽颜色只能吃 Word 默认值。
+- **斜线表头**：表格单元格里写 `[[diag:右上;左下]]` → `w:tcBorders/tl2br` 斜线 +
+  右上右对齐 / 左下左对齐两段文字。分隔符用 `;`（`|` 是 GFM 单元格分隔符，会把表拆坏）。
+  顺带修掉一个 schema 顺序隐患：同一单元格先后写 `bottom` 与 `tl2br` 时，
+  元素顺序由 `insert_child` 保证（`CT_TcBorders` 是 sequence）。
+- 未知 `[table] style` 现在明确报 `E5001`（以前静默退回三线表）。
+- 已知边界见 LIMITATIONS B15：行高、按厘米列宽、逐格边框（斜线除外）、DFM 合并语法仍没有。
+
+Word 实测：`line_size = "1pt"` → 线宽 8（1/8 磅）；`edges` 逐边生效；
+斜线表头单元格 `DiagonalDown = single`，两段文字对齐正确。
+
 ### 修复（PowerShell 脚本兼容 5.1）
 
 - **`.ps1` 现在同时支持 Windows PowerShell 5.1 与 PowerShell 7**，不再需要装 pwsh。

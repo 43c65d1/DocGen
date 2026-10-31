@@ -28,6 +28,7 @@ from ..ir import (
     Break,
     Code,
     CodeBlock,
+    DiagonalHeader,
     Footnote,
     Formula,
     Heading,
@@ -73,6 +74,7 @@ from .ooxml import (
     page_content_width,
     repeat_table_header,
     set_cell_alignment,
+    set_cell_border,
     set_cell_width,
     set_list_numbering,
     set_paragraph_alignment,
@@ -875,7 +877,11 @@ def _render_table(state: _RenderState, block: Table) -> None:
             cell = table.cell(row_index, column_index)
             drop_empty_runs(cell.paragraphs[0])
             nodes = _cell_nodes(block, row_index, column_index)
-            if nodes:
+            diagonal = next((node for node in nodes if isinstance(node, DiagonalHeader)), None)
+            if diagonal is not None:
+                # 斜线表头：线 + 两段文字（右上/左下），不能按普通 run 渲染
+                _render_diagonal_cell(state, cell, diagonal, properties)
+            elif nodes:
                 # 有行内 IR 就渲染它：单元格里的粗体/代码/公式/链接都要保留
                 _render_inlines(state, cell.paragraphs[0], nodes, None)
             else:
@@ -883,7 +889,7 @@ def _render_table(state: _RenderState, block: Table) -> None:
                 run = cell.paragraphs[0].add_run(text)
                 if row_index == 0:
                     run.bold = True
-            if row_index == 0:
+            if row_index == 0 and diagonal is None:
                 for run in cell.paragraphs[0].runs:
                     run.bold = True
             _apply_cell_format(cell, widths[column_index], _column_alignment(block, column_index))
@@ -891,6 +897,28 @@ def _render_table(state: _RenderState, block: Table) -> None:
             repeat_table_header(table.rows[0])
 
     _apply_table_borders(table, properties, header_rows=1)
+
+
+def _render_diagonal_cell(
+    state: _RenderState, cell: Any, node: DiagonalHeader, properties: dict[str, Any]
+) -> None:
+    """斜线表头单元格：``w:tcBorders/tl2br``（左上→右下）+ 右上/左下两段文字。
+
+    Word 的斜线是**单元格级**边框（``CT_TblBorders`` 没有斜线元素），所以只能逐格写。
+    文字分两段：右上那段右对齐、左下那段左对齐——这是「项目\\年份」式表头的常规排法。
+    """
+    spec = _border_spec(properties)
+    set_cell_border(cell, "tl2br", val="single", space="0", **spec)
+
+    first = cell.paragraphs[0]
+    set_paragraph_alignment(first, "right")
+    if node.upper:
+        first.add_run(node.upper)
+
+    second = cell.add_paragraph()
+    set_paragraph_alignment(second, "left")
+    if node.lower:
+        second.add_run(node.lower)
 
 
 def _cell_nodes(block: Table, row: int, column: int) -> list[InlineNode]:
@@ -972,13 +1000,22 @@ def _table_properties(state: _RenderState) -> dict[str, Any]:
     raw = state.config.extra.get("table")
     table = dict(raw) if isinstance(raw, dict) else {}
     style = str(table.get("style", "three_line"))
+    if style not in TABLE_STYLES:
+        raise DocGenError(
+            E_CONFIG,
+            f"[table] style 不支持: {style!r}（可用：{' / '.join(TABLE_STYLES)}）",
+        )
     table["style"] = style
-    table["borders"] = {"three_line": "three_line", "grid": "grid", "none": "none"}.get(
-        style, "three_line"
-    )
+    # 边框行为直接由 style 决定；不再经过一层「未知就退回三线表」的映射，
+    # 否则 custom 会被静默吞掉（实测踩到）
+    table["borders"] = style
     if "header_repeat" not in table:
         table["header_repeat"] = True
     return table
+
+
+#: 表格边框预设 + ``custom``（逐边配置）
+TABLE_STYLES = ("three_line", "grid", "none", "custom")
 
 
 def _column_widths(properties: dict[str, Any], columns: int, state: _RenderState) -> list[int]:
@@ -1014,30 +1051,83 @@ def _apply_cell_format(cell: Any, width: int, alignment: str) -> None:
         set_cell_alignment(cell, alignment)
 
 
-def _apply_table_borders(table: Any, properties: dict[str, Any], header_rows: int) -> None:
+def _border_spec(properties: dict[str, Any]) -> dict[str, str]:
+    """``[table] line_size`` / ``line_color`` → CT_Border 属性（``sz`` 用 1/8 磅）。
+
+    只在用户显式配置时返回；不配置就保持 Word 默认线（避免悄悄改变既有观感）。
+    """
+    spec: dict[str, str] = {}
+    size = properties.get("line_size")
+    if size is not None:
+        length = length_from_text(str(size))
+        if length is None and str(size).strip():
+            try:
+                length = length_from_text(f"{float(str(size).strip())}pt")
+            except ValueError:
+                length = None
+        if length is None:
+            raise DocGenError(
+                E_CONFIG,
+                f"无法解析 [table] line_size: {size!r}（支持 1pt / 0.5pt / 8px）",
+            )
+        spec["sz"] = str(max(2, min(96, round(length.pt * 8))))
+    color = properties.get("line_color")
+    if color is not None:
+        spec["color"] = str(color).lstrip("#").upper() if str(color) != "auto" else "auto"
+    return spec
+
+
+#: 表格可用到的边（与 CT_TblBorders 的元素名一致）
+TABLE_EDGES = ("top", "left", "bottom", "right", "insideH", "insideV")
+
+
+def _table_edges(properties: dict[str, Any], spec: dict[str, str]) -> dict[str, str]:
+    """按 ``[table] style`` + ``[table.edges]`` 算出每条边的线型。"""
     style = properties.get("borders", "three_line")
+    line_style = str(properties.get("line_style", "single"))
+
     if style == "grid":
-        set_table_borders(
-            table,
-            top="single",
-            left="single",
-            bottom="single",
-            right="single",
-            insideH="single",
-            insideV="single",
-        )
-    elif style == "none":
-        set_table_borders(
-            table,
-            top="none",
-            left="none",
-            bottom="none",
-            right="none",
-            insideH="none",
-            insideV="none",
-        )
+        values: dict[str, str] = {edge: line_style for edge in TABLE_EDGES}
+    elif style == "custom":
+        # custom：默认无框线，逐边由 [table.edges] 打开
+        values = {edge: "none" for edge in TABLE_EDGES}
+    else:  # none
+        values = {edge: "none" for edge in TABLE_EDGES}
+
+    overrides = properties.get("edges")
+    if isinstance(overrides, dict):
+        for edge, value in overrides.items():
+            if edge not in TABLE_EDGES:
+                raise DocGenError(
+                    E_CONFIG,
+                    f"[table.edges] 不认识的边: {edge!r}（可用：{', '.join(TABLE_EDGES)}）",
+                )
+            values[edge] = str(value)
+    return values
+
+
+def _apply_table_borders(table: Any, properties: dict[str, Any], header_rows: int) -> None:
+    spec = _border_spec(properties)
+    style = properties.get("borders", "three_line")
+    if style == "three_line":
+        apply_three_line_borders(table, header_rows=header_rows, spec=spec)
     else:
-        apply_three_line_borders(table, header_rows=header_rows)
+        edges = _table_edges(properties, spec)
+        borders: dict[str, Any] = {}
+        for edge, value in edges.items():
+            borders[edge] = {"val": value, **spec} if value != "none" else {"val": "none"}
+        set_table_borders(table, **borders)
+
+    # 行间横线：每行（除最后一行）底部加一条线——Word 没有「行分隔线」概念，
+    # 只能逐单元格写 tcBorders/bottom
+    row_lines = properties.get("row_lines")
+    if row_lines:
+        line = (
+            row_lines if isinstance(row_lines, str) else str(properties.get("line_style", "single"))
+        )
+        for row in list(table.rows)[:-1]:
+            for cell in row.cells:
+                set_cell_border(cell, "bottom", val=line, space="0", **spec)
 
 
 # --------------------------------------------------------------------------
@@ -1077,6 +1167,10 @@ def _render_inline(
         _render_link(state, paragraph, node, context_style)
     elif isinstance(node, Image):
         _add_picture(state, paragraph, node.src)
+    elif isinstance(node, DiagonalHeader):
+        # 表格之外没有斜线的载体：两段文字拼起来当普通文本（不静默丢内容）
+        text = " ".join(part for part in (node.upper, node.lower) if part)
+        paragraph.add_run(text)
 
 
 def _render_link(

@@ -20,6 +20,7 @@ from ..ir import (
     Break,
     Code,
     CodeBlock,
+    DiagonalHeader,
     Footnote,
     Formula,
     Heading,
@@ -118,6 +119,10 @@ def _inline_to_ir(tokens: list[Token]) -> list[InlineNode]:
         elif tok.type == "dfm_sectionbreak":
             # 段落内的分节符没有意义（分节是块级动作），当作硬换行占位
             stack[-1].append(Break())
+        elif tok.type == "dfm_diag":
+            # 用 ; 分隔（不能用 |：那是 GFM 表格的单元格分隔符，会把表格拆坏）
+            upper, _, lower = tok.content.partition(";")
+            stack[-1].append(DiagonalHeader(upper=upper.strip(), lower=lower.strip()))
         elif tok.type == "dfm_ref":
             stack[-1].append(Ref(target=tok.content))
         elif tok.type == "dfm_footnote":
@@ -495,6 +500,8 @@ def _cell_text(inline: Token | None) -> str:
             pieces.append("[[pagebreak]]")
         elif tok.type == "dfm_sectionbreak":
             pieces.append("[[sectionbreak]]")
+        elif tok.type == "dfm_diag":
+            pieces.append(f"[[diag:{tok.content}]]")
         elif tok.type == "dfm_image":
             pieces.append(f"[[img:{tok.content}]]")
     return "".join(pieces)

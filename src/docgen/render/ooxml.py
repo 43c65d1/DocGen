@@ -52,6 +52,7 @@ __all__ = [
     "page_content_width",
     "repeat_table_header",
     "set_cell_alignment",
+    "set_cell_border",
     "set_cell_width",
     "set_list_numbering",
     "set_paragraph_alignment",
@@ -120,7 +121,7 @@ CHILD_ORDER: dict[str, tuple[str, ...]] = {
     ),
     # 框线：``top`` 在 ``left`` 之前、``insideH`` 在最后（schema 如此，别按“上下左右”写）
     "w:tblBorders": _qnames("top start left bottom end right insideH insideV"),
-    "w:tcBorders": _qnames("top start left bottom end right insideH insideV"),
+    "w:tcBorders": _qnames("top start left bottom end right insideH insideV tl2br tr2bl"),
     "w:pBdr": _qnames("top left bottom right between bar"),
     # CT_Settings：``w:updateFields`` 必须按 schema 顺序排（不能 append 到末尾，
     # 否则严格按 schema 解析的实现会忽略它——那样 Word 也不会自动更新域）
@@ -749,8 +750,12 @@ def set_vert_align(cell: Any, align: str = "center") -> None:
     element.set(qn("w:val"), align)
 
 
-def set_table_borders(table: Any, **edges: str) -> None:
-    """设置表格边框：``edges`` 形如 ``top="single"``、``insideH="none"``。
+def set_table_borders(table: Any, **edges: Any) -> None:
+    """设置表格边框：``edges`` 形如 ``top="single"``、``insideH={"val": "none"}``。
+
+    值可以是**线型字符串**（``"single"``/``"none"``/``"dashed"``…），
+    也可以是**属性表**（``{"val": "single", "sz": "8", "color": "000000"}``）。
+    后者用来表达「1pt 黑框」这类需求——只写 ``w:val`` 时粗细/颜色只能吃 Word 默认值。
 
     按 ``CHILD_ORDER`` 的顺序写入——参数书写顺序（如先 bottom 后 left）与 schema 不一致时，
     直接 append 会产出非法顺序，Word 会丢掉后面的边。
@@ -760,17 +765,39 @@ def set_table_borders(table: Any, **edges: str) -> None:
     _write_borders(borders, edges)
 
 
-def _write_borders(borders: Any, edges: dict[str, str]) -> None:
-    ordered = CHILD_ORDER.get(_local_name(borders), ())
-    names = [name for name in ordered if name.split(":")[-1] in edges]
-    names += [f"w:{key}" for key in edges if f"w:{key}" not in names]
-    for name in names:
-        edge = name.split(":")[-1]
+def _normalise_border(value: Any) -> dict[str, str]:
+    """边框值归一化：字符串 → ``{"val": ...}``；属性表原样保留（键不带 ``w:``）。"""
+    if isinstance(value, dict):
+        return {str(key).removeprefix("w:"): str(item) for key, item in value.items()}
+    return {"val": str(value)}
+
+
+def _write_borders(borders: Any, edges: dict[str, Any]) -> None:
+    """按 schema 顺序写边。
+
+    不能直接 append：同一个 ``w:tcBorders`` 可能被调用两次（例如「斜线表头」先写
+    ``tl2br``、随后表头横线再写 ``bottom``），append 会让元素顺序违反
+    ``CT_TcBorders`` 的 sequence，Word 会静默丢掉后面的边。
+    """
+    for edge, value in edges.items():
+        name = f"w:{edge}"
         element = borders.find(qn(name))
         if element is None:
-            element = OxmlElement(name)
-            borders.append(element)
-        element.set(qn("w:val"), edges[edge])
+            element = insert_child(borders, name)
+        for attribute, attribute_value in _normalise_border(value).items():
+            element.set(qn(f"w:{attribute}"), attribute_value)
+
+
+def set_cell_border(cell: Any, edge: str, **spec: Any) -> None:
+    """单元格边框（``w:tcBorders``）：三线表的表头线、斜线表头都靠它。
+
+    ``edge`` 取 ``top``/``left``/``bottom``/``right``/``tl2br``/``tr2bl`` 等；
+    ``spec`` 是 CT_Border 的属性（``val`` / ``sz`` / ``color`` / ``space``）。
+    斜线只有单元格才有（表格级 ``CT_TblBorders`` 没有斜线元素）。
+    """
+    tcpr = cell._tc.get_or_add_tcPr()
+    borders = insert_child(tcpr, "w:tcBorders")
+    _write_borders(borders, {edge: spec})
 
 
 def set_table_cell_width(cell: Any, width: Length) -> None:
@@ -841,31 +868,36 @@ def merge_cell_vertical(table: Any, row: int, column: int, offset: int) -> None:
         insert_child(tcpr, "w:vMerge")
 
 
-def apply_three_line_borders(table: Any, header_rows: int = 1) -> None:
-    """三线表：顶线 + 底线 + 表头下横线；其余框线为 none。"""
+def apply_three_line_borders(
+    table: Any, header_rows: int = 1, spec: dict[str, str] | None = None
+) -> None:
+    """三线表：顶线 + 底线 + 表头下横线；其余框线为 none。
+
+    ``spec`` 是线型属性（``sz``/``color``），用来统一线宽与颜色；
+    不传则保持 Word 默认（表头下横线 1pt）。
+    """
+    spec = dict(spec or {})
+    common = {"val": "single", **spec}
+    none = {"val": "none"}
     set_table_borders(
         table,
-        top="single",
-        bottom="single",
-        left="none",
-        right="none",
-        insideH="none",
-        insideV="none",
+        top=common,
+        bottom=common,
+        left=none,
+        right=none,
+        insideH=none,
+        insideV=none,
     )
     for index in range(header_rows):
         if index < len(table.rows):
-            _set_row_bottom_border(table.rows[index], "single")
+            # 保持既有默认观感：表头下的横线是 1pt（sz=8），可用 [table] line_size 覆盖
+            _set_row_bottom_border(table.rows[index], "single", spec or {"sz": "8"})
 
 
-def _set_row_bottom_border(row: Any, style: str) -> None:
+def _set_row_bottom_border(row: Any, style: str, spec: dict[str, str] | None = None) -> None:
+    spec = dict(spec or {})
     for cell in row.cells:
-        tcpr = cell._tc.get_or_add_tcPr()
-        borders = insert_child(tcpr, "w:tcBorders")
-        bottom = insert_child(borders, "w:bottom")
-        bottom.set(qn("w:val"), style)
-        bottom.set(qn("w:sz"), "8")
-        bottom.set(qn("w:space"), "0")
-        bottom.set(qn("w:color"), "auto")
+        set_cell_border(cell, "bottom", val=style, space="0", **spec)
 
 
 def heading_style_id(level: int) -> str:

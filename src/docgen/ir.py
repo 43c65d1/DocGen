@@ -16,6 +16,7 @@ __all__ = [
     "Break",
     "Code",
     "CodeBlock",
+    "DiagonalHeader",
     "Footnote",
     "Formula",
     "Heading",
@@ -105,7 +106,22 @@ class Footnote(Inline):
     text: str
 
 
-InlineNode = Text | Styled | Code | Math | Link | Image | Break | Ref | Footnote
+@dataclass(frozen=True, slots=True)
+class DiagonalHeader(Inline):
+    """``[[diag:右上;左下]]``：表格单元格的**斜线表头**。
+
+    分隔符用 ``;`` 而不是 ``|``——``|`` 是 GFM 表格的单元格分隔符，
+    写在单元格里会把表格结构拆坏。
+
+    渲染时给单元格加 ``w:tcBorders/w:tl2br`` 斜线（左上→右下），并把两段文字
+    分成两段：右上那段右对齐、左下那段左对齐。
+    """
+
+    upper: str = ""
+    lower: str = ""
+
+
+InlineNode = Text | Styled | Code | Math | Link | Image | Break | Ref | Footnote | DiagonalHeader
 
 
 # --------------------------------------------------------------------------

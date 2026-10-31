@@ -6,6 +6,32 @@
 
 ## [Unreleased]
 
+### 新增（段落间距可配置）
+
+- **`space_before` / `space_after`**：`[document]` / `[styles.*]`（body、headingN、
+  caption）/ `[image]` 都支持，`[table]` 也有同名键。
+  支持两种单位：`"6pt"` / `"12px"` / `"0.2cm"` / 裸数字（按磅）→ `w:before` / `w:after`；
+  `"0.5 line"` / `"1行"` → `w:beforeLines` / `w:afterLines`（百分之一行）。
+  写错单位**报** `E5001`，不再「写了不生效」。
+- **表格与正文不再紧贴**：Word 的表格没有「表格后间距」属性，`[table] space_after`
+  会写到**表格后第一段**的段前距、`space_before` 写到**表格前一段**的段后距。
+  这样「表格底线贴正文」用一行 config 就能解决。
+- 标题只吃「对齐 + 段距」，不会误继承正文的行距与首行缩进；行内样式
+  （`[文字]{.样式名}`）也能承载这四个段落级键。
+
+### 修复（图片与图题必须同页）
+
+- **图片与图题可能被分页拆开**：学术排版里「图在上一页、题注在下一页」是硬伤，
+  但原先只有标题设了 `keepNext`，图片段落什么都没设。
+  现在图片后面紧跟图题时，图片段落自动带 `w:keepNext`、图题段落带 `w:keepLines`，
+  图放不下时会**整体**移到下一页。只在后面确实是图题时才加，避免把正文一起拖走。
+- **图题默认居中**：模板的 `Caption` 样式预置 `w:jc=center`（规范要求图题在图片
+  正下方居中）；`[styles.caption] alignment` 可覆盖，`first_line_chars` 也能用了。
+- 实测（Word 读真实页码）：去掉 `keepNext` 时图片在第 1 页、题注在第 2 页；
+  加上之后两者一起落到第 2 页。
+- 已知边界（[LIMITATIONS.md](LIMITATIONS.md) B14）：表格题注无法强制与表格同页
+  （Word 表格不支持 `keepNext`）；图元注/整图注没有独立入口。
+
 ### 修复（试用人反馈：域缓存值）
 
 - **`SEQ` / `REF` 域的缓存结果全部写死 `"1"`**：Word 打开时会按 `updateFields` 重算，

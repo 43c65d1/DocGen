@@ -167,18 +167,24 @@ def _ensure_caption_styles(document: Any) -> None:
 
 
 def _neutralise_caption_style(document: Any) -> None:
-    """去掉母版 ``Caption`` 的强调外观（颜色/加粗/字号），让它跟正文一致。"""
+    """把母版 ``Caption`` 调成学术排版默认：跟正文同字体、**居中**、不强调。
+
+    为什么要改：python-docx 默认母版的题注是「加粗 + 主题蓝 4F81BD + 9pt」，
+    与「config 是唯一真源」冲突；而且学术报告的图题规范是**图片正下方居中**。
+    这里只给默认值——``[styles.caption]`` 的字号/颜色/对齐仍会覆盖它。
+    """
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.oxml.ns import qn
 
     for style in document.styles:
         if style.name != "Caption":
             continue
         rpr = style.element.find(qn("w:rPr"))
-        if rpr is None:
-            return
-        for name in ("w:b", "w:bCs", "w:color", "w:sz", "w:szCs"):
-            for element in rpr.findall(qn(name)):
-                rpr.remove(element)
+        if rpr is not None:
+            for name in ("w:b", "w:bCs", "w:color", "w:sz", "w:szCs"):
+                for element in rpr.findall(qn(name)):
+                    rpr.remove(element)
+        style.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
         return
 
 

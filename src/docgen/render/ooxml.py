@@ -355,12 +355,13 @@ def set_paragraph_spacing(
     before_points: float | None = None,
     after_points: float | None = None,
     line_spacing: float | None = None,
-    before_lines: int | None = None,
-    after_lines: int | None = None,
+    before_lines: float | None = None,
+    after_lines: float | None = None,
 ) -> None:
-    """段前段后：优先用 ``beforeLines``/``afterLines``（行单位），与钉住的排版细则一致。
+    """段前段后：支持**磅**与**行**两种单位。
 
-    ``beforeLines`` / ``afterLines`` 都是 ``w:spacing`` 的**属性**（顺序也在 ``w:ind`` 之前）。
+    ``beforeLines`` / ``afterLines`` 是 ``w:spacing`` 的**属性**，取值是「百分之一行」：
+    0.5 行 = 50、1 行 = 100（顺序也在 ``w:ind`` 之前）。
     """
     pf = paragraph.paragraph_format
     if before_points is not None:
@@ -371,9 +372,9 @@ def set_paragraph_spacing(
         ppr = paragraph._p.get_or_add_pPr()
         spacing = insert_child(ppr, "w:spacing")
         if before_lines is not None:
-            spacing.set(qn("w:beforeLines"), str(before_lines * 100))
+            spacing.set(qn("w:beforeLines"), str(round(before_lines * 100)))
         if after_lines is not None:
-            spacing.set(qn("w:afterLines"), str(after_lines * 100))
+            spacing.set(qn("w:afterLines"), str(round(after_lines * 100)))
     if line_spacing is not None:
         pf.line_spacing = line_spacing
 

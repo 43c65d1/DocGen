@@ -63,8 +63,43 @@ color = "#222"
 | 用途 | 例 |
 |---|---|
 | 字体 | `font.bold` / `font.color` / `font.name` / `font.size` / `font.italic` |
-| 段落 | `line_spacing` / `first_line_chars` / `alignment` |
+| 段落 | `line_spacing` / `first_line_chars` / `alignment` / `space_before` / `space_after` |
 | 代码块 | `[code_block] background` / `border` |
+
+### 段落间距：`space_before` / `space_after`
+
+`[document]` 给默认值，`[styles.body]` / `[styles.headingN]` / `[styles.caption]`
+按样式覆盖。两种单位：
+
+| 写法 | 产出 | 说明 |
+|---|---|---|
+| `"6pt"` / `"12px"` / `"0.2cm"` / `6`（裸数字按磅） | `w:before` / `w:after` | 绝对长度，1pt = 20 twips |
+| `"0.5 line"` / `"1 line"` / `"2行"` | `w:beforeLines` / `w:afterLines` | 行单位，百分之一行（0.5 行 = 50） |
+
+```toml
+[document]
+space_before = "6pt"
+space_after = "6pt"
+
+[styles.heading1]
+space_before = "1 line"     # 标题前空一行
+space_after = "0.5 line"
+```
+
+写错单位会**报错**（`E5001`）而不是静默丢弃——「写了不生效」曾是最难查的一类问题。
+
+**表格**：Word 的表格没有「表格前/后间距」属性，标准做法是写到**相邻段落**上。
+所以 `[table]` 的间距是这么映射的：
+
+| 配置 | 实际写到 | 效果 |
+|---|---|---|
+| `[table] space_before` | 表格**前**一段的段后距 | 表格与上文隔开 |
+| `[table] space_after` | 表格**后**一段的段前距 | 表格与下文隔开（解决「表格底线贴正文」） |
+
+**图片**：`[image] space_before` / `space_after` 直接作用于图片所在的段落。
+
+行内样式（`[文字]{.样式名}`）的样式里也能写这四个段落级键
+（`alignment` / `first_line_chars` / `space_before` / `space_after`），作用于所在段落。
 
 ### `alignment`：段落对齐
 
@@ -102,6 +137,13 @@ alignment = "center"
 题注段落用的是 Word 内置 `Caption` 样式，所以 `[styles.caption]` 的**字体类**
 属性（`font.name` / `font.size` / `font.color` / `font.bold` …）会写进该样式，
 题注文字与编号一起生效。同理 `[styles.body]` 的字体类属性写进 `Normal`。
+
+段落级键同样生效（与正文共用一套读取）：`alignment`、`first_line_chars`。
+
+- **默认居中**：学术排版规范要求图题在图片正下方居中，模板里的 `Caption` 样式
+  预置了 `w:jc=center`；想左对齐就写 `[styles.caption] alignment = "left"`。
+- **与图片同页**：图片段落自动带 `keepNext`（仅当后面紧跟图题时），图题带
+  `keepLines`，所以两者不会被分页拆开（详见 [docs/word.md](word.md)）。
 
 ### 有序列表编号
 

@@ -73,7 +73,8 @@ first_line_chars = 200     # 首行缩进 2 字符
 |---|---|
 | 中英混排字体回退 | `apply_font` 一次写全四个 `w:rFonts`（ascii/hAnsi/eastAsia/cs） |
 | 首行缩进单位 | 用 `w:firstLineChars`（字符单位），不用 `w:firstLine` |
-| 段前段后单位 | 用 `w:beforeLines` / `w:afterLines` |
+| 段前段后单位 | 行单位用 `w:beforeLines` / `w:afterLines`（属性，百分之一行）；磅用 `w:before` / `w:after` |
+| 表格没有段距属性 | 表格的间距写到**相邻段落**：`[table] space_before` → 前一段的段后距、`space_after` → 后一段的段前距 |
 | 标题不进导航窗格 | 每个 `HeadingN` 样式写 `w:outlineLvl` |
 | 域不自动更新 | `settings.xml` 写 `<w:updateFields w:val="true"/>` |
 | 样式 id 查找 | 用样式**名**（`styles["Heading1"]`）而不是 style_id |
@@ -156,6 +157,26 @@ $$
 \end{equation}
 ```
 
+### 图片与图题：不可分割的整体
+
+学术排版要求图题紧贴图片下方、且**不能跨页**（图在上一页、题注在下一页是硬伤）。
+渲染器为此做了三件事：
+
+| 做法 | OOXML | 效果 |
+|---|---|---|
+| 图片段落 `keepNext`（**仅当下一块是图题**） | `w:keepNext` | 图片与图题同页；图放不下时两者**一起**移到下一页 |
+| 图题段落 `keepLines` | `w:keepLines` | 图题自身不被拆成两半 |
+| 图题样式默认居中 | `Caption` 样式的 `w:jc=center` | 图题在图片正下方居中；`[styles.caption] alignment` 可覆盖 |
+
+> 只在**后面确实是图题**时才加 `keepNext`。图片后面跟的是正文时不加，
+> 否则会把正文段落一起拖到下一页。
+>
+> 实测对照（Word 读真实页码）：去掉 `keepNext` 时图片在第 1 页、题注在第 2 页；
+> 加上之后两者一起落到第 2 页。
+
+**表格题注**没有等价机制：Word 的表格不能靠 `keepNext` 与后续段落绑定，
+所以表格与其题注仍有被分页拆开的可能（见 [LIMITATIONS.md](../LIMITATIONS.md) B14）。
+
 **公式编号**渲染成**无边框三列表格**（左空 / 中公式 / 右编号），编号带书签，
 所以 `[[ref:eq:main]]` 也能引用它。用表格而不是制表位，是因为制表位在不同 Word 版本里表现不一致。
 
@@ -185,6 +206,10 @@ $$
 **W5 已实现**：分节（`[[sections]]` → 纸张/页边距/分节符）、页码体系
 （`w:pgNumType` 格式 + 重启 + 页脚 `PAGE` 域）、页眉页脚（每节独立、`is_linked_to_previous=False`）、
 页面垂直对齐（每节**显式** `w:vAlign`：封面 `center`、正文 `top`）。
+
+**段落间距**：`space_before` / `space_after` 可配（`[document]` / `[styles.*]` /
+`[table]` / `[image]`），支持磅与行两种单位；表格的间距映射到相邻段落
+（Word 表格没有段距属性）。写错单位报 `E5001`，不再静默丢弃。
 
 **W6 部分的实现**：`[output]` 输出与日志系统、`docgen bug-report`、
 `scripts/setup.sh`（自动选可用软件源）与 `scripts/package.sh`（打源码测试版）、

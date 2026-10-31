@@ -14,12 +14,14 @@ W0 覆盖：标题、段落、行内样式、代码块、列表、引用、分�
 from __future__ import annotations
 
 import io
+import re
 from pathlib import Path
 from typing import Any
 
 from docx.oxml import OxmlElement
 
 from ..config import INLINE_STYLE_NAMES, Config, build_style_table
+from ..errors import E_CONFIG, DocGenError
 from ..ir import (
     BlockNode,
     BlockQuote,
@@ -273,16 +275,32 @@ class _RenderState:
 # 块级
 # --------------------------------------------------------------------------
 def _render_blocks(state: _RenderState, blocks: list[BlockNode]) -> None:
-    for block in blocks:
-        _render_block(state, block)
+    for index, block in enumerate(blocks):
+        previous = blocks[index - 1] if index else None
+        following = blocks[index + 1] if index + 1 < len(blocks) else None
+        _render_block(state, block, previous=previous, following=following)
 
 
-def _render_block(state: _RenderState, block: BlockNode) -> None:
+def _render_block(
+    state: _RenderState,
+    block: BlockNode,
+    *,
+    previous: BlockNode | None = None,
+    following: BlockNode | None = None,
+) -> None:
+    """渲染一个块级节点。
+
+    ``previous`` / ``following``：紧邻的前后块，用于两类排版约束：
+
+    - 图片后面的图题：图片段落要 ``keepNext``（见 :func:`_renders_as_caption`）；
+    - 表格前后的段落：Word 表格没有段距属性，间距要写到相邻段落上
+      （见 :func:`_apply_table_gap`）。
+    """
     if isinstance(block, Heading):
-        _render_heading(state, block)
+        _render_heading(state, block, previous=previous, following=following)
     elif isinstance(block, Paragraph):
         paragraph = state.document.add_paragraph()
-        _apply_body_paragraph(state, paragraph)
+        _apply_body_paragraph(state, paragraph, previous=previous, following=following)
         _render_inlines(state, paragraph, block.content, None)
     elif isinstance(block, ListBlock):
         _render_list(state, block)
@@ -291,7 +309,7 @@ def _render_block(state: _RenderState, block: BlockNode) -> None:
     elif isinstance(block, Formula):
         _render_formula(state, block)
     elif isinstance(block, ImageBlock):
-        _render_image_block(state, block)
+        _render_image_block(state, block, following=following)
     elif isinstance(block, ThematicBreak):
         _render_thematic_break(state)
     elif isinstance(block, PageBreak):
@@ -303,41 +321,161 @@ def _render_block(state: _RenderState, block: BlockNode) -> None:
     elif isinstance(block, Table):
         _render_table(state, block)
     elif isinstance(block, NamedBlock):
-        _render_named_block(state, block)
+        _render_named_block(state, block, previous=previous, following=following)
     elif isinstance(block, Toc):
         _render_toc(state)
 
 
-def _render_heading(state: _RenderState, block: Heading) -> None:
+def _renders_as_caption(block: BlockNode | None) -> bool:
+    """这个块会不会渲染成**题注段落**（与 :func:`_render_named_block` 的分支一致）。
+
+    用来判断图片后面是否紧跟图题：是的话图片段落要 ``keepNext``。
+    """
+    if not isinstance(block, NamedBlock) or not block.label:
+        return False
+    from ..numbering import CAPTION_KINDS, caption_kind
+
+    kind = caption_kind(block)
+    # equation 走公式/编号分支，不会渲染成 Caption 段落
+    return kind != "equation" and kind in CAPTION_KINDS
+
+
+def _render_heading(
+    state: _RenderState,
+    block: Heading,
+    *,
+    previous: BlockNode | None = None,
+    following: BlockNode | None = None,
+) -> None:
     level = max(1, min(9, block.level))
     # 用样式「名」（Heading 1）而不是 style_id：python-docx 1.2 起后者会告警
     paragraph = state.document.add_paragraph(style=f"Heading {level}")
     paragraph.paragraph_format.keep_with_next = True
-    # 对齐：``[styles.headingN] alignment`` 优先，``[document] alignment`` 兜底
+    # 标题只吃「对齐 + 段距」：不该继承正文的行距与首行缩进
     properties = {**state.doc_settings, **state.styles.get(f"heading{level}", {})}
-    alignment = properties.get("alignment")
-    if alignment:
-        set_paragraph_alignment(paragraph, _normalise_alignment(str(alignment)))
+    _apply_paragraph_properties(paragraph, properties, keys=("alignment", "space"))
+    _apply_table_gap(state, paragraph, previous=previous, following=following)
     _render_inlines(state, paragraph, block.content, f"heading{level}")
 
 
-def _apply_body_paragraph(state: _RenderState, paragraph: Any) -> None:
+def _apply_body_paragraph(
+    state: _RenderState,
+    paragraph: Any,
+    *,
+    previous: BlockNode | None = None,
+    following: BlockNode | None = None,
+) -> None:
     """正文段落：把 body 样式与 ``[document]`` 的段落级属性写进去。
 
     document 的值作为兜底，body 样式覆盖它（config 只有一个真源，但层级不同）。
     字体类属性不在这里写——它们进 ``Normal`` 样式（见
     :func:`template.apply_document_defaults`），否则每个 run 都要重复一遍。
+
+    ``previous`` / ``following`` 用来实现「表格与相邻段落的间距」：Word 的表格
+    没有段距属性，只能由表格前后的段落各写一条。
     """
     properties = {**state.doc_settings, **state.styles.get("body", {})}
-    spacing = properties.get("line_spacing")
-    if spacing is not None:
-        set_paragraph_spacing(paragraph, line_spacing=float(spacing))
-    indent = properties.get("first_line_chars")
-    if indent is not None:
-        set_paragraph_indent(paragraph, first_line_chars=int(indent))
-    alignment = properties.get("alignment")
-    if alignment:
-        set_paragraph_alignment(paragraph, _normalise_alignment(str(alignment)))
+    _apply_paragraph_properties(paragraph, properties)
+    _apply_table_gap(state, paragraph, previous=previous, following=following)
+
+
+def _apply_paragraph_properties(
+    paragraph: Any,
+    properties: dict[str, Any],
+    *,
+    keys: tuple[str, ...] = ("space", "line_spacing", "first_line_chars", "alignment"),
+) -> None:
+    """写段落级键：段前段后 / ``line_spacing`` / ``first_line_chars`` / ``alignment``。
+
+    ``keys`` 用来限制哪些键生效：标题只取对齐与段距（不该继承正文的行距/首行缩进）。
+
+    正文段落、题注段落共用——两处如果各写一套，很容易只在一处生效
+    （「config 写了但不生效」的老毛病）。
+    """
+    if "space" in keys:
+        before = properties.get("space_before")
+        if before is not None:
+            _apply_space(paragraph, "before", before)
+        after = properties.get("space_after")
+        if after is not None:
+            _apply_space(paragraph, "after", after)
+    if "line_spacing" in keys:
+        spacing = properties.get("line_spacing")
+        if spacing is not None:
+            set_paragraph_spacing(paragraph, line_spacing=float(spacing))
+    if "first_line_chars" in keys:
+        indent = properties.get("first_line_chars")
+        if indent is not None:
+            set_paragraph_indent(paragraph, first_line_chars=int(indent))
+    if "alignment" in keys:
+        alignment = properties.get("alignment")
+        if alignment:
+            set_paragraph_alignment(paragraph, _normalise_alignment(str(alignment)))
+
+
+#: 段前段后的行单位写法：``0.5 line`` / ``1行``（也接受 ``lines``）
+_LINE_UNIT = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*(?:lines?|行)\s*$", re.IGNORECASE)
+
+
+def _apply_space(paragraph: Any, edge: str, value: Any) -> None:
+    """按 config 值写段前/段后；单位决定走 ``w:before`` 还是 ``w:beforeLines``。
+
+    - ``"6pt"`` / ``"12px"`` / ``"0.2cm"`` / 裸数字（按磅）→ ``w:before`` / ``w:after``；
+    - ``"0.5 line"`` / ``"1行"`` → ``w:beforeLines`` / ``w:afterLines``（百分之一行）。
+
+    解析失败时**报错**而不是静默丢弃——「写了不生效」正是这次要消灭的问题。
+    """
+    match = _LINE_UNIT.match(str(value))
+    if match:
+        lines = float(match.group(1))
+        if edge == "before":
+            set_paragraph_spacing(paragraph, before_lines=lines)
+        else:
+            set_paragraph_spacing(paragraph, after_lines=lines)
+        return
+
+    text = str(value).strip()
+    length = length_from_text(text)
+    if length is None:
+        try:
+            length = length_from_text(f"{float(text)}pt")
+        except ValueError:
+            length = None
+    if length is None:
+        raise DocGenError(
+            E_CONFIG,
+            f"无法解析段前/段后数值: {value!r}（支持 6pt / 12px / 0.2cm / 0.5 line）",
+        )
+    if edge == "before":
+        set_paragraph_spacing(paragraph, before_points=length.pt)
+    else:
+        set_paragraph_spacing(paragraph, after_points=length.pt)
+
+
+def _apply_table_gap(
+    state: _RenderState,
+    paragraph: Any,
+    *,
+    previous: BlockNode | None,
+    following: BlockNode | None,
+) -> None:
+    """表格与相邻段落的间距（``[table] space_before`` / ``space_after``）。
+
+    Word 的表格**没有**「表格前/后间距」属性，标准做法是：表格**前**的段落写段后距、
+    表格**后**的段落写段前距。这里就按这个约定映射，于是「表格底线与正文紧贴」
+    可以用一行 config 解决。
+    """
+    if not isinstance(previous, Table) and not isinstance(following, Table):
+        return
+    properties = _table_properties(state)
+    if isinstance(previous, Table):
+        value = properties.get("space_after")
+        if value is not None:
+            _apply_space(paragraph, "before", value)
+    if isinstance(following, Table):
+        value = properties.get("space_before")
+        if value is not None:
+            _apply_space(paragraph, "after", value)
 
 
 #: config 里常见的对齐写法 → OOXML ``w:jc`` 的取值
@@ -448,13 +586,28 @@ def _render_formula(state: _RenderState, block: Formula) -> None:
     paragraph.add_run(block.latex.strip()).font.italic = True
 
 
-def _render_image_block(state: _RenderState, block: ImageBlock) -> None:
+def _render_image_block(
+    state: _RenderState, block: ImageBlock, *, following: BlockNode | None = None
+) -> None:
+    """块级图片。紧跟图题时把两者绑成**不可跨页**的整体。
+
+    学术排版的基本要求：图片与它的图题必须同页、图题紧贴图片下方。
+    Word 里靠 ``w:keepNext``（段落与下一段同页）实现——原先只有标题设了它，
+    图片没有，于是分页时会出现「图片在上一页、图题在下一页」。
+    """
     paragraph = state.document.add_paragraph()
     width = block.width or _image_setting(state, "width")
     align = block.align or _image_setting(state, "align")
     if align:
         set_paragraph_alignment(paragraph, align)
+    # 图片与正文的间距：``[image] space_before`` / ``space_after``
+    for key, edge in (("space_before", "before"), ("space_after", "after")):
+        value = _image_setting(state, key)
+        if value:
+            _apply_space(paragraph, edge, value)
     _add_picture(state, paragraph, block.src, width=width)
+    if _renders_as_caption(following):
+        paragraph.paragraph_format.keep_with_next = True
 
 
 def _image_setting(state: _RenderState, key: str) -> str:
@@ -523,12 +676,21 @@ def _render_block_quote(state: _RenderState, block: BlockQuote) -> None:
             _render_block(state, child)
 
 
-def _render_named_block(state: _RenderState, block: NamedBlock) -> None:
+def _render_named_block(
+    state: _RenderState,
+    block: NamedBlock,
+    *,
+    previous: BlockNode | None = None,
+    following: BlockNode | None = None,
+) -> None:
     """命名块容器。
 
     - ``equation`` 带 ``number`` 属性 → 无边框三列表格（公式编号，W3）
     - ``caption``/``table``/``equation`` 带 ``#id`` → 题注（书签 + SEQ 域）
     - 其余情况：内容照常渲染
+
+    ``previous`` / ``following`` 只对题注有用：表格题注也要吃
+    ``[table] space_before/space_after``（表格间距写在相邻段落上）。
     """
     kind = caption_kind(block)
     if kind == "equation":
@@ -537,7 +699,7 @@ def _render_named_block(state: _RenderState, block: NamedBlock) -> None:
             _render_numbered_formula(state, block)
             return
     elif block.label and kind in CAPTION_KINDS:
-        _render_caption(state, block)
+        _render_caption(state, block, previous=previous, following=following)
         return
     for child in block.content:
         _render_block(state, child)
@@ -594,11 +756,22 @@ def _fill_formula_cell(state: _RenderState, cell: Any, formula: Formula) -> None
     paragraph.add_run(formula.latex.strip()).font.italic = True
 
 
-def _render_caption(state: _RenderState, block: NamedBlock) -> None:
+def _render_caption(
+    state: _RenderState,
+    block: NamedBlock,
+    *,
+    previous: BlockNode | None = None,
+    following: BlockNode | None = None,
+) -> None:
     from ..numbering import CAPTION_KINDS, caption_kind
 
     label = CAPTION_KINDS[caption_kind(block)]
     paragraph = state.document.add_paragraph(style="Caption")
+    # 题注本身不能被分页拆开（两行的图题跨页读起来就是断的）
+    paragraph.paragraph_format.keep_together = True
+    # 段落级样式键（对齐/缩进/段距）也要吃 config，与正文段落同一套语义
+    _apply_paragraph_properties(paragraph, state.styles.get("caption", {}))
+    _apply_table_gap(state, paragraph, previous=previous, following=following)
     append_text(paragraph, f"{label} ")
     append_field(
         paragraph,
@@ -996,12 +1169,20 @@ def _render_styled(
 
 
 def _apply_inline_paragraph_style(paragraph: Any, properties: dict[str, Any]) -> None:
-    """把行内样式里的**段落级**键写到所在段落（``alignment`` / ``first_line_chars``）。
+    """把行内样式里的**段落级**键写到所在段落。
+
+    支持 ``alignment`` / ``first_line_chars`` / ``space_before`` / ``space_after``。
 
     为什么允许：正文段落统一套 ``first_line_chars``（中文首行缩进 2 字符），
     但封面署名、图表标题这类段落需要 0 缩进或居中，而 DFM 没有块级样式语法。
-    ``[文字]{.样式名}`` 是唯一能「就近指到某个样式」的写法，所以让它承载这两个键。
+    ``[文字]{.样式名}`` 是唯一能「就近指到某个样式」的写法，所以让它承载这些键。
     """
+    before = properties.get("space_before")
+    if before is not None:
+        _apply_space(paragraph, "before", before)
+    after = properties.get("space_after")
+    if after is not None:
+        _apply_space(paragraph, "after", after)
     alignment = properties.get("alignment")
     if alignment:
         set_paragraph_alignment(paragraph, _normalise_alignment(str(alignment)))

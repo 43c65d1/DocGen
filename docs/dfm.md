@@ -128,3 +128,7 @@ print("hi")          <!-- 内部可以再出现 ``` -->
 多级编号、题注、交叉引用、目录、脚注、**合并单元格的表格语法**、数学渲染
 （HTML 只占位或 MathJax）、`\begin{...}` 命名块、Word/OOXML —— 都留给第二题。
 （斜线表头已有：单元格里写 `[[diag:右上;左下]]`，见 §行内。）
+
+**内容 include（把另一个文件插入正文）也未实现**：目前只有 config 的 `include`
+（合并 TOML）。需求已登记在 [LIMITATIONS.md](../LIMITATIONS.md) B16，两种候选形式
+（DFM 片段解析插入 / `w:altChunk` 整块插入）待定。

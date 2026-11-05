@@ -256,7 +256,8 @@ $$
 三份面向使用者的文档（QUICKSTART / LIMITATIONS / FEEDBACK）。
 
 **仍未实现**：`docgen init --preset` 预设库、`docgen format`、
-视觉回归（LibreOffice headless 对比）、公式图片降级（matplotlib）。
+视觉回归（LibreOffice headless 对比）、公式图片降级（matplotlib）、
+**内容 include（把外部文件插入正文；DFM 片段 / `w:altChunk` 整块两种形式待定）**。
 完整清单见 [LIMITATIONS.md](../LIMITATIONS.md)。
 
 ## 三个容易被误判为缺陷的行为

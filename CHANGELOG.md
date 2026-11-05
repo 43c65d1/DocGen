@@ -6,6 +6,23 @@
 
 ## [Unreleased]
 
+### 修复（表头孤行：表头不再单独留在页底）
+
+- **表头与首行数据强制同页**：Word 允许在任意两行之间分页，原先「跨页重复表头」
+  只保证表头在下一页重复，却挡不住**表头单独留在上一页页底**。
+  实测（宋体 11pt / 1.5 倍行距，A4，填充 17 段把表格推到页底）：
+  修复前表头在第 1 页、首行数据在第 2 页；修复后两者都在第 2 页。
+- 实现：表头行每个单元格段落写 `w:keepNext`（等价 Word「与下段同页」），
+  表头行写 `w:trPr/w:cantSplit`（行内不分页），并保留 `w:tblHeader`（跨页重复）；
+  `CT_TrPr` 是 sequence，`cantSplit` 排在 `tblHeader` 之前（`insert_child` 保证）。
+- 新增 `[table] header_keep_with_body`（默认 `true`）：关掉才会允许表头孤行。
+  只有一行的表格不做 keepNext（避免把纯表头表和表后正文绑在一起）。
+- 新增 `tests/test_table_header.py`（7 项）：表头行 `cantSplit`/`tblHeader` 顺序、
+  表头段落 keepNext、可关闭、单行表不绑定、非法布尔报 `E5001`、合并单元格路径同样生效。
+- 文档：[word.md](docs/word.md) 新增「表头不能孤行」一节（含实测对照表）、
+  [config.md](docs/config.md) / [cheatsheet.md](docs/cheatsheet.md) /
+  [manual.md](docs/manual.md) 补字段与默认行为。
+
 ### 新增（生成后自动转 PDF）
 
 - **`docgen build --pdf`**：docx 生成后自动转 PDF（同目录同名 `out.docx → out.pdf`）。

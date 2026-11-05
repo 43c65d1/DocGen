@@ -79,6 +79,7 @@ first_line_chars = 200     # 首行缩进 2 字符
 | 域不自动更新 | `settings.xml` 写 `<w:updateFields w:val="true"/>` |
 | 样式 id 查找 | 用样式**名**（`styles["Heading1"]`）而不是 style_id |
 | 标点跑到行首（避头尾失效） | 写 `docDefaults/w:lang/@w:eastAsia`（`zh-CN`）+ `w:kinsoku` / `w:overflowPunct` + `characterSpacingControl=compressPunctuation`，见下文「避头尾」 |
+| 表头单独留在页底 | 表头行段落写 `w:keepNext`，表头行写 `w:trPr/w:cantSplit`，见下文「表头不能孤行」 |
 
 ## 避头尾（行首行尾禁则）
 
@@ -299,6 +300,38 @@ row_lines = true           # 或 row_lines = "dashed"
 - **斜线**只有单元格级元素（`w:tcBorders/tl2br`）：DFM 里写
   `| [[diag:年份;项目]] | … |`（分隔符 `;`，不能用 `|`），渲染成「斜线 + 右上/左下两段文字」。
   `CT_TcBorders` 是 sequence，`tl2br` 必须排在 `bottom` 之后——顺序错了 Word 静默丢线。
+
+### 表头不能孤行（表头单独留在页底）
+
+Word 允许表格在**任意两行之间**分页，所以表头可能单独占上一页的页底
+（表头在第 1 页、首行数据在第 2 页）——这是学位论文/学术出版明确要求
+避免的「表头孤行」（表头在功能上等同于标题类元素，不能只留自己）。
+
+**实测**（Word 2016+，宋体 11pt / 1.5 倍行距，A4，填充 17 段把表格推到页底）：
+
+| 版本 | 表头页 | 首行数据页 | 结果 |
+|---|---|---|---|
+| 修复前 | 1 | 2 | ❌ 表头孤行 |
+| 修复后 | 2 | 2 | ✅ 表头与首行同页 |
+
+实现（表头行）：
+
+- **`w:keepNext`**：表头单元格里每个段落都写「与下段同页」——表头必须和
+  下一行一起，这是「表头不孤行」的核心（等价于 Word 里勾选「与下段同页」）。
+- **`w:trPr/w:cantSplit`**：表头行本身不允许被分页切成两半。
+- **`w:trPr/w:tblHeader`**：跨页后重复表头（原有能力）。
+- `CT_TrPr` 是 sequence，`cantSplit` 必须排在 `tblHeader` 之前。
+
+配置：
+
+```toml
+[table]
+header_keep_with_body = true   # 默认 true：表头与首行同页
+header_repeat = true           # 默认 true：跨页重复表头
+```
+
+> 只有一行的表格不做 keepNext（纯表头表不该和表后正文绑在一起）。
+> `header_keep_with_body = false` 时表头可能孤行——只用于特殊版式。
 
 ### 标题自动编号（可关）
 

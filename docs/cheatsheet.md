@@ -102,6 +102,7 @@ logfile = ""
 |---|---|---|
 | `style` | `three_line` | `grid` / `none` / `custom` |
 | `header_repeat` | `true` | `false` |
+| `header_keep_with_body` | `true` | 表头与首行同页（防「表头孤行」） |
 | `col_widths` | 均分 | `[3, 2, 5]` |
 | `line_style` | `single` | `double` / `dashed` / `dotted` |
 | `line_size` | 母版（表头线 1pt） | `"1pt"` / `"0.5pt"` / `"8px"` |
@@ -218,7 +219,7 @@ docgen bug-report --output r.txt                            # 打包环境信息
 | 正文 | 主题字体 11pt、段后 10pt、1.15 倍行距、无首行缩进、左对齐 |
 | 标题 1 / 2 / 3+ | 14pt 粗 `365F91` / 13pt 粗 `4F81BD` / 11pt 粗 `4F81BD`；自动编号 |
 | 行内 `**粗**` 等 | **无格式**（config 不声明就不加粗/倾斜/删除线） |
-| 表格 | 三线表（顶/底 + 表头下 1pt 横线）、表头加粗、跨页重复表头、列宽均分 |
+| 表格 | 三线表（顶/底 + 表头下 1pt 横线）、表头加粗、跨页重复表头、列宽均分；表头与首行同页（不孤行） |
 | 图片 | 原始尺寸、左对齐、无段距 |
 | 题注 | `Caption` 样式：跟正文同字体、**居中**、`SEQ` 自动编号 |
 | 避头尾 | **开启**：`zh-CN` 禁则 + 标点压缩，标点不会出现在行首 |

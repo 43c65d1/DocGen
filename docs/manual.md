@@ -153,12 +153,14 @@ alignment = "center"
 
 ## 7. 表格：`[table]`
 
-默认（不写 `[table]`）：**三线表** + 表头加粗 + 跨页重复表头 + 列宽均分正文宽度。
+默认（不写 `[table]`）：**三线表** + 表头加粗 + 跨页重复表头 + 列宽均分正文宽度；
+**表头与首行数据同页**（表头不孤行）。
 
 | 字段 | 默认 | 说明 |
 |---|---|---|
 | `style` | `three_line` | `three_line` / `grid` / `none` / `custom` |
 | `header_repeat` | `true` | 跨页时表头重复 |
+| `header_keep_with_body` | `true` | 表头与首行同页：表头段落 `keepNext` + 表头行 `cantSplit`。关掉会出现「表头单独留在页底」的排版缺陷 |
 | `col_widths` | 均分 | 相对比例数组，如 `[3, 2, 5]` |
 | `line_style` | `single` | 线型：`single` / `double` / `dashed` / `dotted` / `none` |
 | `line_size` | 母版默认（表头线 1pt） | 线宽：`"1pt"` / `"0.5pt"` / `"8px"`（1/8 磅换算） |

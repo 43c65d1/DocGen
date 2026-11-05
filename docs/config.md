@@ -108,6 +108,8 @@ line_size = "1pt"               # 1pt / 0.5pt / 8px（转 1/8 磅）
 line_color = "000000"           # 000000 / 999999 / auto
 row_lines = false               # true 或线型：每行底部一条横线
 edges = { ... }                 # 仅 style = "custom"：逐边线型
+header_repeat = true            # 跨页重复表头（默认）
+header_keep_with_body = true    # 表头与首行同页，防止「表头孤行」（默认）
 ```
 
 - `edges` 可用的边：`top` `left` `bottom` `right` `insideH` `insideV`；
@@ -115,6 +117,9 @@ edges = { ... }                 # 仅 style = "custom"：逐边线型
 - `line_size` / `line_color` 对预设（`grid` / `three_line`）与 `custom` 都生效。
 - **斜线表头**：单元格里写 `[[diag:右上;左下]]`（分隔符 `;`），
   渲染成 `w:tcBorders/tl2br` + 两段文字（右上右对齐、左下左对齐）。
+- `header_keep_with_body`：表头行段落写 `w:keepNext`，强制表头与首行数据同页；
+  表头行另写 `cantSplit`（行内不分页）。**默认开启，不建议关**——关掉会出现
+  「表头单独留在页底」的排版缺陷（实测数据见 [word.md](word.md) 的「表头不能孤行」）。
 - 表格与正文的间距仍用 `[table] space_before` / `space_after`（写到相邻段落）。
 
 > 完整字段表见 [cheatsheet.md](cheatsheet.md)，默认效果与边界见 [manual.md](manual.md)。

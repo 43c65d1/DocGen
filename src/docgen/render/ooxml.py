@@ -61,6 +61,7 @@ __all__ = [
     "set_paragraph_indent",
     "set_paragraph_shading",
     "set_paragraph_spacing",
+    "set_row_cant_split",
     "set_run_color",
     "set_run_shading",
     "set_run_size",
@@ -115,6 +116,11 @@ CHILD_ORDER: dict[str, tuple[str, ...]] = {
         "tblStyle tblpPr tblOverlap bidiVisual tblStyleRowBandSize tblStyleColBandSize "
         "tblW jc tblCellSpacing tblInd tblBorders shd tblLayout tblCellMar tblLook "
         "tblCaption tblDescription tblPrChange"
+    ),
+    # 行属性：``cantSplit`` 必须在 ``tblHeader`` 之前（CT_TrPr 是 sequence）
+    "w:trPr": _qnames(
+        "cnfStyle divId gridBefore gridAfter wBefore wAfter cantSplit trHeight "
+        "tblHeader tblCellSpacing jc hidden ins del trPrChange"
     ),
     "w:tcPr": _qnames(
         "cnfStyle tcW gridSpan hMerge vMerge tcBorders shd noWrap tcMar textDirection "
@@ -847,8 +853,18 @@ def set_table_width(table: Any, widths: list[int]) -> None:
 def repeat_table_header(row: Any) -> None:
     """重复表头：``w:trPr/w:tblHeader``，跨页时表头自动重复。"""
     trpr = row._tr.get_or_add_trPr()
-    if trpr.find(qn("w:tblHeader")) is None:
-        trpr.append(OxmlElement("w:tblHeader"))
+    # 走 insert_child：``cantSplit`` 可能先写进来，append 会造出非法顺序
+    insert_child(trpr, "w:tblHeader")
+
+
+def set_row_cant_split(row: Any) -> None:
+    """行内禁止分页：``w:trPr/w:cantSplit``。
+
+    默认 Word 允许一行跨页断开（比如一行很高时被切成两半），排版上通常不希望；
+    表头行尤其不能拆开。
+    """
+    trpr = row._tr.get_or_add_trPr()
+    insert_child(trpr, "w:cantSplit")
 
 
 def merge_cell_horizontal(table: Any, row: int, column: int, span: int = 1) -> None:

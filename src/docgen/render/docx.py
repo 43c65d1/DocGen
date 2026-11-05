@@ -82,6 +82,7 @@ from .ooxml import (
     set_paragraph_indent,
     set_paragraph_shading,
     set_paragraph_spacing,
+    set_row_cant_split,
     set_run_shading,
     set_table_borders,
     set_table_width,
@@ -893,10 +894,47 @@ def _render_table(state: _RenderState, block: Table) -> None:
                 for run in cell.paragraphs[0].runs:
                     run.bold = True
             _apply_cell_format(cell, widths[column_index], _column_alignment(block, column_index))
-        if row_index == 0 and bool(properties.get("header_repeat", True)):
-            repeat_table_header(table.rows[0])
 
+    _apply_table_header_behavior(table, properties)
     _apply_table_borders(table, properties, header_rows=1)
+
+
+def _table_flag(properties: dict[str, Any], key: str, default: bool) -> bool:
+    """``[table]`` 里的布尔开关；非法值明确报错（不静默当真）。"""
+    value = properties.get(key)
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in ("true", "1", "yes", "on"):
+        return True
+    if text in ("false", "0", "no", "off"):
+        return False
+    raise DocGenError(E_CONFIG, f"[table] {key} 需要 true/false，收到 {value!r}")
+
+
+def _apply_table_header_behavior(table: Any, properties: dict[str, Any]) -> None:
+    """表头排版：行内不分页 + 与下一行同页 + 跨页重复。
+
+    为什么需要「与下一行同页」：Word 允许在任意两行之间分页，所以表头可能
+    **单独**留在上一页底部（实测：表头第 1 页、首行数据第 2 页）。给表头行的
+    每个段落写 ``w:keepNext``，表头就必须和下一行留在同一页——这就是
+    「表头不孤行」（学位论文/学术出版规范普遍要求）。
+
+    ``cantSplit`` 保证表头行本身不被切成两半；``tblHeader`` 保证跨页后重复表头。
+    只有一行的表格不做 keepNext（否则会把这一行和表后正文绑在一起）。
+    """
+    if len(table.rows) == 0:
+        return
+    header = table.rows[0]
+    set_row_cant_split(header)
+    if len(table.rows) > 1 and _table_flag(properties, "header_keep_with_body", True):
+        for cell in header.cells:
+            for paragraph in cell.paragraphs:
+                paragraph.paragraph_format.keep_with_next = True
+    if _table_flag(properties, "header_repeat", True):
+        repeat_table_header(header)
 
 
 def _render_diagonal_cell(
@@ -974,9 +1012,8 @@ def _render_cell_table(state: _RenderState, block: Table) -> None:
                         merge_cell_vertical(table, row_index, column_index, offset)
                 _write_cell_content(state, cell, cell_spec)
             column_index += max(1, cell_spec.colspan)
-        if row_index == 0 and bool(properties.get("header_repeat", True)):
-            repeat_table_header(table.rows[0])
 
+    _apply_table_header_behavior(table, properties)
     _apply_table_borders(table, properties, header_rows=1)
 
 

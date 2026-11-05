@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import importlib
 import os
 import shutil
 import subprocess
@@ -63,11 +64,16 @@ def word_available() -> bool:
 
     用注册表 ``Word.Application`` 判断，而不是真的起一个 Word 进程——
     探测要快，且不应在每次 build 时启动 Office。
+
+    为什么用 ``importlib`` 动态导入 ``winreg``：``winreg`` 在 typeshed 里是
+    **仅 Windows 平台**才暴露成员，CI 在 Linux 上跑 mypy（``--platform linux``）
+    会报 ``Module has no attribute "OpenKey"``。动态导入并把结果标成 ``Any``
+    两个平台都能通过类型检查（本机 Windows 实测 CI 失败即此原因）。
     """
     if os.name != "nt":
         return False
     try:
-        import winreg
+        winreg: Any = importlib.import_module("winreg")
     except ImportError:  # pragma: no cover - 非 Windows 走不到
         return False
     try:

@@ -18,11 +18,12 @@ def test_error_code_constants() -> None:
     assert errors.E_MATH_CONVERSION == "E5002"
     assert errors.E_SECTION_CONFIG == "E5003"
     assert errors.E_UNKNOWN_REF == "E5004"
+    assert errors.E_PDF == "E5005"
 
 
 def test_all_error_codes_are_unique_and_well_formed() -> None:
     codes = [value for name, value in vars(errors).items() if name.startswith("E_")]
-    assert len(codes) == len(set(codes)) == 12
+    assert len(codes) == len(set(codes)) == 13
     assert all(len(code) == 5 and code[0] == "E" and code[1:].isdigit() for code in codes)
 
 

@@ -94,6 +94,7 @@ render ──► ir + config（渲染层不认识解析器，也不回读源文�
 | `render/sections.py` | 分节（`[[sectionbreak]]` 按需建节）/ 页面设置 / 页码 / 页眉页脚 / 封面 | 改版式 |
 | `render/math.py` | LaTeX → MathML → OMML | 改公式 |
 | `render/footnotes.py` | 脚注部件生成与注入 | 改脚注 |
+| `pdf.py` | docx → PDF（Word COM / LibreOffice 探测与调用） | 加 PDF 引擎/改转换参数 |
 | `units.py` | 长度/字号单位换算（cm/mm/in/pt/px ↔ twips/EMU） | 改单位 |
 | `canonical.py` | 金标准解析器（交叉验证用，独立实现） | 改解析规则时**同步** |
 

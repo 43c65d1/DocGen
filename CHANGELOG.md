@@ -6,6 +6,29 @@
 
 ## [Unreleased]
 
+### 新增（生成后自动转 PDF）
+
+- **`docgen build --pdf`**：docx 生成后自动转 PDF（同目录同名 `out.docx → out.pdf`）。
+  配套 `--no-pdf`（覆盖 config）与 `--pdf-engine auto|word|libreoffice`。
+- **`[pdf]` 配置段**：`enabled`（默认 `false`）、`engine`（默认 `auto`）、
+  `timeout`（默认 120 秒）。
+- 引擎选择：优先 **Word**（Windows COM，保真最高：分页/字体/域按 Word 计算，
+  不需要 pywin32），其次 **LibreOffice**（`soffice`，可用 `DOCGEN_SOFFICE` 指定路径）；
+  都没有时明确报 `E5005` 并给出修复建议。
+- PDF 转换失败**保留已生成的 docx**；新增退出码 **3**（环境/外部工具错误）。
+- LibreOffice 转换使用独立 `UserInstallation` 临时配置，不与运行中的实例抢锁。
+- 新增 `src/docgen/pdf.py` 与 `tests/test_pdf.py`（20 项：引擎探测与优先级、
+  Word 脚本转义、`[pdf]` 配置校验、`convert()` 行为、CLI 开关与错误码）。
+- Word 实测：`--pdf` → `out.pdf`（126 KB / 1 页）；`[pdf] enabled=true` 自动转；
+  `--no-pdf` 覆盖；`--pdf-engine libreoffice` 无 `soffice` → `E5005` / 退出码 3。
+- 相对路径也安全：传给 Word 前统一 `resolve()` 成绝对路径——
+  Word 的 COM 按自己的进程工作目录（常是 `C:\WINDOWS\system32`）解析相对路径，
+  `docgen build -o t.docx --pdf` 原本会报「找不到文件」（包内端到端测试踩到）。
+- 文档：`cheatsheet.md`（`--pdf`、`[pdf]` 字段表、错误码/退出码）、
+  `config.md`（`[pdf]` 段）、`manual.md`（PDF 输出一节）、
+  `README.md`（用法示例）、`HANDOFF.md`（模块地图）、
+  `LIMITATIONS.md`（B11 改为「依赖外部引擎」）。
+
 ### 新增（避头尾：标点不再出现在行首）
 
 - **默认开启中文避头尾（行首行尾禁则）与标点压缩**。实测根因是

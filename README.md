@@ -70,6 +70,9 @@ docgen check input.md -c config.toml --json
 docgen build input.md -c config.toml -o output.docx
 docgen build input.md -c config.toml -o output.docx --format docx
 
+# 生成后自动转 PDF（优先 Word，其次 LibreOffice；没有引擎会报 E5005）
+docgen build input.md -c config.toml -o output.docx --pdf
+
 # 输出控制（全局开关放在子命令前）：只影响终端，不影响 [output] logfile
 docgen -q build input.md -c config.toml -o out.docx          # 终端只出 err
 docgen -v build input.md -c config.toml -o out.docx          # 终端出 log 级

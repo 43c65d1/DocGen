@@ -279,6 +279,40 @@ DFM 语法（IR 支持 `colspan/rowspan`，但解析器不产生）。
 
 命令行 `-q` / `-v` / `--logfile` 覆盖它们；`level = "none"` 只静默打印，**退出码照常**。
 
+## 12.5 PDF 输出：`[pdf]`
+
+docx 是唯一真源；PDF 是**后处理**（先出 docx，再交给外部引擎转）。默认不转。
+
+```toml
+[pdf]
+enabled = true          # build 时自动转（默认 false）
+engine = "auto"         # auto / word / libreoffice
+timeout = 120           # 秒
+```
+
+命令行（优先级最高）：
+
+```bash
+docgen build in.md -c c.toml -o out.docx --pdf             # 生成 out.pdf
+docgen build in.md -c c.toml -o out.docx --pdf --pdf-engine word
+docgen build in.md -c c.toml -o out.docx --no-pdf          # 覆盖 enabled=true
+```
+
+| 引擎 | 依赖 | 特点 |
+|---|---|---|
+| `word` | Windows + 已装 Microsoft Word | **保真最高**：分页/字体/域按 Word 计算；`ExportAsFixedFormat` |
+| `libreoffice` | `soffice`（PATH 或 `DOCGEN_SOFFICE`） | 跨平台；渲染细节与 Word 有差异（**会忽略右页边距**） |
+| `auto` | 自动挑 | 优先 `word`，其次 `libreoffice` |
+
+要点：
+
+- PDF 失败**不会删掉已生成的 docx**；报 `E5005`，退出码 **3**（环境错误）。
+- LibreOffice 转换用独立 `UserInstallation` 临时配置目录，不会和正在运行的
+  LibreOffice 抢锁。
+- 版式验收以 Word 为准：LibreOffice 的 PDF 只适合看内容，不适合当分页依据。
+- Windows 上 Word 引擎通过 PowerShell COM 调用，**不需要** pywin32；
+  PowerShell 5.1 与 7 都支持。
+
 ## 13. 错误码
 
 | 码 | 含义 |
@@ -295,6 +329,7 @@ DFM 语法（IR 支持 `colspan/rowspan`，但解析器不产生）。
 | `E5002` | 数学转换失败 |
 | `E5003` | 分节配置错误 |
 | `E5004` | 编号 / 交叉引用目标不存在 |
+| `E5005` | PDF 转换失败（无可用引擎 / 外部工具报错 / 超时） |
 
 `docgen check --strict` 会把 `E3001` / `E2001` / `E4001` 一并报出。
 

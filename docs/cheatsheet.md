@@ -136,6 +136,13 @@ logfile = ""
 | `logfile` | 无 | 日志文件 |
 | `logfile_level` | `log` | 文件阈值 |
 
+### `[pdf]`
+| 字段 | 默认 | 说明 |
+|---|---|---|
+| `enabled` | `false` | `true` = build 后自动转 PDF（也可用 `--pdf`） |
+| `engine` | `auto` | `auto`（优先 Word）/ `word` / `libreoffice` |
+| `timeout` | `120` | 秒；超时报 `E5005` |
+
 ### `[math]`
 | 字段 | 默认 | 说明 |
 |---|---|---|
@@ -179,13 +186,17 @@ logfile = ""
 ```bash
 docgen check  input.md -c config.toml [--strict] [--json]   # 校验
 docgen build  input.md -c config.toml -o out.docx           # 生成 .docx
+docgen build  input.md -c config.toml -o out.docx --pdf     # 同时转 out.pdf
 docgen dump-ir input.md                                     # 看解析出的 IR（排查语法）
 docgen dump-styles -c config.toml                           # 看展开后的样式（排查样式）
 docgen bug-report --output r.txt                            # 打包环境信息
 ```
 
+`--pdf` 的配套：`--pdf-engine auto|word|libreoffice`（缺省 `auto`，优先 Word）、
+`--no-pdf`（覆盖 `[pdf] enabled = true`）。
+
 全局开关放在子命令**前**：`-q` / `-v` / `--logfile FILE`。
-退出码：`0` 成功 / `1` 内容错误 / `2` 用法或 config 错误 / `130` 中断。
+退出码：`0` 成功 / `1` 内容错误 / `2` 用法或 config 错误 / `3` 环境错误（PDF 转换失败）/ `130` 中断。
 
 ## 6. 错误码
 
@@ -197,6 +208,7 @@ docgen bug-report --output r.txt                            # 打包环境信息
 | `E2001` | 未知语言 | `E5002` | 公式转换失败 |
 | `E2010` | keywords 非法 | `E5003` | 分节配置错误 |
 | `E3001` | 标记未闭合 | `E5004` | 引用目标不存在 |
+| `E5005` | PDF 转换失败 | | |
 
 ## 7. 不写 config 时的默认效果
 
@@ -210,6 +222,7 @@ docgen bug-report --output r.txt                            # 打包环境信息
 | 图片 | 原始尺寸、左对齐、无段距 |
 | 题注 | `Caption` 样式：跟正文同字体、**居中**、`SEQ` 自动编号 |
 | 避头尾 | **开启**：`zh-CN` 禁则 + 标点压缩，标点不会出现在行首 |
+| PDF | **不生成**（需 `--pdf` 或 `[pdf] enabled = true`） |
 | 代码块 | Consolas、1.0 行距、无底纹/边框 |
 | 行内代码 | Consolas + 底纹 `F2F2F2` |
 | 分节 | 单节、无页眉页脚、无页码 |

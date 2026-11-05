@@ -30,7 +30,7 @@ from pathlib import Path
 
 from .config import Config, build_style_tree, load_config, render_table
 from .diagnostics import with_diagnostics
-from .errors import E_CONFIG, DocGenError
+from .errors import E_CONFIG, E_PDF, DocGenError
 from .ir import BlockNode
 from .ir import Table as TableBlock
 from .normalize import normalize_text
@@ -42,6 +42,7 @@ from .validate import validate_content
 EXIT_OK = 0
 EXIT_CONTENT_ERROR = 1
 EXIT_CONFIG_ERROR = 2
+EXIT_ENV_ERROR = 3  # 环境/外部工具错误（如 PDF 引擎缺失或转换失败）
 
 #: 回退版本号（包未安装时用）。改版本请改 pyproject.toml——这里是兜底，
 #: 两者一致性由 tests/test_release.py::test_version_matches_pyproject 守住。
@@ -124,11 +125,16 @@ def _build(
     output: Path,
     config_path: Path | None = None,
     fmt: str | None = None,
+    *,
+    pdf: bool = False,
+    no_pdf: bool = False,
+    pdf_engine: str | None = None,
 ) -> int:
-    """DFM + config -> docx（完整版手册 §11）。
+    """DFM + config -> docx（完整版手册 §11），可选再转 PDF。
 
-    只产出 Word（``.docx``）。``--format`` 目前只接受 ``docx``，
-    传别的值会明确报错（历史上支持过 HTML，已移除）。
+    ``--pdf`` / ``[pdf] enabled = true`` 会在 docx 生成后调用
+    :func:`docgen.pdf.convert`；``--no-pdf`` 优先级最高。
+    PDF 失败时 docx **保留**，错误码 ``E5005``（退出码 3）。
     """
     source = _read_source(path)
     blocks = parse_dfm(source)
@@ -148,7 +154,32 @@ def _build(
     except OSError as exc:
         raise DocGenError(E_CONFIG, f"无法写入输出文件: {output}: {exc}") from None
     _OUTPUT.results(f"已生成 {output}（{target}，{len(blocks)} 个块级节点）")
+
+    if _pdf_wanted(config, pdf=pdf, no_pdf=no_pdf):
+        _write_pdf(output, config, engine=pdf_engine)
     return EXIT_OK
+
+
+def _pdf_wanted(config: Config, *, pdf: bool, no_pdf: bool) -> bool:
+    """PDF 开关优先级：``--no-pdf`` > ``--pdf`` > ``[pdf] enabled``。"""
+    if no_pdf:
+        return False
+    if pdf:
+        return True
+    from .pdf import pdf_settings
+
+    enabled, _, _ = pdf_settings(config)
+    return enabled
+
+
+def _write_pdf(output: Path, config: Config, *, engine: str | None) -> None:
+    from .pdf import convert, pdf_settings
+
+    _, configured_engine, timeout = pdf_settings(config)
+    chosen = engine or configured_engine
+    pdf_path = output.with_suffix(".pdf")
+    result = convert(output, pdf_path, engine=chosen, timeout=timeout)
+    _OUTPUT.results(f"已生成 {result.path}（PDF，引擎 {result.engine}）")
 
 
 def _resolve_format(fmt: str | None) -> str:
@@ -339,6 +370,22 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="输出格式（目前只支持 docx）",
     )
+    build.add_argument(
+        "--pdf",
+        action="store_true",
+        help="生成 docx 后自动转 PDF（与 docx 同目录同名）",
+    )
+    build.add_argument(
+        "--no-pdf",
+        action="store_true",
+        help="不转 PDF（覆盖 config 的 [pdf] enabled = true）",
+    )
+    build.add_argument(
+        "--pdf-engine",
+        choices=("auto", "word", "libreoffice"),
+        default=None,
+        help="PDF 引擎：auto（默认，优先 Word）/ word / libreoffice",
+    )
 
     dump_styles = sub.add_parser("dump-styles", help="输出展开后的样式表")
     dump_styles.add_argument("-c", "--config", type=Path, required=True, help="config.toml（必需）")
@@ -406,7 +453,15 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "dump-ir":
             _dump_ir(args.input)
         elif args.cmd == "build":
-            exit_code = _build(args.input, args.output, args.config, args.fmt)
+            exit_code = _build(
+                args.input,
+                args.output,
+                args.config,
+                args.fmt,
+                pdf=args.pdf,
+                no_pdf=args.no_pdf,
+                pdf_engine=args.pdf_engine,
+            )
         elif args.cmd == "dump-styles":
             _dump_styles(args.config, args.raw)
         elif args.cmd == "check":
@@ -415,7 +470,12 @@ def main(argv: list[str] | None = None) -> int:
             exit_code = _bug_report(args.output, config_path)
     except DocGenError as err:
         _OUTPUT.error(str(err))
-        exit_code = EXIT_CONFIG_ERROR if err.code == E_CONFIG else EXIT_CONTENT_ERROR
+        if err.code == E_CONFIG:
+            exit_code = EXIT_CONFIG_ERROR
+        elif err.code == E_PDF:
+            exit_code = EXIT_ENV_ERROR
+        else:
+            exit_code = EXIT_CONTENT_ERROR
     except KeyboardInterrupt:  # pragma: no cover - 人工中断
         _OUTPUT.error("已中断")
         exit_code = 130

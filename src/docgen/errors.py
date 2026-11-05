@@ -16,6 +16,7 @@ E_CONFIG = "E5001"  # config / 母版缺失或版本不符
 E_MATH_CONVERSION = "E5002"  # 数学转换失败
 E_SECTION_CONFIG = "E5003"  # 分节配置错误
 E_UNKNOWN_REF = "E5004"  # 编号 / 交叉引用不存在
+E_PDF = "E5005"  # PDF 转换失败（没有可用引擎 / 外部工具报错 / 超时）
 
 
 class DocGenError(Exception):

@@ -225,6 +225,28 @@ logfile_level = "log"   # 文件阈值，**独立于终端**（通常更详细�
   环境变量里的 `*_TOKEN`、`*_PASSWORD` 等敏感键会被过滤。
 - CLI 的 `-q` / `-v` / `--logfile` **只影响终端**，不改文件内的级别。
 
+## `[pdf]`：生成后自动转 PDF
+
+docx 是唯一真源；PDF 是后处理（先出 docx，再交外部引擎转）。默认关闭。
+
+```toml
+[pdf]
+enabled = false         # true = build 时自动转（也可用 --pdf）
+engine = "auto"         # auto / word / libreoffice
+timeout = 120           # 秒
+```
+
+| 引擎 | 依赖 | 说明 |
+|---|---|---|
+| `word` | Windows + Microsoft Word | 保真最高（分页/字体/域按 Word 算）；不需要 pywin32 |
+| `libreoffice` | `soffice`（PATH 或 `DOCGEN_SOFFICE`） | 跨平台；会忽略右页边距，不适合当分页依据 |
+| `auto`（默认） | — | 优先 Word，其次 LibreOffice；都没有报 `E5005` |
+
+- PDF 输出路径 = docx 同目录同名（`out.docx` → `out.pdf`）。
+- 优先级：`--no-pdf` > `--pdf` > `[pdf] enabled`；`--pdf-engine` 覆盖 `engine`。
+- 转换失败**不会删已生成的 docx**，报 `E5005`、退出码 3；非法配置报 `E5001`。
+- 版式验收以 Word 为准，LibreOffice 的 PDF 只适合看内容。
+
 ## `[inline]`：语义名 -> 样式名映射
 
 Markdown/DFM 语法产出的是**语义名**（`**粗体**` → `strong` 等），默认**同名**，

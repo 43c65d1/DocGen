@@ -6,6 +6,26 @@
 
 ## [Unreleased]
 
+### 新增（避头尾：标点不再出现在行首）
+
+- **默认开启中文避头尾（行首行尾禁则）与标点压缩**。实测根因是
+  `python-docx` 自带模板的 `docDefaults` 写着 `w:lang w:eastAsia="en-US"`、
+  `characterSpacingControl="doNotCompress"`——此时 Word 即使「避头尾」开着，
+  `）」` 仍会出现在行首（225 字压力段落里 2 处）。
+  引擎现在默认写 `eastAsia="zh-CN"` + `w:kinsoku` / `w:overflowPunct`
+  （`true`）+ `compressPunctuation`，同一段文本 **0 处**行首标点。
+  实测对照：仅加 `kinsoku`/`overflowPunct` 仍 2 处；再加压缩 1 处；
+  语言改 `zh-CN` 后 0 处——**语言标记是决定性因素**。
+- 新增 `[document]` 配置键：`east_asia_lang`（默认 `zh-CN`，可换 `zh-TW` / `ja-JP` /
+  `ko-KR`）、`kinsoku`、`overflow_punct`、`compress_punctuation`、`auto_space`。
+  非法语言标记或布尔值报 `E5001`（不静默取默认）。
+- 设置写在 `settings.xml`（按 `CT_Settings` 的 sequence 插入）与
+  `styles.xml` 的 `docDefaults`；模板构建路径同样生效。
+- 新增 `tests/test_typography.py`（9 项）：默认全开、语言可换、
+  各开关可关、`settings` 子元素顺序符合 schema、非法值报错。
+- 文档：`word.md` 新增「避头尾」一节（含实测表）、`config.md` / `cheatsheet.md` /
+  `manual.md` 补字段与默认效果。
+
 ### 新增（表格线可配 + 斜线表头）
 
 - **表格线不再只有三个预设**：新增

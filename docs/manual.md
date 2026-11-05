@@ -31,6 +31,15 @@
 | `alignment` | 无（继承） | 段落对齐，会被 `[styles.*]` 覆盖，见 §3 |
 | `space_before` / `space_after` | 无 | 段前/段后，见 §3 |
 | `hr.style` / `hr.color` / `hr.size` | `single` / `auto` / `6`（0.75pt） | `---` 分隔线的线型/颜色/粗细 |
+| `east_asia_lang` | `zh-CN` | 避头尾用哪套禁则表（`zh-TW` / `ja-JP` / `ko-KR`） |
+| `kinsoku` / `overflow_punct` | 开 / 开 | 行首尾禁则、行尾标点溢出边界 |
+| `compress_punctuation` | 开 | 标点压缩（优先挤回上一行） |
+| `auto_space` | 开 | 中西文/中文与数字自动留白 |
+
+> **避头尾**：引擎默认写 `docDefaults/eastAsia="zh-CN"` 并打开上述开关，
+> 标点不会落到行首。实测：模板原样（`en-US` + `doNotCompress`）有 2 处行首标点，
+> 改成 `zh-CN` 后 0 处——**语言标记才是决定性因素**，只写 `kinsoku` 不够。
+> 细节与实测表见 [word.md](word.md) 的「避头尾」一节。
 
 > `font.*` 是点号键，展开后是嵌套表。`[document] font.name = "宋体"` 与
 > `[document.font] name = "宋体"` 等价。

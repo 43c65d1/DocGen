@@ -54,6 +54,7 @@ __all__ = [
     "set_cell_alignment",
     "set_cell_border",
     "set_cell_width",
+    "set_document_language",
     "set_list_numbering",
     "set_paragraph_alignment",
     "set_paragraph_border",
@@ -898,6 +899,30 @@ def _set_row_bottom_border(row: Any, style: str, spec: dict[str, str] | None = N
     spec = dict(spec or {})
     for cell in row.cells:
         set_cell_border(cell, "bottom", val=style, space="0", **spec)
+
+
+def set_document_language(document: Any, *, east_asia: str) -> None:
+    """改 ``docDefaults`` 的东亚语言（``w:lang/@w:eastAsia``）。
+
+    为什么这决定断行：Word 的「行首行尾禁则」按**东亚语言**取用禁则表。
+    ``docDefaults`` 是 ``en-US`` 时，即使 ``w:kinsoku`` 开着，
+    ``）」`` 仍会出现在行首（实测 2 处）；改成 ``zh-CN`` 后同一段文本 0 处。
+    详见 :func:`template.apply_east_asian_typography`。
+    """
+    styles = getattr(getattr(document, "styles", None), "element", None)
+    if styles is None:
+        return
+    doc_defaults = styles.find(qn("w:docDefaults"))
+    if doc_defaults is None:
+        return
+    rpr_default = doc_defaults.find(qn("w:rPrDefault"))
+    rpr = rpr_default.find(qn("w:rPr")) if rpr_default is not None else None
+    if rpr is None:
+        return
+    lang = rpr.find(qn("w:lang"))
+    if lang is None:
+        lang = insert_child(rpr, "w:lang")
+    lang.set(qn("w:eastAsia"), east_asia)
 
 
 def heading_style_id(level: int) -> str:

@@ -69,6 +69,10 @@ logfile = ""
 | `alignment` | 继承 | `"center"` |
 | `space_before` / `space_after` | 无 | `"6pt"` / `"0.5 line"` |
 | `hr.style` / `hr.color` / `hr.size` | `single` / `auto` / `6` | — |
+| `east_asia_lang` | `"zh-CN"` | 避头尾用哪套禁则表；`zh-TW` / `ja-JP` |
+| `kinsoku` / `overflow_punct` | `true` / `true` | 行首尾禁则、行尾标点溢出 |
+| `compress_punctuation` | `true` | 标点压缩（优先挤回上一行） |
+| `auto_space` | `true` | 中西文/中文与数字自动留白 |
 
 ### `[styles.*]`（`body`、`heading1..9`、`caption`、`strong`、`em`、`strike`、`sup`、`sub`、任意名）
 | 字段 | 作用 |
@@ -205,6 +209,7 @@ docgen bug-report --output r.txt                            # 打包环境信息
 | 表格 | 三线表（顶/底 + 表头下 1pt 横线）、表头加粗、跨页重复表头、列宽均分 |
 | 图片 | 原始尺寸、左对齐、无段距 |
 | 题注 | `Caption` 样式：跟正文同字体、**居中**、`SEQ` 自动编号 |
+| 避头尾 | **开启**：`zh-CN` 禁则 + 标点压缩，标点不会出现在行首 |
 | 代码块 | Consolas、1.0 行距、无底纹/边框 |
 | 行内代码 | Consolas + 底纹 `F2F2F2` |
 | 分节 | 单节、无页眉页脚、无页码 |

@@ -122,6 +122,25 @@ edges = { ... }                 # 仅 style = "custom"：逐边线型
 行内样式（`[文字]{.样式名}`）的样式里也能写这四个段落级键
 （`alignment` / `first_line_chars` / `space_before` / `space_after`），作用于所在段落。
 
+### 中文排版：避头尾 / 标点压缩
+
+默认全开——正式中文文档里「标点出现在行首」是排版差错：
+
+```toml
+[document]
+east_asia_lang = "zh-CN"        # 决定 Word 用哪套禁则表（zh-TW / ja-JP / ko-KR）
+kinsoku = true                  # 按中文习惯控制首尾字符（避头尾）
+overflow_punct = true           # 行尾标点允许溢出边界
+compress_punctuation = true     # 标点压缩：优先把标点挤回上一行
+auto_space = true               # 中西文、中文与数字之间自动留白
+```
+
+为什么需要这些：`python-docx` 自带模板的 `docDefaults` 是 `eastAsia="en-US"`，
+此时 Word 即使「避头尾」开着，仍会把 `）」` 放到行首；改成 `zh-CN` 后同一段文本
+从 2 处降为 0 处（实测数据见 [word.md](word.md) 的「避头尾」一节）。
+
+值写错会报 `E5001`（`kinsoku = "maybe"`、`east_asia_lang = "chinese"` 都报错）。
+
 ### `alignment`：段落对齐
 
 `[document] alignment` 是**默认值**，`[styles.body] alignment` / `[styles.headingN] alignment`

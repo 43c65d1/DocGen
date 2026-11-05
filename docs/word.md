@@ -78,6 +78,45 @@ first_line_chars = 200     # 首行缩进 2 字符
 | 标题不进导航窗格 | 每个 `HeadingN` 样式写 `w:outlineLvl` |
 | 域不自动更新 | `settings.xml` 写 `<w:updateFields w:val="true"/>` |
 | 样式 id 查找 | 用样式**名**（`styles["Heading1"]`）而不是 style_id |
+| 标点跑到行首（避头尾失效） | 写 `docDefaults/w:lang/@w:eastAsia`（`zh-CN`）+ `w:kinsoku` / `w:overflowPunct` + `characterSpacingControl=compressPunctuation`，见下文「避头尾」 |
+
+## 避头尾（行首行尾禁则）
+
+中文排版里「句号、逗号、右引号、右括号在行首」是明确差错（GB/T 15834 的禁则）。
+Word **不会**自动替你做好——它看的是**文档默认语言**和 East Asian 排版开关：
+
+| 开关 | 写入位置 | 作用 |
+|---|---|---|
+| `w:lang/@w:eastAsia` | `styles.xml` → `docDefaults` | **决定用哪套禁则表**（关键） |
+| `w:kinsoku` | `settings.xml` | 按中文习惯控制行首/行尾字符 |
+| `w:overflowPunct` | `settings.xml` | 行尾标点允许溢出边界 |
+| `w:characterSpacingControl` | `settings.xml` | `compressPunctuation` = 标点压缩 |
+
+`python-docx` 自带模板里是 `eastAsia="en-US"` + `doNotCompress`——这正是问题根源：
+语言是 en-US 时，即使 `w:kinsoku` 开着，`）」` 仍会出现在行首。
+
+**实测**（Word 2016+，225 字标点密集段落，宋体 11pt / 1.5 倍行距）：
+
+| 设置 | 行首标点 |
+|---|---|
+| 母版原样（`en-US` + `doNotCompress`） | **2 处**（`）」`、`）`） |
+| 只加 `kinsoku` / `overflowPunct` | 2 处 |
+| 再加 `compressPunctuation` | 1 处 |
+| 再把 `eastAsia` 改成 `zh-CN` | **0 处** |
+
+所以引擎默认写 `eastAsia="zh-CN"` + 全开这几项。可用 config 覆盖：
+
+```toml
+[document]
+east_asia_lang = "zh-CN"        # zh-TW / ja-JP / ko-KR
+kinsoku = true                  # 关掉 = 写 w:kinsoku val=false
+overflow_punct = true
+compress_punctuation = true     # 关掉 = doNotCompress
+auto_space = true               # 中西文/中文与数字自动留白（autoSpaceDE/DN）
+```
+
+注意：断行最终由**查看器**实现。Word 按上述设置正确处理；LibreOffice / WPS /
+网页预览各有自己的断行规则，验证时以 Word 为准（导出 PDF 后逐行看首个字符）。
 
 ## 母版（手册 §14.1）
 

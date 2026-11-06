@@ -113,6 +113,7 @@ logfile = ""
 | `line_color` | `auto` | `"000000"` |
 | `edges` | 无（仅 `custom` 用） | `{ top = "single", insideH = "dashed" }` |
 | `row_lines` | `false` | `true` / `"dashed"`（每行底部横线） |
+| `decimal_align` | 无（不对齐） | `[2, 4]`：数值列按小数点/个位对齐 |
 | `space_before` / `space_after` | 无 | 表格与上下文间距 |
 
 `edges` 可用的边：`top` `left` `bottom` `right` `insideH` `insideV`。

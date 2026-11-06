@@ -40,5 +40,7 @@ examples/*/output.docx
 .tmp/
 .tmp-pytest/
 .pytest-tmp/
-.self-use/
 pytest-tmp/
+
+# 自用文件夹
+.self-use/

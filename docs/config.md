@@ -114,7 +114,12 @@ row_lines = false               # true 或线型：每行底部一条横线
 edges = { ... }                 # 仅 style = "custom"：逐边线型
 header_repeat = true            # 跨页重复表头（默认）
 header_keep_with_body = true    # 表头与首行同页，防止「表头孤行」（默认）
+decimal_align = [2]             # 数值列（1 起）：小数点/个位对齐，可多列
 ```
+
+- **数值对齐**：`decimal_align = [2, 4]` 让这些列的数据行按小数点对齐，
+  整数行按个位对齐（只处理纯数字；表头与非数字单元格保持原样）。
+  实现细节与 Word 实测见 [word.md](word.md) 的「数值列」。有效位数一致属于内容，工具不检查。
 
 - **三线表粗细**：顶/底粗、栏目线细，三者必须**有区分**（默认 1.5pt / 0.5pt）；
   各期刊磅值不同，用 `outer_line_size` / `header_line_size` 覆盖。

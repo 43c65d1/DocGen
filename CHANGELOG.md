@@ -18,6 +18,9 @@
 - 限制：只处理纯数字（`12` / `12.34` / `-0.5`）；`N/A`、带单位、科学计数法保持原样；
   有效位数一致属于内容层面，工具不检查。
 - 测试：新增 `tests/test_table_decimal.py`（8 项）。
+- 文档：[word.md](docs/word.md)「数值列」一节（含实测表与两个 Word 坑）、
+  [config.md](docs/config.md) / [cheatsheet.md](docs/cheatsheet.md) /
+  [manual.md](docs/manual.md) 补字段。
 
 ### 修复（三线表线宽反了 + 辅助线 / 二线表）
 

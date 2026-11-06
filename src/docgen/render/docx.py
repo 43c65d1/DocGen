@@ -876,6 +876,7 @@ def _render_table(state: _RenderState, block: Table) -> None:
     set_table_width(table, widths)
     aux_spec = _three_line_aux_spec(properties)
     aux_style = str(properties.get("line_style", "single"))
+    decimal_columns = _decimal_columns(properties, columns)
     for row_index, row in enumerate(block.rows):
         # 辅助线：任一单元格写了 [[aux]]，整行上方加线（三线表的「合计线」）
         aux_row = any(
@@ -894,7 +895,15 @@ def _render_table(state: _RenderState, block: Table) -> None:
                     stripped = nodes[0].content.lstrip()
                     nodes = [Text(content=stripped), *nodes[1:]]
             diagonal = next((node for node in nodes if isinstance(node, DiagonalHeader)), None)
-            if diagonal is not None:
+            aligned = False
+            if row_index > 0 and diagonal is None and column_index in decimal_columns:
+                # 数值列：按小数点/个位对齐（表头不参与，保持原对齐）
+                plain = "".join(node.content for node in nodes if isinstance(node, Text)).strip()
+                if plain:
+                    aligned = _render_decimal_cell(cell.paragraphs[0], plain, widths[column_index])
+            if aligned:
+                pass
+            elif diagonal is not None:
                 # 斜线表头：线 + 两段文字（右上/左下），不能按普通 run 渲染
                 _render_diagonal_cell(state, cell, diagonal, properties)
             elif nodes:
@@ -1123,6 +1132,68 @@ def _line_points(value: Any, label: str) -> float:
             f"无法解析 {label}: {value!r}（支持 1.5pt / 0.5pt / 8px）",
         )
     return float(length.pt)
+
+
+#: 数值单元格：可选正负号 + 整数 + 可选小数；不匹配的单元格保持原样
+_DECIMAL_RE = re.compile(r"^([+-]?)(\d+)(?:\.(\d+))?$")
+
+
+def _decimal_columns(properties: dict[str, Any], columns: int) -> set[int]:
+    """``[table] decimal_align = [2, 3]``：按 1 起的列号做小数点/个位对齐。"""
+    raw = properties.get("decimal_align")
+    if raw is None:
+        return set()
+    if not isinstance(raw, list) or not all(
+        isinstance(item, int) and not isinstance(item, bool) for item in raw
+    ):
+        raise DocGenError(
+            E_CONFIG, f"[table] decimal_align 需要列号数组（1 起），如 [2, 3]；收到 {raw!r}"
+        )
+    for item in raw:
+        if not 1 <= item <= columns:
+            raise DocGenError(
+                E_CONFIG, f"[table] decimal_align 列号越界: {item}（表格共 {columns} 列）"
+            )
+    return {item - 1 for item in raw}
+
+
+def _render_decimal_cell(paragraph: Any, text: str, width_twips: int) -> bool:
+    """数值对齐：整数部分右对齐到制表位、小数部分左对齐到同一点。
+
+    为什么不用 Word 的 ``w:tab w:val="decimal"``：实测在**表格单元格**里 Word
+    不执行 decimal 对齐（正文段落却正常）；「right tab + left tab 同位置」在
+    单元格里稳定生效——Word 实测小数点坐标一致，整数则按个位对齐。
+
+    只处理纯数字（``12`` / ``12.34`` / ``-0.5``）；``N/A``、带单位等保持原样。
+    """
+    match = _DECIMAL_RE.fullmatch(text.strip())
+    if match is None:
+        return False
+    sign, integer, fraction = match.groups()
+    # 制表位距单元格右边缘约 0.5 英寸（720 twips），保证常见数值放得下。
+    # 注意：位置恰好落在 Word **默认制表位**（每 720 twips 一个）上时，
+    # Word 会把它当作默认左制表位而丢掉对齐效果（实测 3600 失败、3540 正常），
+    # 所以整数倍要错开 60 twips。
+    stop = max(1, width_twips - 720)
+    if stop % 720 == 0:
+        stop = max(1, stop - 60)
+    ppr = paragraph._p.get_or_add_pPr()
+    from docx.oxml.ns import qn
+
+    from .ooxml import insert_child
+
+    tabs = insert_child(ppr, "w:tabs")
+    for value in ("right", "left") if fraction is not None else ("right",):
+        element = OxmlElement("w:tab")
+        element.set(qn("w:val"), value)
+        element.set(qn("w:pos"), str(stop))
+        tabs.append(element)
+    paragraph.add_run().add_tab()
+    paragraph.add_run(sign + integer)
+    if fraction is not None:
+        paragraph.add_run().add_tab()
+        paragraph.add_run("." + fraction)
+    return True
 
 
 def _line_spec(

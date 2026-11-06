@@ -104,7 +104,11 @@ space_after = "0.5 line"
 [table]
 style = "three_line"            # three_line / grid / none / custom
 line_style = "single"           # single / double / dashed / dotted / none
-line_size = "1pt"               # 1pt / 0.5pt / 8px（转 1/8 磅）
+line_size = "1pt"               # 统一线宽（三线表下为旧行为：三条线都用它）
+outer_line_size = "1.5pt"       # 顶线/底线（粗，默认 1.5pt）
+header_line_size = "0.5pt"      # 栏目线（细，默认 0.5pt）
+aux_line_size = "0.5pt"         # 辅助线（默认同栏目线）
+header_line = true              # false = 二线表（无栏目线）
 line_color = "000000"           # 000000 / 999999 / auto
 row_lines = false               # true 或线型：每行底部一条横线
 edges = { ... }                 # 仅 style = "custom"：逐边线型
@@ -112,6 +116,12 @@ header_repeat = true            # 跨页重复表头（默认）
 header_keep_with_body = true    # 表头与首行同页，防止「表头孤行」（默认）
 ```
 
+- **三线表粗细**：顶/底粗、栏目线细，三者必须**有区分**（默认 1.5pt / 0.5pt）；
+  各期刊磅值不同，用 `outer_line_size` / `header_line_size` 覆盖。
+  `line_size` 是统一线宽（旧行为），优先级：具体键 > `line_size` > 默认。
+- **二线表**：`header_line = false`，只保留顶线与底线（横向阅读逻辑更适用）。
+- **辅助线**：竖线/横线之外，`[[aux]]` 写在某行任一单元格里，给该行**上方**加一条
+  辅助线（合计 / 小计 / 统计处理结果行），线宽由 `aux_line_size` 控制。
 - `edges` 可用的边：`top` `left` `bottom` `right` `insideH` `insideV`；
   未写的边默认 `none`。写错边名报 `E5001`。
 - `line_size` / `line_color` 对预设（`grid` / `three_line`）与 `custom` 都生效。

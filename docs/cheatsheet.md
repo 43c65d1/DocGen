@@ -105,13 +105,18 @@ logfile = ""
 | `header_keep_with_body` | `true` | 表头与首行同页（防「表头孤行」） |
 | `col_widths` | 均分 | `[3, 2, 5]` |
 | `line_style` | `single` | `double` / `dashed` / `dotted` |
-| `line_size` | 母版（表头线 1pt） | `"1pt"` / `"0.5pt"` / `"8px"` |
+| `outer_line_size` | `1.5pt`（顶/底粗线） | `"1pt"` |
+| `header_line_size` | `0.5pt`（栏目线细线） | `"0.75pt"` |
+| `aux_line_size` | 同栏目线 | `"0.5pt"`（`[[aux]]` 辅助线） |
+| `header_line` | `true` | `false` = 二线表 |
+| `line_size` | 无（统一线宽） | `"1pt"` / `"0.5pt"` / `"8px"` |
 | `line_color` | `auto` | `"000000"` |
 | `edges` | 无（仅 `custom` 用） | `{ top = "single", insideH = "dashed" }` |
 | `row_lines` | `false` | `true` / `"dashed"`（每行底部横线） |
 | `space_before` / `space_after` | 无 | 表格与上下文间距 |
 
 `edges` 可用的边：`top` `left` `bottom` `right` `insideH` `insideV`。
+`[[aux]]` 写在单元格里 = 该行上方加辅助线（合计行常用），标记不渲染文字。
 
 ### `[image]`
 | 字段 | 默认 | 例 |
@@ -219,7 +224,7 @@ docgen bug-report --output r.txt                            # 打包环境信息
 | 正文 | 主题字体 11pt、段后 10pt、1.15 倍行距、无首行缩进、左对齐 |
 | 标题 1 / 2 / 3+ | 14pt 粗 `365F91` / 13pt 粗 `4F81BD` / 11pt 粗 `4F81BD`；自动编号 |
 | 行内 `**粗**` 等 | **无格式**（config 不声明就不加粗/倾斜/删除线） |
-| 表格 | 三线表（顶/底 + 表头下 1pt 横线）、表头加粗、跨页重复表头、列宽均分；表头与首行同页（不孤行） |
+| 表格 | 三线表（顶/底 1.5pt 粗线、栏目线 0.5pt 细线）、表头加粗、跨页重复表头、列宽均分；表头与首行同页（不孤行） |
 | 图片 | 原始尺寸、左对齐、无段距 |
 | 题注 | `Caption` 样式：跟正文同字体、**居中**、`SEQ` 自动编号 |
 | 避头尾 | **开启**：`zh-CN` 禁则 + 标点压缩，标点不会出现在行首 |

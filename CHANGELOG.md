@@ -21,6 +21,9 @@
   （横向阅读逻辑的表格更适用）。
 - 测试：`tests/test_table_borders.py` 扩充（23 项）：默认标准线宽、可配线宽、
   `line_size` 统一覆盖、二线表、`[[aux]]` 加线 / 去标记 / 线宽跟随与覆盖。
+- 文档：[word.md](docs/word.md) 新增「三线表的标准线宽」一节（含 Word 实测）、
+  [config.md](docs/config.md) / [cheatsheet.md](docs/cheatsheet.md) /
+  [manual.md](docs/manual.md) 补字段；[dfm.md](docs/dfm.md) 登记 `[[aux]]`。
 
 ### 修复（表头孤行：表头不再单独留在页底）
 

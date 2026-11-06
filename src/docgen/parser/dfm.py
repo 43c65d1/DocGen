@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from markdown_it import MarkdownIt
 
 from ..ir import (
+    AuxLine,
     BlockNode,
     BlockQuote,
     Break,
@@ -123,6 +124,8 @@ def _inline_to_ir(tokens: list[Token]) -> list[InlineNode]:
             # 用 ; 分隔（不能用 |：那是 GFM 表格的单元格分隔符，会把表格拆坏）
             upper, _, lower = tok.content.partition(";")
             stack[-1].append(DiagonalHeader(upper=upper.strip(), lower=lower.strip()))
+        elif tok.type == "dfm_aux":
+            stack[-1].append(AuxLine())
         elif tok.type == "dfm_ref":
             stack[-1].append(Ref(target=tok.content))
         elif tok.type == "dfm_footnote":
@@ -502,6 +505,9 @@ def _cell_text(inline: Token | None) -> str:
             pieces.append("[[sectionbreak]]")
         elif tok.type == "dfm_diag":
             pieces.append(f"[[diag:{tok.content}]]")
+        elif tok.type == "dfm_aux":
+            # 辅助线标记不是文字，纯文本视图里直接省略
+            continue
         elif tok.type == "dfm_image":
             pieces.append(f"[[img:{tok.content}]]")
     return "".join(pieces)

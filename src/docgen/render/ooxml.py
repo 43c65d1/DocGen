@@ -886,15 +886,22 @@ def merge_cell_vertical(table: Any, row: int, column: int, offset: int) -> None:
 
 
 def apply_three_line_borders(
-    table: Any, header_rows: int = 1, spec: dict[str, str] | None = None
+    table: Any,
+    header_rows: int = 1,
+    *,
+    spec: dict[str, str] | None = None,
+    header_spec: dict[str, str] | None = None,
+    draw_header: bool = True,
+    style: str = "single",
 ) -> None:
-    """三线表：顶线 + 底线 + 表头下横线；其余框线为 none。
+    """三线表：顶线 + 底线 + 栏目线；其余框线为 none。
 
-    ``spec`` 是线型属性（``sz``/``color``），用来统一线宽与颜色；
-    不传则保持 Word 默认（表头下横线 1pt）。
+    标准三线表的粗细是**顶/底粗、栏目线细**（常见 1.5pt / 0.5pt）。
+    ``spec`` 管顶/底线，``header_spec`` 管栏目线；``draw_header=False`` 时
+    不画栏目线 → 退化成**二线表**（顶线 + 底线，适合横向阅读逻辑的表格）。
     """
-    spec = dict(spec or {})
-    common = {"val": "single", **spec}
+    outer = dict(spec or {})
+    common = {"val": style, **outer}
     none = {"val": "none"}
     set_table_borders(
         table,
@@ -905,10 +912,11 @@ def apply_three_line_borders(
         insideH=none,
         insideV=none,
     )
+    if not draw_header:
+        return
     for index in range(header_rows):
         if index < len(table.rows):
-            # 保持既有默认观感：表头下的横线是 1pt（sz=8），可用 [table] line_size 覆盖
-            _set_row_bottom_border(table.rows[index], "single", spec or {"sz": "8"})
+            _set_row_bottom_border(table.rows[index], style, header_spec)
 
 
 def _set_row_bottom_border(row: Any, style: str, spec: dict[str, str] | None = None) -> None:

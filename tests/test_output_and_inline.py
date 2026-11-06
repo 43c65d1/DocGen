@@ -105,13 +105,13 @@ def test_table_hint_is_suppressed_by_quiet(
 
 
 def test_table_style_default_is_three_line(tmp_path: Path) -> None:
-    """默认值仍是三线表：无竖线、无内部横线。"""
+    """默认值仍是三线表：无竖线、无内部横线；顶/底为 1.5pt 粗线。"""
     document = _document_xml(tmp_path, TABLE_MD)
     borders = re.search(r"<w:tblBorders>.*?</w:tblBorders>", document, re.DOTALL)
     assert borders is not None
     body = borders.group(0)
-    assert '<w:top w:val="single"/>' in body
-    assert '<w:bottom w:val="single"/>' in body
+    assert '<w:top w:val="single" w:sz="12"/>' in body
+    assert '<w:bottom w:val="single" w:sz="12"/>' in body
     assert '<w:left w:val="none"/>' in body
     assert '<w:right w:val="none"/>' in body
     assert '<w:insideV w:val="none"/>' in body

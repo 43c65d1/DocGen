@@ -41,19 +41,82 @@ def _tbl_borders(document: str) -> str:
 
 
 # --------------------------------------------------------------------------
-# 预设：默认观感不变
+# 三线表：标准粗细（顶/底粗、栏目线细）
 # --------------------------------------------------------------------------
-def test_three_line_default_is_unchanged(tmp_path: Path) -> None:
-    """默认三线表：顶/底 single，其余 none；表头下横线 1pt。"""
+def test_three_line_default_rules_match_standard(tmp_path: Path) -> None:
+    """标准三线表：顶/底线 1.5pt（sz=12），栏目线 0.5pt（sz=4），无竖线。
+
+    之前默认反了（栏目线 1pt、顶/底 Word 默认细线），与规范不符。
+    """
     document = _render(tmp_path)
     borders = _tbl_borders(document)
-    assert 'w:top w:val="single"' in borders
-    assert 'w:bottom w:val="single"' in borders
+    assert 'w:top w:val="single" w:sz="12"' in borders
+    assert 'w:bottom w:val="single" w:sz="12"' in borders
     assert 'w:left w:val="none"' in borders
     assert 'w:insideH w:val="none"' in borders
     header_bottom = re.search(r"<w:tcBorders>.*?</w:tcBorders>", document, re.DOTALL)
     assert header_bottom is not None
+    assert 'w:bottom w:val="single" w:space="0" w:sz="4"' in header_bottom.group(0)
+
+
+def test_three_line_sizes_are_configurable(tmp_path: Path) -> None:
+    extra = '\n[table]\nouter_line_size = "1pt"\nheader_line_size = "0.75pt"\n'
+    document = _render(tmp_path, extra=extra)
+    borders = _tbl_borders(document)
+    assert 'w:top w:val="single" w:sz="8"' in borders
+    assert 'w:bottom w:val="single" w:sz="8"' in borders
+    header_bottom = re.search(r"<w:tcBorders>.*?</w:tcBorders>", document, re.DOTALL)
+    assert header_bottom is not None
+    assert 'w:sz="6"' in header_bottom.group(0)
+
+
+def test_line_size_remains_a_uniform_override(tmp_path: Path) -> None:
+    """``line_size`` 是统一线宽（旧行为）：三线表的顶/底与栏目线都变成它。"""
+    document = _render(tmp_path, extra='\n[table]\nline_size = "1pt"\n')
+    assert 'w:top w:val="single" w:sz="8"' in _tbl_borders(document)
+    header_bottom = re.search(r"<w:tcBorders>.*?</w:tcBorders>", document, re.DOTALL)
+    assert header_bottom is not None
     assert 'w:sz="8"' in header_bottom.group(0)
+
+
+def test_header_line_can_be_removed_for_two_line_table(tmp_path: Path) -> None:
+    """``header_line = false`` → 二线表（只有顶线与底线，适合横向阅读逻辑）。"""
+    document = _render(tmp_path, extra="\n[table]\nheader_line = false\n")
+    assert 'w:top w:val="single" w:sz="12"' in _tbl_borders(document)
+    assert "<w:tcBorders>" not in document
+
+
+# --------------------------------------------------------------------------
+# 辅助线：[[aux]] 给当前行上方加线（合计/小计行）
+# --------------------------------------------------------------------------
+AUX_MD = "| 项目 | 金额 |\n| --- | --- |\n| A | 10 |\n| [[aux]] 合计 | 10 |\n"
+
+
+def test_aux_marker_adds_line_above_row(tmp_path: Path) -> None:
+    document = _render(tmp_path, AUX_MD, "\n[table]\n")
+    row = re.findall(r"<w:tr>.*?</w:tr>", document, re.DOTALL)[-1]
+    assert 'w:top w:val="single" w:space="0" w:sz="4"' in row
+    assert "合计" in row
+
+
+def test_aux_marker_text_is_stripped(tmp_path: Path) -> None:
+    document = _render(tmp_path, AUX_MD)
+    texts = re.findall(r"<w:t(?: [^>]*)?>(.*?)</w:t>", document, re.DOTALL)
+    assert "[[aux]]" not in "".join(texts)
+    assert "合计" in texts
+
+
+def test_aux_line_size_follows_header_line(tmp_path: Path) -> None:
+    extra = '\n[table]\nheader_line_size = "0.75pt"\n'
+    document = _render(tmp_path, AUX_MD, extra)
+    row = re.findall(r"<w:tr>.*?</w:tr>", document, re.DOTALL)[-1]
+    assert 'w:sz="6"' in row
+
+
+def test_aux_line_size_can_override(tmp_path: Path) -> None:
+    document = _render(tmp_path, AUX_MD, '\n[table]\naux_line_size = "1pt"\n')
+    row = re.findall(r"<w:tr>.*?</w:tr>", document, re.DOTALL)[-1]
+    assert 'w:sz="8"' in row
 
 
 def test_grid_style_sets_all_edges(tmp_path: Path) -> None:

@@ -26,7 +26,8 @@ if TYPE_CHECKING:  # pragma: no cover
 
 def rule_wiki(state: StateInline, silent: bool) -> bool:
     """``[[...]]``：白名单为 ``[[img:path]]``、``[[pagebreak]]``、``[[toc]]``、
-    ``[[ref:目标]]``、``[[fn:文字]]``、``[[sectionbreak]]``、``[[diag:右上|左下]]``。"""
+    ``[[ref:目标]]``、``[[fn:文字]]``、``[[sectionbreak]]``、``[[diag:右上;左下]]``、
+    ``[[aux]]``（表格行上方的辅助横线）。"""
     src = state.src
     if src[state.pos : state.pos + 2] != "[[":
         return False
@@ -36,7 +37,7 @@ def rule_wiki(state: StateInline, silent: bool) -> bool:
         return False
 
     inner = src[state.pos + 2 : end]
-    keywords = ("pagebreak", "toc", "sectionbreak", "diag")
+    keywords = ("pagebreak", "toc", "sectionbreak", "diag", "aux")
     if inner not in keywords and not inner.startswith(("img:", "ref:", "fn:", "diag:")):
         return False
 
@@ -49,6 +50,8 @@ def rule_wiki(state: StateInline, silent: bool) -> bool:
         token = Token("dfm_toc", "", 0)
     elif inner == "sectionbreak":
         token = Token("dfm_sectionbreak", "", 0)
+    elif inner == "aux":
+        token = Token("dfm_aux", "", 0)
     elif inner == "diag":
         token = Token("dfm_diag", "", 0)
     elif inner.startswith("diag:"):

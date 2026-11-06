@@ -23,6 +23,7 @@ from docx.oxml import OxmlElement
 from ..config import INLINE_STYLE_NAMES, Config, build_style_table
 from ..errors import E_CONFIG, DocGenError
 from ..ir import (
+    AuxLine,
     BlockNode,
     BlockQuote,
     Break,
@@ -873,11 +874,25 @@ def _render_table(state: _RenderState, block: Table) -> None:
 
     widths = _column_widths(properties, columns, state)
     set_table_width(table, widths)
+    aux_spec = _three_line_aux_spec(properties)
+    aux_style = str(properties.get("line_style", "single"))
     for row_index, row in enumerate(block.rows):
+        # 辅助线：任一单元格写了 [[aux]]，整行上方加线（三线表的「合计线」）
+        aux_row = any(
+            isinstance(node, AuxLine)
+            for column in range(columns)
+            for node in _cell_nodes(block, row_index, column)
+        )
         for column_index in range(columns):
             cell = table.cell(row_index, column_index)
             drop_empty_runs(cell.paragraphs[0])
             nodes = _cell_nodes(block, row_index, column_index)
+            if aux_row:
+                nodes = [node for node in nodes if not isinstance(node, AuxLine)]
+                # 标记后面的空格不是内容：「[[aux]] 合计」应渲染成「合计」
+                if nodes and isinstance(nodes[0], Text):
+                    stripped = nodes[0].content.lstrip()
+                    nodes = [Text(content=stripped), *nodes[1:]]
             diagonal = next((node for node in nodes if isinstance(node, DiagonalHeader)), None)
             if diagonal is not None:
                 # 斜线表头：线 + 两段文字（右上/左下），不能按普通 run 渲染
@@ -885,6 +900,9 @@ def _render_table(state: _RenderState, block: Table) -> None:
             elif nodes:
                 # 有行内 IR 就渲染它：单元格里的粗体/代码/公式/链接都要保留
                 _render_inlines(state, cell.paragraphs[0], nodes, None)
+            elif aux_row:
+                # 这一格只剩 [[aux]] 标记：不渲染占位文字
+                pass
             else:
                 text = row[column_index] if column_index < len(row) else ""
                 run = cell.paragraphs[0].add_run(text)
@@ -894,6 +912,9 @@ def _render_table(state: _RenderState, block: Table) -> None:
                 for run in cell.paragraphs[0].runs:
                     run.bold = True
             _apply_cell_format(cell, widths[column_index], _column_alignment(block, column_index))
+        if aux_row:
+            for cell in table.rows[row_index].cells:
+                set_cell_border(cell, "top", val=aux_style, space="0", **aux_spec)
 
     _apply_table_header_behavior(table, properties)
     _apply_table_borders(table, properties, header_rows=1)
@@ -1088,30 +1109,78 @@ def _apply_cell_format(cell: Any, width: int, alignment: str) -> None:
         set_cell_alignment(cell, alignment)
 
 
-def _border_spec(properties: dict[str, Any]) -> dict[str, str]:
-    """``[table] line_size`` / ``line_color`` → CT_Border 属性（``sz`` 用 1/8 磅）。
+def _line_points(value: Any, label: str) -> float:
+    """把 ``"1.5pt"`` / ``"8px"`` / 裸数字（按磅）换算成磅；失败报 ``E5001``。"""
+    length = length_from_text(str(value))
+    if length is None and str(value).strip():
+        try:
+            length = length_from_text(f"{float(str(value).strip())}pt")
+        except ValueError:
+            length = None
+    if length is None:
+        raise DocGenError(
+            E_CONFIG,
+            f"无法解析 {label}: {value!r}（支持 1.5pt / 0.5pt / 8px）",
+        )
+    return float(length.pt)
 
-    只在用户显式配置时返回；不配置就保持 Word 默认线（避免悄悄改变既有观感）。
+
+def _line_spec(
+    properties: dict[str, Any], size_key: str, default_pt: float | None
+) -> dict[str, str]:
+    """某类线的 CT_Border 属性：``sz``（1/8 磅）+ ``color``。
+
+    ``size_key`` 未配置时回退到 ``line_size``（统一线宽），再回退到 ``default_pt``
+    （``None`` = 不写 ``sz``，交给 Word 默认）。
     """
+    raw = properties.get(size_key)
+    if raw is None and size_key != "line_size":
+        raw = properties.get("line_size")
     spec: dict[str, str] = {}
-    size = properties.get("line_size")
-    if size is not None:
-        length = length_from_text(str(size))
-        if length is None and str(size).strip():
-            try:
-                length = length_from_text(f"{float(str(size).strip())}pt")
-            except ValueError:
-                length = None
-        if length is None:
-            raise DocGenError(
-                E_CONFIG,
-                f"无法解析 [table] line_size: {size!r}（支持 1pt / 0.5pt / 8px）",
-            )
-        spec["sz"] = str(max(2, min(96, round(length.pt * 8))))
+    if raw is not None:
+        spec["sz"] = str(max(2, min(96, round(_line_points(raw, f"[table] {size_key}") * 8))))
+    elif default_pt is not None:
+        spec["sz"] = str(max(2, min(96, round(default_pt * 8))))
     color = properties.get("line_color")
     if color is not None:
         spec["color"] = str(color).lstrip("#").upper() if str(color) != "auto" else "auto"
     return spec
+
+
+def _border_spec(properties: dict[str, Any]) -> dict[str, str]:
+    """``[table] line_size`` / ``line_color`` → CT_Border 属性。
+
+    只在用户显式配置时返回；不配置就保持 Word 默认线。
+    用于 ``grid`` / ``custom`` / 行横线 / 斜线（三线表另有粗细规则，见
+    :func:`_three_line_specs`）。
+    """
+    return _line_spec(properties, "line_size", None)
+
+
+#: 三线表标准线宽（磅）：顶/底粗线、栏目线细线
+THREE_LINE_OUTER_PT = 1.5
+THREE_LINE_HEADER_PT = 0.5
+
+
+def _three_line_specs(properties: dict[str, Any]) -> tuple[dict[str, str], dict[str, str], bool]:
+    """三线表三条线的 spec：``(outer, header, draw_header)``。
+
+    标准（学位论文/学术出版）：**顶线与底线为粗线（1.5pt），栏目线为细线（0.5pt）**，
+    三者粗细必须有区分——之前默认反过来（栏目线 1pt、顶底 Word 默认细线），
+    与规范不符。各期刊磅值略有不同，用 ``outer_line_size`` / ``header_line_size`` 覆盖。
+    """
+    outer = _line_spec(properties, "outer_line_size", THREE_LINE_OUTER_PT)
+    header = _line_spec(properties, "header_line_size", THREE_LINE_HEADER_PT)
+    draw_header = _table_flag(properties, "header_line", True)
+    return outer, header, draw_header
+
+
+def _three_line_aux_spec(properties: dict[str, Any]) -> dict[str, str]:
+    """辅助线（``[[aux]]``）的线宽：默认与栏目线一致（细线）。"""
+    header = _line_spec(properties, "header_line_size", THREE_LINE_HEADER_PT)
+    if properties.get("aux_line_size") is None and properties.get("line_size") is None:
+        return {"sz": header["sz"]} | ({"color": header["color"]} if "color" in header else {})
+    return _line_spec(properties, "aux_line_size", THREE_LINE_HEADER_PT)
 
 
 #: 表格可用到的边（与 CT_TblBorders 的元素名一致）
@@ -1146,8 +1215,17 @@ def _table_edges(properties: dict[str, Any], spec: dict[str, str]) -> dict[str, 
 def _apply_table_borders(table: Any, properties: dict[str, Any], header_rows: int) -> None:
     spec = _border_spec(properties)
     style = properties.get("borders", "three_line")
+    line_style = str(properties.get("line_style", "single"))
     if style == "three_line":
-        apply_three_line_borders(table, header_rows=header_rows, spec=spec)
+        outer, header, draw_header = _three_line_specs(properties)
+        apply_three_line_borders(
+            table,
+            header_rows=header_rows,
+            spec=outer,
+            header_spec=header,
+            draw_header=draw_header,
+            style=line_style,
+        )
     else:
         edges = _table_edges(properties, spec)
         borders: dict[str, Any] = {}
@@ -1208,6 +1286,9 @@ def _render_inline(
         # 表格之外没有斜线的载体：两段文字拼起来当普通文本（不静默丢内容）
         text = " ".join(part for part in (node.upper, node.lower) if part)
         paragraph.add_run(text)
+    elif isinstance(node, AuxLine):
+        # 表格之外没有「行」的概念，辅助线标记直接忽略（不产生文字）
+        pass
 
 
 def _render_link(

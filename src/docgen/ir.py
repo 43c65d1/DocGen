@@ -11,6 +11,7 @@
 from dataclasses import dataclass, field
 
 __all__ = [
+    "AuxLine",
     "Block",
     "BlockQuote",
     "Break",
@@ -121,7 +122,25 @@ class DiagonalHeader(Inline):
     lower: str = ""
 
 
-InlineNode = Text | Styled | Code | Math | Link | Image | Break | Ref | Footnote | DiagonalHeader
+@dataclass(frozen=True, slots=True)
+class AuxLine(Inline):
+    """``[[aux]]``：给**表格当前行**上方加一条辅助横线（三线表的「合计线」）。
+
+    三线表在「合计 / 小计 / 统计处理结果」行上方常需要一条辅助细线。
+    标记写在任意单元格里都作用于整行，标记本身不渲染文字：
+
+    ```markdown
+    | 项目 | 金额 |
+    | --- | --- |
+    | A | 10 |
+    | [[aux]] 合计 | 10 |
+    ```
+    """
+
+
+InlineNode = (
+    Text | Styled | Code | Math | Link | Image | Break | Ref | Footnote | DiagonalHeader | AuxLine
+)
 
 
 # --------------------------------------------------------------------------

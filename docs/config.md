@@ -267,6 +267,35 @@ timeout = 120           # 秒
 - 转换失败**不会删已生成的 docx**，报 `E5005`、退出码 3；非法配置报 `E5001`。
 - 版式验收以 Word 为准，LibreOffice 的 PDF 只适合看内容。
 
+## `[bibliography]`：文献库与参考文献表
+
+配合 `[[cite:key]]` / `[[bibliography]]` 使用（顺序编码制，GB/T 7714 子集）。
+
+```toml
+[bibliography]
+file = "references.toml"   # 文献库；相对输入文件所在目录（也可用 --refs 覆盖）
+title = "参考文献"          # 文献表标题（借 Heading 1 样式但取消编号）
+```
+
+文献库是独立 TOML，每个条目一个 `[key]` 表：
+
+```toml
+[zhang2024]
+type = "article"           # article/book/conference/thesis/standard/online
+author = ["张三", "李四"]   # 或字符串
+title = "中文排版中的行首禁则研究"
+journal = "排版学报"
+year = "2024"
+volume = "12"
+issue = "3"
+pages = "45-52"
+```
+
+- 编号按**首次引用顺序**分配，构建期烘焙；`[[cite:a,b]]` → `[1,2]`。
+- 不写 `[[bibliography]]` 时参考文献表自动追加到文末。
+- 引用不存在的 key 报 `E5004`；有 `[[cite:]]` 但没配文献库报 `E5001`。
+- 不支持 BibTeX 完整语法与 CSL 多风格（APA/IEEE）引擎；不做 Word 原生引文域。
+
 ## `[inline]`：语义名 -> 样式名映射
 
 Markdown/DFM 语法产出的是**语义名**（`**粗体**` → `strong` 等），默认**同名**，

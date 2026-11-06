@@ -20,6 +20,7 @@ DFM = DocGen Flavored Markdown。剪枝版只实现手册 §5.1 的子集，
 | 独立一行的 `[[pagebreak]]` | `PageBreak()`（分页符） |
 | 独立一行的 `[[toc]]` | `Toc()`（Word 的 TOC 域） |
 | 独立一行的 `[[sectionbreak]]` | `SectionBreak()`（切到下一个 `[[sections]]` 配置的新节） |
+| 独立一行的 `[[bibliography]]` | `Bibliography()`（参考文献表占位；不写则自动追加到文末） |
 | 独立成段的 `$$ ... $$` | `Formula(latex="...")` |
 
 ## 行内
@@ -37,6 +38,7 @@ DFM = DocGen Flavored Markdown。剪枝版只实现手册 §5.1 的子集，
 | `[[sectionbreak]]`（行内） | `Break()`（分节是块级动作，行内只当换行） |
 | `[[diag:右上;左下]]` | `DiagonalHeader(upper="右上", lower="左下")`（表格单元格里的斜线表头；用 `;` 分隔） |
 | `[[aux]]` | `AuxLine()`（表格**该行上方**加一条辅助横线，用于合计/小计行；标记不渲染文字） |
+| `[[cite:key1,key2]]` | `Cite(keys=("key1", "key2"))`（文献引用；文献库用 `--refs` 或 `[bibliography] file`） |
 | `$x^2$` | `Math(latex="x^2", display=False)` |
 | `H~2~O` | `Styled(content=[Text("2")], style_name="sub")` |
 | `E=mc^2^` | `Styled(content=[Text("2")], style_name="sup")` |

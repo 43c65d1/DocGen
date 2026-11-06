@@ -10,6 +10,7 @@
 
 **已实现**：块级/行内语法、样式继承与 `@ref`、诊断与结构化错误、真超链接、
 数学（LaTeX→MathML→OMML）、标题多级编号（可关、缩进可配）、题注与交叉引用（REF 域）、
+文献引用（`[[cite:...]]` + TOML 文献库，GB/T 7714 顺序编码制）、
 表格（三线表/网格/无框 + 列宽/对齐/合并/重复表头）、图片尺寸与对齐、脚注（Word 原生自动编号）、
 分节/页码/页眉页脚/封面、`[output]` 输出与日志系统、`[inline]` 语义名映射、
 `docgen bug-report` 报错出口。
@@ -72,6 +73,9 @@ docgen build input.md -c config.toml -o output.docx --format docx
 
 # 生成后自动转 PDF（优先 Word，其次 LibreOffice；没有引擎会报 E5005）
 docgen build input.md -c config.toml -o output.docx --pdf
+
+# 文献引用（[[cite:...]] + TOML 文献库；也可在 config 写 [bibliography] file）
+docgen build input.md -c config.toml -o output.docx --refs references.toml
 
 # 输出控制（全局开关放在子命令前）：只影响终端，不影响 [output] logfile
 docgen -q build input.md -c config.toml -o out.docx          # 终端只出 err

@@ -150,6 +150,12 @@ logfile = ""
 | `engine` | `auto` | `auto`（优先 Word）/ `word` / `libreoffice` |
 | `timeout` | `120` | 秒；超时报 `E5005` |
 
+### `[bibliography]`
+| 字段 | 默认 | 说明 |
+|---|---|---|
+| `file` | 无 | 文献库 TOML（相对输入文件目录；也可 `--refs`） |
+| `title` | `"参考文献"` | 文献表标题（Heading 1 样式，取消编号） |
+
 ### `[math]`
 | 字段 | 默认 | 说明 |
 |---|---|---|
@@ -168,6 +174,8 @@ logfile = ""
 | `[[ref:fig:1]]` | 交叉引用（REF 域） |
 | `[[fn:文字]]` | 脚注 |
 | `[[diag:年份;项目]]` | **表格单元格**里的斜线表头（用 `;` 分隔，不能用 `\|`） |
+| `[[cite:key1,key2]]` | 文献引用（顺序编码制，需文献库 `--refs` / `[bibliography] file`） |
+| `[[bibliography]]` | 参考文献表位置（不写则自动追加到文末） |
 | `` `code` `` | 行内代码（Consolas + 灰底） |
 | `$x^2$` / `$$…$$` | 行内 / 块级公式 |
 | `**粗**` `*斜*` `~~删~~` `^上^` `~下~` | 行内语义（需在 config 声明样式） |
@@ -194,6 +202,8 @@ logfile = ""
 docgen check  input.md -c config.toml [--strict] [--json]   # 校验
 docgen build  input.md -c config.toml -o out.docx           # 生成 .docx
 docgen build  input.md -c config.toml -o out.docx --pdf     # 同时转 out.pdf
+docgen build  input.md -c config.toml -o out.docx --refs references.toml  # 文献引用
+docgen check  input.md -c config.toml --refs references.toml              # 校验文献
 docgen dump-ir input.md                                     # 看解析出的 IR（排查语法）
 docgen dump-styles -c config.toml                           # 看展开后的样式（排查样式）
 docgen bug-report --output r.txt                            # 打包环境信息

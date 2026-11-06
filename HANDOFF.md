@@ -87,6 +87,7 @@ render ──► ir + config（渲染层不认识解析器，也不回读源文�
 | `validate.py` | 样式引用、图片路径校验；`[inline]` 映射链报错 | 加校验规则 |
 | `diagnostics.py` | 未闭合标记 / 未知语言 / 围栏未配对 | 加诊断 |
 | `numbering.py` | 标题/公式编号、题注与交叉引用映射 | 改编号逻辑 |
+| `bibliography.py` | 文献库解析、引用编号（顺序编码制）、GB/T 7714 条目格式化 | 改文献格式/引用规则 |
 | `render/docx.py` | Word 后端主渲染器（最大的模块） | 加 Word 特性 |
 | `render/ooxml.py` | 所有 OOXML 元素构造 + **schema 顺序插入** | 加任何 OOXML 元素 |
 | `render/ooxml_check.py` | 结构不变量 + **官方 ECMA-376 XSD 校验** | 校验规则 |

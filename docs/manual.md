@@ -260,6 +260,39 @@ DFM 语法（IR 支持 `colspan/rowspan`，但解析器不产生）。
   `PAGE` / `TOC` 仍需查看器更新（分页相关）。
 - 题注编号按类型独立计数（图 1、图 2、表 1…）。
 
+### 文献引用（顺序编码制）
+
+```markdown
+正如文献所述[[cite:zhang2024]]，另见[[cite:wang2023,zhao2022]]。
+
+[[bibliography]]
+```
+
+- `[[cite:key1,key2]]` → `[1]` / `[1,2]` / `[1-3]`（连续 3 个以上压成区间）；
+  编号按**首次出现顺序**分配、构建期烘焙，不依赖 Word 的引文功能。
+- 文献库是独立 TOML 文件（`--refs` 或 `[bibliography] file`）：
+
+  ```toml
+  [zhang2024]
+  type = "article"              # article/book/conference/thesis/standard/online
+  author = ["张三", "李四"]      # 或字符串
+  title = "中文排版中的行首禁则研究"
+  journal = "排版学报"
+  year = "2024"
+  volume = "12"
+  issue = "3"
+  pages = "45-52"
+  ```
+
+- `[[bibliography]]` 指定参考文献表位置；**不写则自动追加到文末**。
+  标题默认「参考文献」（可用 `[bibliography] title` 改），借 `Heading 1` 样式但取消编号。
+- 条目按 GB/T 7714 顺序编码制格式化：`[J]` 期刊、`[M]` 专著、`[C]` 会议、
+  `[D]` 学位论文、`[S]` 标准、`[EB/OL]` 电子资源；支持 `doi` 字段。
+- 错误：引用不存在的 key → `E5004`；有 `[[cite:]]` 却没给文献库 → `E5001`；
+  `[[cite:]]` 为空或 `[[bibliography]]` 重复 → `E4001`。
+- 限制：只做 **GB/T 7714 数字制**的常见类型；不做 BibTeX 完整语法、CSL 多风格
+  （APA/IEEE）引擎，也不生成 Word 原生 `CITATION` 域。
+
 ## 10. 公式：`[math]`
 
 | 字段 | 默认 | 说明 |

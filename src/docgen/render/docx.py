@@ -24,9 +24,11 @@ from ..config import INLINE_STYLE_NAMES, Config, build_style_table
 from ..errors import E_CONFIG, DocGenError
 from ..ir import (
     AuxLine,
+    Bibliography,
     BlockNode,
     BlockQuote,
     Break,
+    Cite,
     Code,
     CodeBlock,
     DiagonalHeader,
@@ -81,6 +83,7 @@ from .ooxml import (
     set_paragraph_alignment,
     set_paragraph_border,
     set_paragraph_indent,
+    set_paragraph_numbering_none,
     set_paragraph_shading,
     set_paragraph_spacing,
     set_row_cant_split,
@@ -107,9 +110,10 @@ def render_docx(
     output: Path,
     template: Path | None = None,
     base_dir: Path | None = None,
+    refs: Path | None = None,
 ) -> Path:
     """渲染为 ``.docx`` 文件，返回写入路径。"""
-    data = render_docx_bytes(blocks, config, template, base_dir)
+    data = render_docx_bytes(blocks, config, template, base_dir, refs)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(data)
     return output
@@ -120,6 +124,7 @@ def render_docx_bytes(
     config: Config,
     template: Path | None = None,
     base_dir: Path | None = None,
+    refs: Path | None = None,
 ) -> bytes:
     """渲染到内存（测试用，避免落盘）。
 
@@ -129,7 +134,7 @@ def render_docx_bytes(
     from .footnotes import inject_footnotes
     from .template import _strip_effects_part
 
-    document, footnotes, state = _build_document(blocks, config, template, base_dir)
+    document, footnotes, state = _build_document(blocks, config, template, base_dir, refs)
     buffer = io.BytesIO()
     document.save(buffer)
     data = buffer.getvalue()
@@ -166,6 +171,7 @@ def _build_document(
     config: Config,
     template: Path | None,
     base_dir: Path | None,
+    refs: Path | None = None,
 ) -> tuple[Any, list[str], _RenderState]:
     document = create_document(config, template)
     # 内容里有 [[sectionbreak]] 时按需建节，内容才能分进前面的节；
@@ -183,7 +189,14 @@ def _build_document(
     from ..numbering import baked_fields
 
     state.caption_fields = baked_fields(blocks)
+    # 文献引用：先分配编号、生成条目（没有 [[cite:]] 时为 None）
+    from ..bibliography import has_bibliography_marker, plan_bibliography
+
+    state.bibliography = plan_bibliography(blocks, config, base_dir=base_dir, refs=refs)
     _render_blocks(state, blocks)
+    if state.bibliography is not None and not has_bibliography_marker(blocks):
+        # 没写 [[bibliography]]：参考文献表追加到文末
+        _render_bibliography(state)
     sections.finish()
     _ensure_update_fields(document)
     _normalise_root(document)
@@ -226,6 +239,7 @@ class _RenderState:
     __slots__ = (
         "_bookmark_id",
         "base_dir",
+        "bibliography",
         "caption_fields",
         "config",
         "default_east_asia",
@@ -255,6 +269,7 @@ class _RenderState:
         self.math_engine, self.math_on_fail, self.math_xsl = math_settings(config)
         self.sections: Any = None
         self.caption_fields: dict[str, str] = {}
+        self.bibliography: Any = None
         self._bookmark_id = 1000
         self.footnotes: list[str] = []
         self.footnote_reference_maker: Any = None
@@ -302,6 +317,8 @@ def _render_block(
     """
     if isinstance(block, Heading):
         _render_heading(state, block, previous=previous, following=following)
+    elif isinstance(block, Bibliography):
+        _render_bibliography(state)
     elif isinstance(block, Paragraph):
         paragraph = state.document.add_paragraph()
         _apply_body_paragraph(state, paragraph, previous=previous, following=following)
@@ -1360,6 +1377,33 @@ def _render_inline(
     elif isinstance(node, AuxLine):
         # 表格之外没有「行」的概念，辅助线标记直接忽略（不产生文字）
         pass
+    elif isinstance(node, Cite):
+        # 编号在构建期分配并烘焙（见 bibliography.plan_bibliography）
+        from ..bibliography import citation_text
+
+        plan = state.bibliography
+        text = citation_text(node.keys, plan.numbers) if plan is not None else ""
+        if text:
+            paragraph.add_run(text)
+
+
+def _render_bibliography(state: _RenderState) -> None:
+    """渲染「参考文献」标题 + 条目。
+
+    标题借用 ``Heading 1`` 样式（字号/间距/大纲级别），但显式取消编号——
+    否则会被自动编号成「6 参考文献」。
+    """
+    plan = state.bibliography
+    if plan is None or not plan.entries:
+        return
+    heading = state.document.add_paragraph(style="Heading 1")
+    set_paragraph_numbering_none(heading)
+    heading.add_run(plan.title)
+    for entry in plan.entries:
+        paragraph = state.document.add_paragraph()
+        _apply_body_paragraph(state, paragraph)
+        set_paragraph_indent(paragraph, first_line_chars=0)
+        paragraph.add_run(entry)
 
 
 def _render_link(

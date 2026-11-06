@@ -12,9 +12,11 @@ from dataclasses import dataclass, field
 
 __all__ = [
     "AuxLine",
+    "Bibliography",
     "Block",
     "BlockQuote",
     "Break",
+    "Cite",
     "Code",
     "CodeBlock",
     "DiagonalHeader",
@@ -138,8 +140,30 @@ class AuxLine(Inline):
     """
 
 
+@dataclass(frozen=True, slots=True)
+class Cite(Inline):
+    """``[[cite:key1,key2]]``：文献引用（顺序编码制，编号在构建期烘焙）。
+
+    ``keys`` 是文献库里的条目名；渲染成 ``[1]`` / ``[1,2]`` / ``[1-3]``，
+    编号按**首次出现顺序**分配，与题注的 ``SEQ``/``REF`` 烘焙思路一致。
+    """
+
+    keys: tuple[str, ...] = ()
+
+
 InlineNode = (
-    Text | Styled | Code | Math | Link | Image | Break | Ref | Footnote | DiagonalHeader | AuxLine
+    Text
+    | Styled
+    | Code
+    | Math
+    | Link
+    | Image
+    | Break
+    | Ref
+    | Footnote
+    | DiagonalHeader
+    | AuxLine
+    | Cite
 )
 
 
@@ -279,6 +303,14 @@ class Table(Block):
     cell_nodes: list[list[list["InlineNode"]]] = field(default_factory=list)
 
 
+@dataclass(frozen=True, slots=True)
+class Bibliography(Block):
+    """``[[bibliography]]``：参考文献表占位（生成在当前位置）。
+
+    不写这个标记时，只要正文里有 ``[[cite:...]]``，参考文献表会自动追加到文末。
+    """
+
+
 BlockNode = (
     Heading
     | Paragraph
@@ -293,4 +325,5 @@ BlockNode = (
     | SectionBreak
     | BlockQuote
     | Table
+    | Bibliography
 )

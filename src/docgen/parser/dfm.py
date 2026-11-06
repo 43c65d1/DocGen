@@ -16,9 +16,11 @@ from markdown_it import MarkdownIt
 
 from ..ir import (
     AuxLine,
+    Bibliography,
     BlockNode,
     BlockQuote,
     Break,
+    Cite,
     Code,
     CodeBlock,
     DiagonalHeader,
@@ -126,6 +128,9 @@ def _inline_to_ir(tokens: list[Token]) -> list[InlineNode]:
             stack[-1].append(DiagonalHeader(upper=upper.strip(), lower=lower.strip()))
         elif tok.type == "dfm_aux":
             stack[-1].append(AuxLine())
+        elif tok.type == "dfm_cite":
+            keys = tuple(part.strip() for part in tok.content.split(",") if part.strip())
+            stack[-1].append(Cite(keys=keys))
         elif tok.type == "dfm_ref":
             stack[-1].append(Ref(target=tok.content))
         elif tok.type == "dfm_footnote":
@@ -276,6 +281,8 @@ def _paragraph_block(open_token: Token, inline_token: Token | None) -> BlockNode
         return SectionBreak(source_line=source_line)
     if len(children) == 1 and children[0].type == "dfm_toc":
         return Toc(source_line=source_line)
+    if len(children) == 1 and children[0].type == "dfm_bibliography":
+        return Bibliography(source_line=source_line)
 
     content = _inline_to_ir(children)
     if len(content) == 1 and isinstance(content[0], Image):

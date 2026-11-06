@@ -129,12 +129,16 @@ def _build(
     pdf: bool = False,
     no_pdf: bool = False,
     pdf_engine: str | None = None,
+    refs: Path | None = None,
 ) -> int:
     """DFM + config -> docx（完整版手册 §11），可选再转 PDF。
 
     ``--pdf`` / ``[pdf] enabled = true`` 会在 docx 生成后调用
     :func:`docgen.pdf.convert`；``--no-pdf`` 优先级最高。
     PDF 失败时 docx **保留**，错误码 ``E5005``（退出码 3）。
+
+    ``--refs`` 指定文献库（``[[cite:...]]`` 用），也可在 config 里写
+    ``[bibliography] file``。
     """
     source = _read_source(path)
     blocks = parse_dfm(source)
@@ -143,14 +147,14 @@ def _build(
     target = _resolve_format(fmt)
     _warn_table_default(config, blocks)
 
-    errors = validate_content(blocks, config, source=path)
+    errors = validate_content(blocks, config, source=path, refs=refs)
     if errors:
         for err in errors:
             _OUTPUT.error(str(err))
         return EXIT_CONTENT_ERROR
 
     try:
-        render_docx(blocks, config, output, base_dir=path.parent)
+        render_docx(blocks, config, output, base_dir=path.parent, refs=refs)
     except OSError as exc:
         raise DocGenError(E_CONFIG, f"无法写入输出文件: {output}: {exc}") from None
     _OUTPUT.results(f"已生成 {output}（{target}，{len(blocks)} 个块级节点）")
@@ -207,6 +211,7 @@ def _check(
     config_path: Path | None,
     as_json: bool = False,
     strict: bool = False,
+    refs: Path | None = None,
 ) -> int:
     text = _read_source(path)
     blocks = parse_dfm(text)
@@ -214,9 +219,11 @@ def _check(
     _apply_output_config(config)
 
     if strict:
-        errors = with_diagnostics(text, blocks, config, source=str(path), base_dir=path.parent)
+        errors = with_diagnostics(
+            text, blocks, config, source=str(path), base_dir=path.parent, refs=refs
+        )
     else:
-        errors = validate_content(blocks, config, source=path)
+        errors = validate_content(blocks, config, source=path, refs=refs)
 
     if as_json:
         # stdout 只允许 JSON：诊断走 stderr（_OUTPUT.error 已保证）
@@ -386,6 +393,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="PDF 引擎：auto（默认，优先 Word）/ word / libreoffice",
     )
+    build.add_argument(
+        "--refs",
+        type=Path,
+        default=None,
+        help="文献库 TOML（[[cite:...]] 用；也可在 config 写 [bibliography] file）",
+    )
 
     dump_styles = sub.add_parser("dump-styles", help="输出展开后的样式表")
     dump_styles.add_argument("-c", "--config", type=Path, required=True, help="config.toml（必需）")
@@ -403,6 +416,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "--strict",
         action="store_true",
         help="同时报告诊断问题（未闭合标记 E3001、未知语言 E2001、围栏未配对 E4001）",
+    )
+    check.add_argument(
+        "--refs",
+        type=Path,
+        default=None,
+        help="文献库 TOML（校验 [[cite:...]] 用；也可在 config 写 [bibliography] file）",
     )
 
     bug = sub.add_parser("bug-report", help="打包环境与 config 摘要，便于报错反馈")
@@ -461,11 +480,12 @@ def main(argv: list[str] | None = None) -> int:
                 pdf=args.pdf,
                 no_pdf=args.no_pdf,
                 pdf_engine=args.pdf_engine,
+                refs=args.refs,
             )
         elif args.cmd == "dump-styles":
             _dump_styles(args.config, args.raw)
         elif args.cmd == "check":
-            exit_code = _check(args.input, args.config, args.as_json, args.strict)
+            exit_code = _check(args.input, args.config, args.as_json, args.strict, refs=args.refs)
         elif args.cmd == "bug-report":
             exit_code = _bug_report(args.output, config_path)
     except DocGenError as err:

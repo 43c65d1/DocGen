@@ -59,6 +59,7 @@ __all__ = [
     "set_paragraph_alignment",
     "set_paragraph_border",
     "set_paragraph_indent",
+    "set_paragraph_numbering_none",
     "set_paragraph_shading",
     "set_paragraph_spacing",
     "set_row_cant_split",
@@ -546,6 +547,18 @@ def set_list_numbering(paragraph: Any, *, num_id: int, level: int = 0) -> None:
     num_pr = insert_child(ppr, "w:numPr")
     insert_child(num_pr, "w:ilvl", **{"w:val": str(level)})
     insert_child(num_pr, "w:numId", **{"w:val": str(num_id)})
+
+
+def set_paragraph_numbering_none(paragraph: Any) -> None:
+    """取消段落编号：``w:numPr/w:numId=0``（``ilvl`` 必须一起写）。
+
+    用途：「参考文献」这类标题借用了 ``Heading 1`` 样式（字号/间距/大纲级别），
+    但不该带章号（否则会渲染成「6 参考文献」）。
+    """
+    ppr = paragraph._p.get_or_add_pPr()
+    num_pr = insert_child(ppr, "w:numPr")
+    insert_child(num_pr, "w:ilvl", **{"w:val": "0"})
+    insert_child(num_pr, "w:numId", **{"w:val": "0"})
 
 
 def allocate_list_num_id(document: Any) -> int | None:

@@ -73,6 +73,7 @@ def validate_content(
     config: Config,
     source: Path | None = None,
     base_dir: Path | None = None,
+    refs: Path | None = None,
 ) -> list[ContentError]:
     """检查样式引用与图片路径，返回全部错误（可能为空）。
 
@@ -160,4 +161,9 @@ def validate_content(
                 check_image(child.src, line)
 
     check_blocks(blocks, 0)
+
+    # 文献引用：unknown key / 缺文献库 / 重复 [[bibliography]] 标记等
+    from .bibliography import validate_bibliography
+
+    errors.extend(validate_bibliography(blocks, config, source=source, base_dir=root, refs=refs))
     return errors

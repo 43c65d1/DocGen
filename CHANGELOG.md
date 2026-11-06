@@ -6,6 +6,23 @@
 
 ## [Unreleased]
 
+### 新增（文献引用：GB/T 7714 顺序编码制）
+
+- **`[[cite:key1,key2]]`**：行内文献引用 → `[1]` / `[1,2]` / `[1-3]`
+  （连续 3 个以上压成区间）；编号按**首次出现顺序**分配，构建期烘焙
+  （不依赖 Word 引文功能，WPS/预览也能看到正确编号）。
+- **文献库**：独立 TOML（`[key]` 表），支持期刊/专著/会议/学位论文/标准/电子资源；
+  用 `docgen build --refs references.toml` 或 `[bibliography] file = "references.toml"`
+  （相对输入文件目录）。
+- **`[[bibliography]]`**：参考文献表位置；不写时自动追加到文末。标题默认「参考文献」
+  （`[bibliography] title` 可改），借 `Heading 1` 样式但**取消自动编号**
+  （`w:numPr/w:numId=0`，Word 实测 list string 为空）。
+- **校验**：引用不存在的 key → `E5004`；有 `[[cite:]]` 却没配文献库 → `E5001`；
+  空 `[[cite:]]` / 重复 `[[bibliography]]` → `E4001`；`check --refs` 同步校验。
+- 新增 `src/docgen/bibliography.py` 与 `tests/test_bibliography.py`（19 项）。
+- 限制：只做 GB/T 7714 **数字制**子集，不做 BibTeX 完整语法、CSL 多风格引擎、
+  Word 原生 `CITATION`/`BIBLIOGRAPHY` 域（见 LIMITATIONS B17）。
+
 ### 新增（表格数值列：小数点 / 个位对齐）
 
 - 新增 `[table] decimal_align = [2, 4]`（1 起列号）：指定列的数据行按

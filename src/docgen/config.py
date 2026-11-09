@@ -213,10 +213,9 @@ def _read_toml(path: Path) -> Table:
         raise DocGenError(E_CONFIG, f"config 文件不存在: {path}") from None
     except OSError as exc:
         raise DocGenError(E_CONFIG, f"无法读取 config: {path}: {exc}") from None
-    try:
-        text = raw.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise DocGenError(E_CONFIG, f"config 不是合法 UTF-8: {path}: {exc}") from None
+    from .encoding import decode_text
+
+    text = decode_text(raw, path=str(path))
     try:
         data = tomllib.loads(text)
     except tomllib.TOMLDecodeError as exc:

@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import Config
+from .encoding import decode_text
 from .errors import E_CONFIG, E_SYNTAX, E_UNKNOWN_REF, DocGenError
 from .ir import (
     Bibliography,
@@ -78,11 +79,17 @@ class BibliographyPlan:
 # 文献库
 # --------------------------------------------------------------------------
 def load_references(path: Path) -> dict[str, dict[str, Any]]:
-    """读取 TOML 文献库：每个条目是 ``[key]`` 表。"""
+    """读取 TOML 文献库：每个条目是 ``[key]`` 表。
+
+    编码走 :func:`docgen.encoding.decode_text`（UTF-8 优先、GB18030 兜底）——
+    之前直接 ``read_text(encoding="utf-8")``，GBK 文件会抛未捕获的
+    ``UnicodeDecodeError``。
+    """
     try:
-        raw = path.read_text(encoding="utf-8")
+        raw_bytes = path.read_bytes()
     except OSError as exc:
         raise DocGenError(E_CONFIG, f"无法读取文献库: {path}: {exc}") from None
+    raw = decode_text(raw_bytes, path=str(path))
     try:
         data = tomllib.loads(raw)
     except tomllib.TOMLDecodeError as exc:

@@ -6,6 +6,19 @@
 
 ## [Unreleased]
 
+### 新增（输入编码：UTF-8 优先、GB18030 兜底）
+
+- DFM 源文件 / config / 文献库统一用 `src/docgen/encoding.py` 解码：
+  **UTF-8（含 BOM）优先，GB18030 兜底**（兼容 Windows 记事本存的 GBK/GB2312）；
+  两种都失败时报 `E5001` 并提示「请另存为 UTF-8」。产物 `.docx` 始终 UTF-8。
+- 顺带修掉一个崩溃：文献库之前直接 `read_text(encoding="utf-8")`，
+  GBK 文件会抛未捕获的 `UnicodeDecodeError`（traceback）；现在走统一解码。
+- 中文条目名/作者/文件路径实测可用（TOML 非 ASCII key 需加引号，如 `["张三2024"]`）。
+- 新增 `tests/test_encoding.py`（12 项）：UTF-8 / BOM / GBK / GB18030 /
+  不可解码、以及 DFM·config·文献库三条输入路径的 GBK 端到端。
+- 文档：manual/config 加「输入编码」说明；LIMITATIONS 新增 B18（只兜底
+  UTF-8 / GB18030，Big5/Shift-JIS/无 BOM UTF-16 会报错）。
+
 ### 新增（文献引用：GB/T 7714 顺序编码制）
 
 - **`[[cite:key1,key2]]`**：行内文献引用 → `[1]` / `[1,2]` / `[1-3]`

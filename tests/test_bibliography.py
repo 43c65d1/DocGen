@@ -279,6 +279,32 @@ def test_validate_catches_missing_library(tmp_path: Path) -> None:
     assert errors and errors[0].code == "E5001"
 
 
+def test_chinese_reference_key(tmp_path: Path) -> None:
+    """条目名/作者用中文可以用：TOML 非 ASCII key 加引号，``[[cite:]]`` 直接写。"""
+    refs = tmp_path / "refs.toml"
+    refs.write_text(
+        '["张三2024"]\ntype = "article"\nauthor = ["张三"]\ntitle = "中文条目"\n'
+        'journal = "期刊"\nyear = "2024"\n',
+        encoding="utf-8",
+    )
+    blocks = parse_dfm("引用[[cite:张三2024]]。\n\n[[bibliography]]\n")
+    plan = plan_bibliography(blocks, _config(tmp_path), refs=refs)
+    assert plan is not None
+    assert plan.numbers == {"张三2024": 1}
+    assert plan.entries[0].startswith("张三. 中文条目[J]")
+
+    data = render_docx_bytes(parse_dfm("引用[[cite:张三2024]]。\n"), _config(tmp_path), refs=refs)
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        text = "".join(
+            re.findall(
+                r"<w:t(?: [^>]*)?>(.*?)</w:t>",
+                archive.read("word/document.xml").decode(),
+                re.DOTALL,
+            )
+        )
+    assert "[1]" in text and "张三" in text
+
+
 # --------------------------------------------------------------------------
 # 渲染
 # --------------------------------------------------------------------------

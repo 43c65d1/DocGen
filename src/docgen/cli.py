@@ -30,6 +30,7 @@ from pathlib import Path
 
 from .config import Config, build_style_tree, load_config, render_table
 from .diagnostics import with_diagnostics
+from .encoding import decode_text
 from .errors import E_CONFIG, E_PDF, DocGenError
 from .ir import BlockNode
 from .ir import Table as TableBlock
@@ -83,11 +84,7 @@ def _read_source(path: Path) -> str:
     except OSError as exc:
         raise DocGenError(E_CONFIG, f"无法读取文件: {path}: {exc}") from None
 
-    try:
-        text = raw.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise DocGenError(E_CONFIG, f"文件不是合法 UTF-8: {path}: {exc}") from None
-    return normalize_text(text)
+    return normalize_text(decode_text(raw, path=str(path)))
 
 
 def _dump_ir(path: Path) -> list[BlockNode]:

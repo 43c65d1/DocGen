@@ -1,4 +1,4 @@
-"""IR -> Word（.docx）（完整版手册 §5 / §7 / W0~W1）。
+"""IR -> Word（.docx）。
 
 渲染层只认 IR + config：
 
@@ -938,6 +938,7 @@ def _render_table(state: _RenderState, block: Table) -> None:
                 for run in cell.paragraphs[0].runs:
                     run.bold = True
             _apply_cell_format(cell, widths[column_index], _column_alignment(block, column_index))
+            _apply_table_text(state, cell, properties, header=row_index == 0)
         if aux_row:
             for cell in table.rows[row_index].cells:
                 set_cell_border(cell, "top", val=aux_style, space="0", **aux_spec)
@@ -1058,6 +1059,7 @@ def _render_cell_table(state: _RenderState, block: Table) -> None:
                     for offset in range(1, cell_spec.rowspan):
                         merge_cell_vertical(table, row_index, column_index, offset)
                 _write_cell_content(state, cell, cell_spec)
+                _apply_table_text(state, cell, properties, header=row_index == 0)
             column_index += max(1, cell_spec.colspan)
 
     _apply_table_header_behavior(table, properties)
@@ -1095,6 +1097,25 @@ def _table_properties(state: _RenderState) -> dict[str, Any]:
     table["borders"] = style
     if "header_repeat" not in table:
         table["header_repeat"] = True
+    text_props = table.get("text")
+    if text_props is not None and not isinstance(text_props, dict):
+        raise DocGenError(
+            E_CONFIG,
+            '[table.text] 必须是表：如 [table.text] font.size = "10.5pt" / line_spacing = 1.0',
+        )
+    if isinstance(text_props, dict):
+        spacing = text_props.get("line_spacing")
+        if spacing is not None:
+            try:
+                value = float(spacing)
+            except (TypeError, ValueError):
+                raise DocGenError(
+                    E_CONFIG, f"[table.text] line_spacing 必须是数字倍数: {spacing!r}"
+                ) from None
+            if value <= 0:
+                raise DocGenError(E_CONFIG, f"[table.text] line_spacing 必须大于 0: {spacing!r}")
+    # header_bold 用与其它布尔开关相同的严格校验（写错不静默）
+    _table_flag(table, "header_bold", True)
     return table
 
 
@@ -1133,6 +1154,40 @@ def _apply_cell_format(cell: Any, width: int, alignment: str) -> None:
     set_cell_width(cell, width)
     if alignment:
         set_cell_alignment(cell, alignment)
+
+
+def _apply_table_text(
+    state: _RenderState,
+    cell: Any,
+    properties: dict[str, Any],
+    *,
+    header: bool,
+) -> None:
+    """单元格文字格式 / 行距：``[table.text]``。
+
+    只写**显式配置**的键（行距、段前段后、字体），不继承 ``[styles.body]``——
+    单元格默认走 ``Normal``，与正文段落是两条路径；要让表格文字更紧凑，
+    在 ``[table.text]`` 里显式写 ``line_spacing`` / ``space_*``。
+
+    ``header_bold``（``[table]`` 根级，默认 ``true``）控制表头加粗；
+    ``[table.text] font.bold`` 显式写了就以它为准。
+    """
+    text_props = properties.get("text")
+    props = dict(text_props) if isinstance(text_props, dict) else {}
+    header_bold = bool(properties.get("header_bold", True))
+    font = props.get("font")
+    explicit_bold = (
+        font.get("bold") if isinstance(font, dict) and "bold" in font else props.get("font.bold")
+    )
+    for paragraph in cell.paragraphs:
+        if props:
+            _apply_paragraph_properties(paragraph, props, keys=("space", "line_spacing"))
+        if explicit_bold is None:
+            for run in paragraph.runs:
+                run.bold = header_bold if header else None
+        if props:
+            for run in paragraph.runs:
+                _apply_run_style(state, run, props)
 
 
 def _line_points(value: Any, label: str) -> float:

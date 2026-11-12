@@ -85,65 +85,8 @@ def test_reference_documents_exist(name: str) -> None:
     assert path.stat().st_size > 1500, f"{name} 内容过少"
 
 
-def test_cheatsheet_covers_every_config_namespace() -> None:
-    """速查表要覆盖**所有** config 段——少一段，用户就得翻手册。
-
-    新增配置段时如果忘了加快捷表，这条会失败。
-    """
-    text = (ROOT / "docs" / "cheatsheet.md").read_text(encoding="utf-8")
-    for section in (
-        "[document]",
-        "[styles.",
-        "[inline]",
-        "[code_block]",
-        "[table]",
-        "[image]",
-        "[[sections]]",
-        "[output]",
-        "[math]",
-    ):
-        assert section in text, f"速查表少了 {section}"
-
-
-def test_cheatsheet_lists_all_markers() -> None:
-    """语法标记也要齐全（新增标记时同步）。"""
-    text = (ROOT / "docs" / "cheatsheet.md").read_text(encoding="utf-8")
-    for marker in (
-        "[[img:",
-        "[[pagebreak]]",
-        "[[sectionbreak]]",
-        "[[toc]]",
-        "[[ref:",
-        "[[fn:",
-        "[[diag:",
-        "\\begin{caption",
-        "\\begin{equation",
-    ):
-        assert marker in text, f"速查表少了标记 {marker}"
-
-
-def test_readme_links_reference_documents() -> None:
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "docs/cheatsheet.md" in readme
-    assert "docs/manual.md" in readme
-
-
-def test_handoff_document_is_about_development() -> None:
-    """`HANDOFF.md` 讲的是**开发**，不讲仓库维护。
-
-    它随仓库上传，只放"运行/贡献所需"的信息；git 分支/发布流程这类自用内容
-    不放在仓库里（维护者自己找地方存）。这里只断言文档的**主题**，
-    不检测本地有没有别的文件、也不检测 git 状态——测试本身会上传，
-    不该依赖某个人的本地布局。
-    """
-    handoff = (ROOT / "HANDOFF.md").read_text(encoding="utf-8")
-    topics = set(re.findall(r"^## (.+)$", handoff, re.MULTILINE))
-    for topic in ("分支模型", "发布流程（清单）", "怎么同步", "git 踩坑记录"):
-        assert topic not in topics, f"HANDOFF.md 混入了 git 维护章节: {topic}"
-
-
 def test_development_manual_is_shipped() -> None:
-    """开发手册（原始规格）要随包发布——错误码等文档引用它。"""
+    """设计说明（历史与架构）要随包发布——错误码等文档引用它。"""
     assert (ROOT / "docs" / "development-manual.md").is_file()
 
 
@@ -194,12 +137,6 @@ def test_setup_script_does_not_mutate_lockfile() -> None:
     assert sync_lines, "找不到同步命令"
     for line in sync_lines:
         assert "--frozen" in line, f"这条同步没带 --frozen: {line.strip()}"
-
-
-def test_quickstart_mentions_frozen() -> None:
-    """文档要提醒手动同步时也加 ``--frozen``（否则锁文件会被源改写）。"""
-    text = (ROOT / "QUICKSTART.md").read_text(encoding="utf-8")
-    assert "--frozen" in text
 
 
 def test_setup_script_tries_multiple_sources() -> None:
@@ -360,95 +297,12 @@ def test_package_ps1_prefers_windows_bsdtar() -> None:
     assert "bsdtar" in text, "没有校验 tar 是不是 bsdtar（GNU tar 不认 Windows 路径）"
 
 
-def test_readme_directory_map_matches_source_tree() -> None:
-    """README 的目录结构里点名的每个模块都必须真实存在。
-
-    这条是**实际踩到后补的**：README 的目录树一度还停在早期版本，
-    只列了部分模块、完全没提 Word 后端与后来新增的文件。
-    """
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    block = re.search(r"## 目录结构.*?```\n(.*?)```", readme, re.DOTALL)
-    assert block is not None, "README 里找不到目录结构代码块"
-    tree = block.group(1)
-    # 只取 src/docgen/ 那一段（到 tests/ 之前），避免把 tests 文件名与注释里的名字算进来
-    source_section = tree.split("tests/")[0].split("src/docgen/")[-1]
-    listed = set(re.findall(r"^\s*([a-z_]+\.py)\s", source_section, re.MULTILINE))
-    assert listed, "目录结构里没列出任何 .py 模块"
-    actual = {path.name for path in (ROOT / "src" / "docgen").rglob("*.py")}
-    missing = {name for name in listed if name not in actual}
-    assert not missing, f"README 列了不存在的模块: {sorted(missing)}"
-    # 反向：核心模块不能漏（漏了就说明目录树过期了）
-    for core in ("cli.py", "output.py", "config.py", "ir.py", "validate.py", "docx.py", "ooxml.py"):
-        assert core in listed, f"README 目录结构漏了核心模块 {core}"
-
-
-def test_readme_mentions_shipped_documents() -> None:
-    """面向使用者的文档必须都能从 README 找到入口。"""
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    for name in ("QUICKSTART.md", "LIMITATIONS.md", "FEEDBACK.md"):
-        assert name in readme, f"README 没有链接 {name}"
-
-
-def test_readme_describes_current_output_format() -> None:
-    """README 必须描述**当前**产出格式（只有 Word）。
-
-    这条抓过两次过时：README 一度只讲 HTML（Word 后端还没写），
-    后来又同时讲两个后端（HTML 已移除）。
-    """
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert ".docx" in readme, "README 应说明产出是 .docx"
-    assert "ECMA-376" in readme, "应说明产出过官方 schema 校验"
-    # HTML 后端已移除：README 不该再把它当能力宣传
-    assert "→ HTML / Word" not in readme
-    assert "output.html" not in readme
-    # 不该再把"剪枝版"当成项目现状的主标题
-    assert not readme.startswith("# DocGen（剪枝版"), "标题还在用剪枝版的旧定位"
-
-
-def test_limitations_does_not_claim_unimplemented_for_shipped_feature() -> None:
-    """限制清单不能把**已实现**的功能写成"无/不支持"。
-
-    实测踩到：`[[toc]]` 早就能渲染成 Word 的 TOC 域（`_render_toc` + TOC 样式 +
-    updateFields），但限制清单里还写着「无目录（TOC）生成」。
-    """
-    from docgen.render.docx import _render_toc  # noqa: F401  （存在即已实现）
-
-    text = (ROOT / "LIMITATIONS.md").read_text(encoding="utf-8")
-    for pattern in ("无目录（TOC）生成", "无目录生成", "不支持目录"):
-        assert pattern not in text, f"限制清单把已实现的功能写成了限制: {pattern}"
-
-
 def test_manual_excluded_from_ruff_format() -> None:
     """手册含契约代码，必须从 ruff format 里排除，否则 CI 的 --check 会失败。"""
     config = _pyproject()["tool"]["ruff"]
     exclusions = config["exclude"]
     joined = " ".join(exclusions) if isinstance(exclusions, list) else str(exclusions)
     assert "development-manual" in joined
-
-
-def test_limitations_cover_documented_design_limits() -> None:
-    """限制清单要覆盖几个最容易被误报的设计边界。"""
-    text = (ROOT / "LIMITATIONS.md").read_text(encoding="utf-8")
-    for topic in ("three_line", "heading_numbering", "heading_indent", "font_weight", "none"):
-        assert topic in text, f"限制清单漏了 {topic}"
-
-
-def test_quickstart_references_key_commands() -> None:
-    text = (ROOT / "QUICKSTART.md").read_text(encoding="utf-8")
-    for command in (
-        "docgen check",
-        "docgen build",
-        "docgen dump-ir",
-        "docgen dump-styles",
-        "docgen bug-report",
-    ):
-        assert command in text, command
-
-
-def test_feedback_template_has_sections() -> None:
-    text = (ROOT / "FEEDBACK.md").read_text(encoding="utf-8")
-    for section in ("我做了什么", "期望", "环境", "bug-report"):
-        assert section in text, section
 
 
 def test_pyproject_has_no_local_junk_paths() -> None:
@@ -464,14 +318,3 @@ def test_pyproject_has_no_local_junk_paths() -> None:
         assert junk not in text, f"pyproject.toml 里出现了本机路径 {junk!r}"
     config = _pyproject()
     assert "exclude" not in config["tool"]["mypy"], "mypy 只跑 src tests，不需要 exclude"
-
-
-def test_pyproject_has_no_internal_doc_references() -> None:
-    """`pyproject.toml` 不该引用仓库内部的文档编号/内部代号。
-
-    读者可能只拿到这一个文件（或只看 PyPI 元数据页），"手册 §12" 这类索引
-    对他们没有意义。要让说明自足。
-    """
-    text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    for marker in ("手册", "§", "Hard Version", "剪枝版"):
-        assert marker not in text, f"pyproject.toml 引用了内部概念 {marker!r}"

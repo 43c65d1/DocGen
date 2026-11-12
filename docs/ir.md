@@ -72,7 +72,7 @@ ListBlock(source_line=3, ordered=False, items=[ListItem(source_line=3, content=[
 
 ## 为什么这样设计
 
-- **渲染层可替换**：第二题的 Word 渲染只要重新消费 IR，不需要改解析器。
+- **渲染层可替换**：Word 渲染只消费 IR，不需要改解析器。
 - **可测试**：IR 是纯数据，快照测试直接比较对象，不做字符串比对。
 - **行号可追溯**：错误能定位到源文件行列（`check --json` 的 `file:line:col`）。
 - **稳定**：新增语法只新增节点或新增 `style_name`，不改已有字段。

@@ -106,7 +106,7 @@ render ──► ir + config（渲染层不认识解析器，也不回读源文�
 - 配置：[docs/config.md](docs/config.md)　Word/OOXML：[docs/word.md](docs/word.md)
 - **用户视角的默认效果与字段**：[docs/cheatsheet.md](docs/cheatsheet.md)（速查）、
   [docs/manual.md](docs/manual.md)（细节）——改行为时这两份要同步改，否则用户文档先失真。
-- 原始规格（**决策基线**）：[docs/development-manual.md](docs/development-manual.md)
+- 设计说明（历史与架构）：[docs/development-manual.md](docs/development-manual.md)
 
 ## 5. 怎么改一个特性（推荐顺序）
 
@@ -218,8 +218,7 @@ ruff check . && ruff format --check . && mypy src tests && pytest
 明确**还没做**的：`docgen init --preset` 预设库、`docgen format`、
 视觉回归测试、公式的图片降级（matplotlib）。
 
-`docs/development-manual.md` 里的 W0~W6 是**原始计划**，不是当前进度；
-以 `docs/word.md` 的"已实现 / 仍未实现"与 [CHANGELOG.md](CHANGELOG.md) 为准。
+进度与已实现范围以 `docs/word.md` 的"已实现 / 仍未实现"与 [CHANGELOG.md](CHANGELOG.md) 为准。
 
 ## 9. 下一步（如果要继续做）
 

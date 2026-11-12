@@ -115,9 +115,12 @@ logfile = ""
 | `row_lines` | `false` | `true` / `"dashed"`（每行底部横线） |
 | `decimal_align` | 无（不对齐） | `[2, 4]`：数值列按小数点/个位对齐 |
 | `space_before` / `space_after` | 无 | 表格与上下文间距 |
+| `header_bold` | `true` | `false` = 表头不加粗 |
+| `[table.text]` | 无 | 单元格文字：`font.size` / `font.name` / `line_spacing` / `space_*` |
 
 `edges` 可用的边：`top` `left` `bottom` `right` `insideH` `insideV`。
 `[[aux]]` 写在单元格里 = 该行上方加辅助线（合计行常用），标记不渲染文字。
+表格文字默认继承正文（Normal）；要更紧凑就写 `[table.text]`：`line_spacing = 1.0`、`space_before = "0pt"`、`font.size = "9pt"`。
 
 ### `[image]`
 | 字段 | 默认 | 例 |

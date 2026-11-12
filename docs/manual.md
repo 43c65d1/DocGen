@@ -178,6 +178,24 @@ alignment = "center"
 | `row_lines` | `false` | 每行（除最后一行）底部加横线；`true` 或线型字符串 |
 | `decimal_align` | 无 | 数值列（1 起列号，如 `[2, 4]`）：小数点/个位对齐；只处理纯数字，表头不参与 |
 | `space_before` / `space_after` | 无 | 表格与上下文的间距（写到相邻段落） |
+| `header_bold` | `true` | 表头加粗开关（`false` = 表头与正文同粗） |
+| `[table.text]` | 无 | 单元格文字格式（见下）：`font.*` / `line_spacing` / `space_before` / `space_after` |
+
+**单元格文字与行距**（`[table.text]`）：表格单元格默认继承 `Normal`
+（与正文段落是两条路径），需要更紧凑时显式配置：
+
+```toml
+[table.text]
+line_spacing = 1.0        # 行距倍数（同 [styles.*] 的 line_spacing）
+space_before = "0pt"      # 单元格段落段前
+space_after = "0pt"       # 段后
+font.size = "9pt"         # 字体类字段与 [styles.*] 相同：name/size/color/bold/italic
+font.name = "黑体"
+```
+
+- 只写**显式配置**的键；不写就保持原样（继承 `Normal`）。
+- `header_bold` 是根级开关；`[table.text] font.bold` 显式写了则以它为准。
+- 行距为**倍数**（`1.0` / `1.5`），不支持固定磅值；需要固定值请用 `space_*` 微调。
 
 **辅助线**：合计 / 小计 / 统计处理结果行上方常需一条辅助线，在该行任一单元格写
 `[[aux]]`（标记不渲染文字）：

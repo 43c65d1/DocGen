@@ -266,7 +266,7 @@ CI（[.github/workflows/ci.yml](.github/workflows/ci.yml)）在 Python 3.11 / 3.
 - IR 节点与不变量：[docs/ir.md](docs/ir.md)
 - 解析器金标准交叉验证：[docs/crosscheck.md](docs/crosscheck.md)
 - Word 后端与 OOXML 陷阱：[docs/word.md](docs/word.md)
-- 完整开发手册（原始规格）：[docs/development-manual.md](docs/development-manual.md)
+- 设计说明（历史与架构）：[docs/development-manual.md](docs/development-manual.md)
 - 错误码：手册 §11 与 [src/docgen/errors.py](src/docgen/errors.py)
 - 版本变化：[CHANGELOG.md](CHANGELOG.md)
 - 可测试不变量：输出里的每个内联样式声明都等于 config 的展开值

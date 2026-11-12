@@ -1,10 +1,29 @@
 # Changelog
 
-本文件记录 DocGen 的对外可见变化（剪枝版 + 完整版 Word 后端）。格式参考
+本文件记录 DocGen 的对外可见变化。格式参考
 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循
 [语义化版本](https://semver.org/lang/zh-CN/)。
 
 ## [Unreleased]
+
+### 新增（表格文字格式与行距）
+
+- `[table.text]`：单元格文字与行距的独立控制（此前只能全局改正文）：
+  `line_spacing`（倍数）、`space_before` / `space_after`、`font.size` / `font.name` /
+  `font.color` / `font.bold` / `font.italic`；只写显式配置的键，默认仍继承 `Normal`。
+- `[table] header_bold = false`：表头不加粗（默认 `true`）；`[table.text] font.bold`
+  显式写了以它为准。合并单元格（`colspan/rowspan`）同样生效。
+- 非法配置明确报 `E5001`（`line_spacing` 非正/非数字、`header_bold` 非布尔、
+  `[table.text]` 不是表）。
+- 新增 `tests/test_table_text.py`（11 项）；Word COM 核对：字号 9pt、行距 12pt/单倍、
+  段前后 0、表头不加粗、黑体 eastAsia 均生效。
+
+### 文档（去掉早期版本细节）
+
+- 早期版本说明收敛为一段历史背景：`docs/development-manual.md` 重写为
+  「设计说明（历史与架构）」；`dfm.md` / `config.md` / `word.md` / `ir.md` /
+  README / HANDOFF / CHANGELOG 不再出现「剪枝版」「完整版」「第二题」等内部阶段用语。
+- 发布测试不再约束 README/手册/速查表的具体表述（只保留存在性与打包完整性检查）。
 
 ### 新增（输入编码：UTF-8 优先、GB18030 兜底）
 
@@ -473,7 +492,7 @@ Word 16 复核：打开显示 1/2/3，`Fields.Update()` 后仍为 1/2/3，无修
   **Word 导出 PDF**（`ExportAsFixedFormat`）+ pdfium 渲染。Word 实测：A4 左右页边距
   均为 2.5cm（渲染 109–117px / 910px 页宽），表格、页眉页脚、域结果全部正确。
 
-### 新增（完整版 W5：分节 / 页码 / 页眉页脚 / 封面）
+### 新增（分节 / 页码 / 页眉页脚 / 封面）
 
 - **分节**：`[[sections]]` 配置纸张（A4/A3/A5/Letter/Legal）、页边距（cm）、分节符
 - **页码体系**：`numbering.format`（decimal / upperRoman / lowerRoman / upperLetter）
@@ -481,7 +500,7 @@ Word 16 复核：打开显示 1/2/3，`Fields.Update()` 后仍为 1/2/3，无修
 - **页眉页脚**：每节独立（`is_linked_to_previous = False`），避免 Word 继承错乱（§17.1）
 - **封面**：`cover = true` → `sectPr` 的 `w:vAlign val="center"` 垂直居中
 
-### 新增（完整版 W4：表格 / 图片 / 脚注）
+### 新增（表格 / 图片 / 脚注）
 
 - **表格**：`[table] style` 三线表/网格/无框、`header_repeat`（`w:tblHeader` 跨页重复表头）、
   `col_widths` 固定列宽（比例归一化）、GFM 列对齐（`:---:`）、IR `TableCell` 合并
@@ -513,7 +532,7 @@ Word 16 复核：打开显示 1/2/3，`Fields.Update()` 后仍为 1/2/3，无修
   （域元素必须在 run 内、`w:pPr`/`w:rPr` 顺序、表格层级、空 run）；
   [tests/test_ooxml_validity.py](tests/test_ooxml_validity.py) 覆盖全部特性与真实示例。
 
-### 新增（完整版 W3：编号 / 题注 / 交叉引用）
+### 新增（编号 / 题注 / 交叉引用）
 
 - **公式编号**：`\begin{equation #eq:main number=1}` → 无边框三列表格（左空 / 中公式 / 右编号），
   编号带书签，可被 `[[ref:eq:main]]` 引用；无 `number` 时就是普通块级公式
@@ -532,7 +551,7 @@ Word 16 复核：打开显示 1/2/3，`Fields.Update()` 后仍为 1/2/3，无修
 - **编号映射显式化**：`numbering.heading_numbering()` 把 `level -> (ilvl, HeadingN)` 写成一张表
 - **校验**：引用目标不存在 → `E5004`；标签重复 → `E4001`；`check --strict` 一并报告
 
-### 新增（完整版 W2：数学渲染）
+### 新增（数学渲染）
 
 - **数学引擎**：`render/math.py` 把 LaTeX 经 `latex2mathml` → MathML → Office
   `MML2OMML.XSL` → **OMML**（`m:oMath`），公式在 Word 里可编辑
@@ -542,7 +561,7 @@ Word 16 复核：打开显示 1/2/3，`Fields.Update()` 后仍为 1/2/3，无修
 - 公式测试集 40 条，转换通率 **40/40 = 100%**（手册验收 > 90%）
 - 修复确定性测试：比 `document.xml` 而不是 docx 字节（zip 时间戳不可比）
 
-### 新增（完整版 W1：基础渲染 + 母版槽位）
+### 新增（基础渲染 + 母版槽位）
 
 - **上下标**（手册 §6.2.3）：`H~2~O` / `E=mc^2^`（Pandoc 单字符标记）与
   `[上标]{.sup}` / `[下标]{.sub}`，Word 侧写 `w:vertAlign`
@@ -552,15 +571,15 @@ Word 16 复核：打开显示 1/2/3，`Fields.Update()` 后仍为 1/2/3，无修
   `tests/test_template.py` 断言全部槽位（CI 重建即验证）
 - 文档：`docs/word.md` 补母版与已实现清单；`docs/dfm.md` 补上下标语法
 
-### 新增（完整版 W0：最小 docx 链路）
+### 新增（最小 docx 链路）
 
 - **Word 后端**：`docgen build -o out.docx` 与 `--format=docx` 端到端可用
-- [render/ooxml.py](../src/docgen/render/ooxml.py)：所有 `OxmlElement` 构造集中一处，
+- [render/ooxml.py](src/docgen/render/ooxml.py)：所有 `OxmlElement` 构造集中一处，
   处理手册 §17.1 的陷阱（四个 `rFonts`、`firstLineChars`、`beforeLines`/`afterLines`、
   `outlineLvl`、`updateFields`）
-- [render/template.py](../src/docgen/render/template.py)：母版加载、样式槽位校验、
+- [render/template.py](src/docgen/render/template.py)：母版加载、样式槽位校验、
   标题 `outlineLvl`、`updateFields`
-- [units.py](../src/docgen/units.py)：`12pt` / `16px` / `1.5em` / 纯数字 → 磅
+- [units.py](src/docgen/units.py)：`12pt` / `16px` / `1.5em` / 纯数字 → 磅
 - **config 点号键**：`[document] font.name = "宋体"`、`[styles.x] font.bold = true`
   （手册 §6.1 口径），展开后为嵌套表
 - **错误码扩展**：`E2010` keywords 非法、`E3002` `\begin` 名字不一致、
@@ -568,11 +587,10 @@ Word 16 复核：打开显示 1/2/3，`Fields.Update()` 后仍为 1/2/3，无修
 - **OOXML 语义探针**：`tests/test_ooxml_probe.py`（样式槽位、`outlineLvl`、
   四个字体属性、`firstLineChars`、`updateFields`、分页符、表格边框、
   config 值 == 输出属性的不变量、确定性、图片嵌入）
-- 文档：[docs/word.md](../docs/word.md)
+- 文档：[docs/word.md](docs/word.md)
 
 ### 计划中
 
-- 遗留：剪枝版第 5 周可选的临时 HTML → Word 输出（已被正式 Word 后端取代，不再实现）
 
 ## [0.1.0] - 2026-10-10
 

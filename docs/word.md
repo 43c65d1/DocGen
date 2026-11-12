@@ -15,11 +15,11 @@ docgen build input.md -c config.toml -o output.docx
 docgen build input.md -c config.toml -o output.docx --format docx
 ```
 
-退出码与剪枝版一致：`0` 成功、`1` 内容错误、`2` 配置/文件错误。
+退出码：`0` 成功、`1` 内容错误、`2` 配置/文件错误。
 
-## config 口径（手册 §6.1）
+## config 口径
 
-完整版用**点号键**，与剪枝版的下划线扁平键不同：
+config 用**点号键**；下划线扁平键（`font_weight` 等）是已移除的旧写法：
 
 ```toml
 config_version = "0.1"

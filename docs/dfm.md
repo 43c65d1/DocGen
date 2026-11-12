@@ -1,6 +1,6 @@
-# DFM 子集（剪枝版）
+# DFM 子集
 
-DFM = DocGen Flavored Markdown。剪枝版只实现手册 §5.1 的子集，
+DFM = DocGen Flavored Markdown。当前实现的是手册 §5.1 定义的子集，
 所有语法最终都变成 [IR](../src/docgen/ir.py) 节点；解析器不产生 HTML。
 
 ## 块级
@@ -54,7 +54,7 @@ DFM = DocGen Flavored Markdown。剪枝版只实现手册 §5.1 的子集，
 代码围栏的 `lang` 会原样记进 `CodeBlock.language`；允许的语言见下文「诊断」。
 `$` 后紧跟数字或空白不当作数学（`价格 $5 元`、`$ $` 都是普通文本）。
 
-## 双语法：fence 与 `\begin`（完整版 §6.2.5）
+## 双语法：fence 与 `\begin`
 
 CommonMark 的 fence 长度规则对 LLM 不友好：内部含 ` ``` ` 或需要嵌套同类结构时，fence 会提前终止。
 所以 DFM 提供第二套语法，在交给 markdown-it 之前处理：
@@ -94,7 +94,7 @@ print("hi")          <!-- 内部可以再出现 ``` -->
 
 ## 宽容解析 + 严格诊断
 
-剪枝版把「解析」与「诊断」分成两层：
+解析器把「解析」与「诊断」分成两层：
 
 - **解析器永远宽容**：未闭合的标记退化为字面文本，不抛异常、不丢内容，
   所以 `docgen build` 任何时候都能产出结果。
@@ -126,12 +126,10 @@ print("hi")          <!-- 内部可以再出现 ``` -->
 每个块级节点的 `source_line` 是 **1 起的源文件行号**，指向该块在 DFM 中的起始行。
 输入在解析前经过 `normalize_text`（去 BOM、统一 LF），所以行号与磁盘上的 LF 版本一致。
 
-## 剪枝版不做
+## 尚未实现
 
-多级编号、题注、交叉引用、目录、脚注、**合并单元格的表格语法**、数学渲染
-（HTML 只占位或 MathJax）、`\begin{...}` 命名块、Word/OOXML —— 都留给第二题。
-（斜线表头已有：单元格里写 `[[diag:右上;左下]]`，见 §行内。）
-
-**内容 include（把另一个文件插入正文）也未实现**：目前只有 config 的 `include`
-（合并 TOML）。需求已登记在 [LIMITATIONS.md](../LIMITATIONS.md) B16，两种候选形式
+**内容 include（把另一个文件插入正文）未实现**：目前只有 config 的 `include`
+（合并 TOML）。需求登记在 [LIMITATIONS.md](../LIMITATIONS.md) B16，两种候选形式
 （DFM 片段解析插入 / `w:altChunk` 整块插入）待定。
+
+公式的交叉引用（`\ref` 公式）也不做；图表题注的引用不受影响。

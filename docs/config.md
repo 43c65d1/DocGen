@@ -1,7 +1,7 @@
 # config（TOML）参考
 
 config 是**唯一真源**：所有字号、颜色、字体都来自这里，解析器不写死任何视觉属性。
-剪枝版支持单继承 `based_on`、`@引用`、`include` 合并与 `for = false` 软删除。
+支持单继承 `based_on`、`@引用`、`include` 合并与 `for = false` 软删除。
 
 > **输入编码**：config / DFM / 文献库统一「UTF-8（含 BOM）优先，GB18030 兜底」
 > （best effort，兼容 GBK/GB2312 旧文件）；其它编码报 `E5001`。产物始终 UTF-8。
@@ -100,6 +100,23 @@ space_after = "0.5 line"
 | `[table] space_after` | 表格**后**一段的段前距 | 表格与下文隔开（解决「表格底线贴正文」） |
 
 **图片**：`[image] space_before` / `space_after` 直接作用于图片所在的段落。
+
+
+### 表格文字：`[table.text]` / `header_bold`
+
+```toml
+[table]
+header_bold = false          # 表头不加粗
+
+[table.text]
+line_spacing = 1.0           # 行距倍数
+space_before = "0pt"
+space_after = "0pt"
+font.size = "9pt"
+font.name = "黑体"
+```
+
+表格文字默认继承 `Normal`；`[table.text]` 只写显式配置的键。字段语义与 `[styles.*]` 相同（`font.*` / `line_spacing` / `space_*`）。
 
 ### 表格线：`[table] style` / `line_*` / `edges` / `row_lines`
 
@@ -430,6 +447,6 @@ docgen check input.md -c config.toml --json   # {"ok": false, "errors": [...]}
 退出码：`0` 通过；`1` 内容错误（样式引用/图片缺失）；`2` 配置错误（文件缺失、版本不符、
 继承环、深度超限、`@ref` 不存在）。
 
-## 剪枝版不支持
+## 不支持
 
 多继承、深合并、跨命名空间继承、`include` 指向 URL、config 变量插值（除 `@ref` 外）。

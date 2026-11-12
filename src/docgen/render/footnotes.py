@@ -1,4 +1,4 @@
-"""脚注（完整版手册 W4）：手写 ``word/footnotes.xml``。
+"""脚注：手写 ``word/footnotes.xml``。
 
 python-docx 不支持脚注，所以这里直接改包：
 

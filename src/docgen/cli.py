@@ -128,7 +128,7 @@ def _build(
     pdf_engine: str | None = None,
     refs: Path | None = None,
 ) -> int:
-    """DFM + config -> docx（完整版手册 §11），可选再转 PDF。
+    """DFM + config -> docx，可选再转 PDF。
 
     ``--pdf`` / ``[pdf] enabled = true`` 会在 docx 生成后调用
     :func:`docgen.pdf.convert`；``--no-pdf`` 优先级最高。

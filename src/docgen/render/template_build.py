@@ -1,6 +1,6 @@
-"""母版构建（完整版手册 §14.1 / §14.3）。
+"""母版构建。
 
-剪枝版与 W0 用的是 python-docx 自带模板：已有 ``Heading 1``~``Heading 9``、
+默认模板来自 python-docx 自带模板：已有 ``Heading 1``~``Heading 9``、
 ``Caption``、``Body Text``、``List Bullet/Number``，但**没有目录样式**
 （``TOC 1``~``TOC 9``）也**没有多级标题编号**——W3（编号/题注）与 W5（目录）依赖它们。
 

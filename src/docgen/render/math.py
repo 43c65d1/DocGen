@@ -1,4 +1,4 @@
-"""数学渲染：LaTeX → MathML → OMML（完整版手册 §4 / W2）。
+"""数学渲染：LaTeX → MathML → OMML。
 
 链路：``latex2mathml`` 把 LaTeX 转成 MathML，再用 Office 的 **MML2OMML.XSL**
 转成 OMML（``m:oMath``），插进 docx 的段落里——公式在 Word 里**可编辑**。

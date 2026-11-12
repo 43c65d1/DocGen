@@ -495,7 +495,7 @@ def _alignment_of(css_style: str) -> str:
 
 
 def _cell_text(inline: Token | None) -> str:
-    """表格单元格统一按纯文本处理（剪枝版不支持单元格内样式）。"""
+    """表格单元格统一按纯文本处理（暂不支持单元格内样式）。"""
     if inline is None or not inline.children:
         return ""
     pieces: list[str] = []

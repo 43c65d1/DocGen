@@ -1,4 +1,4 @@
-"""数学渲染契约（完整版手册 §4 / W2）。
+"""数学渲染契约。
 
 - ``latex2mathml`` → MathML → Office ``MML2OMML.XSL`` → OMML（``m:oMath``）
 - 引擎可插拔、失败可观测（``on_fail = error | plain``）

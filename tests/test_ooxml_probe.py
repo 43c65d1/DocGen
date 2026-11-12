@@ -1,4 +1,4 @@
-"""OOXML 语义探针（完整版手册 §10.1）。
+"""OOXML 语义探针。
 
 只断言 Word 专有结构：样式引用、``outlineLvl``、``rFonts`` 四属性、
 ``updateFields``、分页符、表格边框。**不做全文 document.xml 快照**（脆弱）。

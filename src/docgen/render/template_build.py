@@ -46,12 +46,24 @@ TOC_LEVELS = range(1, 10)
 _W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 
 
+def _word_heading_numbering(config: Config | None) -> bool:
+    """是否使用 Word 多级编号：只有 decimal（或未配置）才挂 numPr。
+
+    chapter/chinese 由渲染层烘焙文本；这里返回 False，避免双重编号。
+    """
+    if config is None:
+        return True
+    from ..numbering import heading_numbering_mode
+
+    return heading_numbering_mode(config) == "decimal"
+
+
 def build_template(config: Config | None = None, output: Path | None = None) -> Any:
     """构建规范母版：默认模板 + 补齐的目录样式与多级标题编号。
 
     返回 python-docx ``Document``；给了 ``output`` 就同时落盘为 ``.docx``。
     """
-    from .template import apply_document_defaults, heading_indent, heading_numbering_enabled
+    from .template import apply_document_defaults, heading_indent
 
     document = _Document()
     if config is not None:
@@ -59,7 +71,7 @@ def build_template(config: Config | None = None, output: Path | None = None) -> 
     add_toc_styles(document)
     add_heading_numbering(
         document,
-        enabled=heading_numbering_enabled(config) if config else True,
+        enabled=_word_heading_numbering(config),
         indent=heading_indent(config) if config else None,
     )
     ensure_update_fields(document)

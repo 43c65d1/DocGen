@@ -173,3 +173,15 @@ def test_invalid_mode_render_raises(tmp_path: Path) -> None:
     with pytest.raises(DocGenError) as caught:
         _render(tmp_path, DOC, '\n[document]\nheading_numbering = "uppercase"\n')
     assert caught.value.code == "E5001"
+
+
+def test_build_template_disables_word_numbering_for_baked_presets(tmp_path: Path) -> None:
+    """build_template 也要遵循预设：chapter/chinese 不挂 Word 多级编号。"""
+    from docgen.render.template_build import build_template
+
+    chapter = build_template(_config(tmp_path, '\n[document]\nheading_numbering = "chapter"\n'))
+    decimal = build_template(_config(tmp_path))
+    chapter_heading = chapter.styles["Heading 1"].element.xml
+    decimal_heading = decimal.styles["Heading 1"].element.xml
+    assert "w:numPr" not in chapter_heading
+    assert "w:numPr" in decimal_heading

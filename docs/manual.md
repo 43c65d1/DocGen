@@ -31,7 +31,7 @@
 | `font.size` | 11pt | 字号：`12pt` / `1.5em` / `16px`，或**中文字号**（`小四` / `三号`） |
 | `font.east_asia` | 无 | 代码块里中文的回退字体（可选） |
 | `line_spacing` | 1.15 倍（276/240） | 正文行距：数字 = **倍数**（`1.5`）；带 `pt`/`磅` = **固定磅值**（`"20pt"` → `w:lineRule="exact"`） |
-| `heading_numbering` | **开** | 标题多级编号；`false` 关闭 |
+| `heading_numbering` | **开**（decimal） | 标题编号：`false` 关闭；`decimal` / `chapter`（第一章）/ `chinese`（一、） |
 | `heading_indent` | 母版缩进（`left=720` + `hanging=360`） | 三种写法：`false` / 表 / 数字，见 §2 |
 | `alignment` | 无（继承） | 段落对齐，会被 `[styles.*]` 覆盖，见 §3 |
 | `space_before` / `space_after` | 无 | 段前/段后，见 §3 |
@@ -72,6 +72,19 @@
 > `font.size` 同样接受中文字号（`三号` / `小四` …），换算表见 §1。
 
 - **编号**：`[document] heading_numbering = false` 关闭；缩进用 `heading_indent`。
+- **编号格式预设**（`chapter` / `chinese` 为构建期烘焙文本，TOC 里同样显示）：
+
+  ```toml
+  [document]
+  heading_numbering = "chapter"   # 第一章 / 1.1 / 1.1.1
+  # heading_numbering = "chinese" # 一、 / （一） / 1. / （1）
+  # heading_numbering = "decimal" # 1 / 1.1 / 1.1.1（默认，Word 多级编号）
+  ```
+
+  `chapter` 只影响一级标题的显示（第一章），二级/三级仍用阿拉伯章号（1.1 / 1.1.1）；
+  `chinese` 的一级为「一、」、二级「（一）」、三级「1.」、四级「（1）」。
+  切换后标题样式不再挂 Word 自动编号（避免「1 第一章」双重编号），
+  改动后重建即可。
 - `heading_indent` 的三种写法：
 
   ```toml

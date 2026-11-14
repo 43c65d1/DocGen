@@ -408,9 +408,15 @@ decimal_align = [2]        # 1 起的列号；可多列，如 [2, 4]
 
 ```toml
 [document]
-heading_numbering = true    # 默认：H1 → "1"、H2 → "1.1"
-heading_numbering = false   # 关闭：标题不再自动编号
+heading_numbering = true       # 默认：H1 → "1"、H2 → "1.1"（Word 多级编号）
+heading_numbering = false      # 关闭：标题不再自动编号
+heading_numbering = "chapter"  # 烘焙文本：第一章 / 1.1 / 1.1.1
+heading_numbering = "chinese"  # 烘焙文本：一、 / （一） / 1.
 ```
+
+`chapter` / `chinese` 不再使用母版的 `numId`，编号在构建期写成标题文本
+（与题注/文献编号同一思路），因此 TOC 与预览都能直接看到；代价是
+在 Word 里手工改标题顺序不会自动重排，需重新构建。
 
 > ⚠️ **标题文字里不要自己写序号**。`# 1 概述` 叠加自动编号会变成
 > `1 1 概述` 的观感（H2 则是 `1.1 1. 概述`）。要么去掉手写序号，要么关掉自动编号。

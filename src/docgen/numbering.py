@@ -16,8 +16,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .config import Config
-from .errors import E_SYNTAX, E_UNKNOWN_REF
-from .ir import BlockNode, BlockQuote, InlineNode, ListBlock, NamedBlock, Ref
+from .errors import E_CONFIG, E_SYNTAX, E_UNKNOWN_REF, DocGenError
+from .ir import BlockNode, BlockQuote, Heading, InlineNode, ListBlock, NamedBlock, Ref
 from .validate import ContentError
 
 __all__ = [
@@ -25,11 +25,14 @@ __all__ = [
     "CaptionRef",
     "RefUse",
     "baked_fields",
+    "baked_heading_labels",
     "caption_counters",
     "caption_kind",
     "collect_labels",
     "collect_refs",
+    "format_heading_label",
     "heading_numbering",
+    "heading_numbering_mode",
     "validate_numbering",
 ]
 
@@ -73,6 +76,101 @@ def heading_numbering() -> dict[int, tuple[int, str]]:
     这里把映射显式写出来（手册 W3 要求），渲染与校验都引用它。
     """
     return {level: (level - 1, f"Heading{level}") for level in range(1, 10)}
+
+
+#: 标题编号预设：``decimal`` = Word 多级编号 1 / 1.1 / 1.1.1（默认，不烘焙）；
+#: ``chapter`` = 第一章 / 1.1 / 1.1.1；``chinese`` = 一、 / （一） / 1. / （1）
+HEADING_NUMBERING_MODES = ("decimal", "chapter", "chinese")
+
+_CN_DIGITS = ("零", "一", "二", "三", "四", "五", "六", "七", "八", "九")
+
+
+def _cn_number(value: int) -> str:
+    """1–99 → 中文数字（一 / 十二 / 二十三）；超出范围退回阿拉伯数字。"""
+    if value <= 0 or value >= 100:
+        return str(value)
+    if value < 10:
+        return _CN_DIGITS[value]
+    tens, ones = divmod(value, 10)
+    prefix = "" if tens == 1 else _CN_DIGITS[tens]
+    return prefix + "十" + (_CN_DIGITS[ones] if ones else "")
+
+
+def heading_numbering_mode(config: Config) -> str:
+    """``[document] heading_numbering`` → ``off`` / ``decimal`` / ``chapter`` / ``chinese``。
+
+    兼容旧写法：``true``（= decimal）、``false``（= off）、
+    ``heading_numbering.enabled = false`` 以及 ``heading_numbering.style = "chapter"``。
+    """
+    raw = config.setting("heading_numbering", True)
+    if isinstance(raw, dict):
+        if not raw.get("enabled", True):
+            return "off"
+        raw = raw.get("style", "decimal")
+    if isinstance(raw, bool):
+        return "decimal" if raw else "off"
+    text = str(raw).strip().lower()
+    aliases = {
+        "true": "decimal",
+        "1": "decimal",
+        "yes": "decimal",
+        "on": "decimal",
+        "false": "off",
+        "0": "off",
+        "no": "off",
+        "off": "off",
+        "decimal": "decimal",
+        "chapter": "chapter",
+        "chinese": "chinese",
+    }
+    if text in aliases:
+        return aliases[text]
+    raise DocGenError(
+        E_CONFIG,
+        f"[document] heading_numbering 不支持: {raw!r}"
+        "（可用 true/false 或 decimal / chapter / chinese）",
+    )
+
+
+def format_heading_label(mode: str, level: int, counters: list[int]) -> str:
+    """按预设生成一级标题编号文本；``counters[1..9]`` 是各级当前计数。"""
+    if mode == "chapter":
+        if level == 1:
+            return f"第{_cn_number(counters[1])}章"
+        return ".".join(str(counters[index]) for index in range(1, level + 1))
+    if mode == "chinese":
+        if level == 1:
+            return f"{_cn_number(counters[1])}、"
+        if level == 2:
+            return f"（{_cn_number(counters[2])}）"
+        if level == 3:
+            return f"{counters[3]}."
+        if level == 4:
+            return f"（{counters[4]}）"
+        return f"{counters[level]})"
+    return ".".join(str(counters[index]) for index in range(1, level + 1))
+
+
+def baked_heading_labels(blocks: list[BlockNode], config: Config) -> dict[int, str]:
+    """自定义标题编号（chapter/chinese）在构建期算成文本；decimal/off 返回空表。
+
+    返回 ``{id(Heading 节点): 编号文本}``——节点是 frozen dataclass，用 ``id`` 关联；
+    渲染时同一次构建内对象不会回收，安全。
+    """
+    mode = heading_numbering_mode(config)
+    if mode in ("off", "decimal"):
+        return {}
+    counters = [0] * 10
+    labels: dict[int, str] = {}
+    for block in iter_blocks(blocks):
+        if not isinstance(block, Heading):
+            continue
+        level = max(1, min(9, block.level))
+        counters[level] += 1
+        for deeper in range(level + 1, 10):
+            counters[deeper] = 0
+        labels[id(block)] = format_heading_label(mode, level, counters)
+    return labels
 
 
 def caption_kind(block: NamedBlock) -> str:

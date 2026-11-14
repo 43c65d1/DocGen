@@ -6,6 +6,20 @@
 
 ## [Unreleased]
 
+### 新增（标题中文编号格式）
+
+- `[document] heading_numbering` 从布尔开关扩展为预设：
+  `decimal`（默认，1 / 1.1 / 1.1.1，Word 多级编号）、`chapter`
+  （第一章 / 1.1 / 1.1.1）、`chinese`（一、 / （一） / 1. / （1））；
+  仍支持 `false` 关闭与 `heading_numbering.enabled = false`。
+- `chapter` / `chinese` 改为**构建期烘焙文本**：标题段落写死编号并清掉样式 numPr，
+  不会出现「1 第一章」双重编号；TOC/预览也能直接看到编号。
+- 非法预设报 `E5001`，`docgen check` 同样报出。
+- Word COM 实测：`第一章 绪论` / `1.1 研究背景` / `1.1.1 问题定义` / `第二章 方法`，
+  ListString 为空（无重复编号），文档正常打开。
+- 新增 `tests/test_heading_numbering_format.py`（18 项：模式解析、编号文本、
+  层级重置、两种预设渲染、默认/关闭行为、非法值）。
+
 ### 新增（参考文献表规范化）
 
 - **条目编号**：参考文献表条目现在默认带 `[n]` 前缀（顺序编码制要求）。

@@ -187,9 +187,10 @@ def _build_document(
     )
     state.sections = sections
     # 域缓存值：渲染时把真实编号写进产物，别指望查看器去更新域
-    from ..numbering import baked_fields
+    from ..numbering import baked_fields, baked_heading_labels
 
     state.caption_fields = baked_fields(blocks)
+    state.heading_labels = baked_heading_labels(blocks, config)
     # 文献引用：先分配编号、生成条目（没有 [[cite:]] 时为 None）
     from ..bibliography import has_bibliography_marker, plan_bibliography
 
@@ -248,6 +249,7 @@ class _RenderState:
         "document",
         "footnote_reference_maker",
         "footnotes",
+        "heading_labels",
         "math_engine",
         "math_on_fail",
         "math_xsl",
@@ -270,6 +272,7 @@ class _RenderState:
         self.math_engine, self.math_on_fail, self.math_xsl = math_settings(config)
         self.sections: Any = None
         self.caption_fields: dict[str, str] = {}
+        self.heading_labels: dict[int, str] = {}
         self.bibliography: Any = None
         self._bookmark_id = 1000
         self.footnotes: list[str] = []
@@ -377,6 +380,13 @@ def _render_heading(
     properties = {**state.doc_settings, **state.styles.get(f"heading{level}", {})}
     _apply_paragraph_properties(paragraph, properties, keys=("alignment", "space"))
     _apply_table_gap(state, paragraph, previous=previous, following=following)
+    label = state.heading_labels.get(id(block))
+    if label:
+        # chapter/chinese 预设：编号在构建期烘焙成文本（与题注/文献编号同一思路），
+        # 样式上的 numPr 已关闭；这里再显式清一次，防止母版样式残留。
+        set_paragraph_numbering_none(paragraph)
+        separator = "" if label.endswith(("、", "）", ")")) else " "
+        paragraph.add_run(label + separator)
     _render_inlines(state, paragraph, block.content, f"heading{level}")
 
 

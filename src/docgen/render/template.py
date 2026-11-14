@@ -74,14 +74,14 @@ def create_document(config: Config, template: Path | None = None) -> Any:
 
 
 def heading_numbering_enabled(config: Config) -> bool:
-    """``[document] heading_numbering``：标题多级编号开关，缺省开启（手册 §14 要求）。
+    """``[document] heading_numbering``：标题编号是否开启（``off`` 之外都算开）。
 
-    支持 ``heading_numbering = false`` 与 ``heading_numbering.enabled = false`` 两种写法。
+    支持 ``false`` / ``enabled = false``，以及 ``decimal`` / ``chapter`` / ``chinese``
+    三种预设；非法值在此报 ``E5001``。
     """
-    value = config.setting("heading_numbering", True)
-    if isinstance(value, dict):
-        value = value.get("enabled", True)
-    return bool(value)
+    from ..numbering import heading_numbering_mode
+
+    return heading_numbering_mode(config) != "off"
 
 
 def heading_indent(config: Config) -> dict[str, Any] | None:
@@ -129,7 +129,14 @@ def _extend_default_template(document: Any, config: Config | None = None) -> Non
     add_toc_styles(document)
     _ensure_caption_styles(document)
     ensure_font_table(document)
-    enabled = heading_numbering_enabled(config) if config is not None else True
+    if config is None:
+        enabled: bool = True
+    else:
+        from ..numbering import heading_numbering_mode
+
+        # 只有 decimal 用 Word 的多级编号；chapter/chinese 改为构建期烘焙文本，
+        # 母版不再挂 numPr，否则会出现「1 第一章」这类双重编号。
+        enabled = heading_numbering_mode(config) == "decimal"
     indent = heading_indent(config) if config is not None else None
     add_heading_numbering(document, enabled=enabled, indent=indent)
     ensure_update_fields(document)

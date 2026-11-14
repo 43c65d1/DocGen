@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .config import BUILTIN_STYLES, INLINE_STYLE_NAMES, Config
-from .errors import E_CONFIG, E_UNKNOWN_STYLE
+from .errors import E_CONFIG, E_UNKNOWN_STYLE, DocGenError
 from .ir import (
     BlockNode,
     BlockQuote,
@@ -166,4 +166,12 @@ def validate_content(
     from .bibliography import validate_bibliography
 
     errors.extend(validate_bibliography(blocks, config, source=source, base_dir=root, refs=refs))
+
+    # 标题编号预设（decimal / chapter / chinese / false）：非法值在 check 时也报
+    from .numbering import heading_numbering_mode
+
+    try:
+        heading_numbering_mode(config)
+    except DocGenError as err:
+        errors.append(ContentError(code=err.code, message=str(err), file=file_name, line=0))
     return errors

@@ -26,10 +26,11 @@
 
 | 字段 | 默认效果 | 说明 |
 |---|---|---|
-| `font.name` | 主题字体（西文 minorHAnsi / 中文 minorEastAsia） | 写入 `Normal`，正文继承 |
+| `font.name` | 主题字体（西文 minorHAnsi / 中文 minorEastAsia） | 中文字体；只写它时西文也用它 |
+| `font.latin` | 无（跟随 `font.name`） | **西文字体**（ascii/hAnsi/cs）；写它就只换西文，中文仍用 `font.name` |
 | `font.size` | 11pt | 同上 |
 | `font.east_asia` | 无 | 代码块里中文的回退字体（可选） |
-| `line_spacing` | 1.15 倍（276/240） | 正文行距；`1.5` / `"20pt"` 这类数值按倍数 |
+| `line_spacing` | 1.15 倍（276/240） | 正文行距：数字 = **倍数**（`1.5`）；带 `pt`/`磅` = **固定磅值**（`"20pt"` → `w:lineRule="exact"`） |
 | `heading_numbering` | **开** | 标题多级编号；`false` 关闭 |
 | `heading_indent` | 母版缩进（`left=720` + `hanging=360`） | 三种写法：`false` / 表 / 数字，见 §2 |
 | `alignment` | 无（继承） | 段落对齐，会被 `[styles.*]` 覆盖，见 §3 |
@@ -59,7 +60,7 @@
 | `heading3` | 11pt（继承） | 是 | `4F81BD` | 10pt | 同上 |
 | `heading4`–`heading9` | 11pt（继承） | 4 是 / 5–6 否 | `4F81BD` / `243F60` | 10pt | 同上 |
 
-可用字段：`font.name` / `font.size` / `font.bold` / `font.italic` / `font.color` /
+可用字段：`font.name` / `font.latin` / `font.size` / `font.bold` / `font.italic` / `font.color` /
 `font.underline` / `font.strike` / `alignment` / `space_before` / `space_after`。
 
 - **编号**：`[document] heading_numbering = false` 关闭；缩进用 `heading_indent`。
@@ -193,9 +194,10 @@ font.size = "9pt"         # 字体类字段与 [styles.*] 相同：name/size/col
 font.name = "黑体"
 ```
 
-- 只写**显式配置**的键；不写就保持原样（继承 `Normal`）。
+- 只写**显式配置**的键；不写就保持原样（继承 `Normal`）。字体字段与样式一致，
+  支持 `font.name`（中文）+ `font.latin`（西文）分开设置。
 - `header_bold` 是根级开关；`[table.text] font.bold` 显式写了则以它为准。
-- 行距为**倍数**（`1.0` / `1.5`），不支持固定磅值；需要固定值请用 `space_*` 微调。
+- 行距与样式一致：数字 = 倍数（`1.0` / `1.5`）；`"18pt"` / `"18磅"` = 固定磅值。
 
 **辅助线**：合计 / 小计 / 统计处理结果行上方常需一条辅助线，在该行任一单元格写
 `[[aux]]`（标记不渲染文字）：
@@ -425,6 +427,15 @@ font.size = "12pt"
 [styles.heading1]
 font.name = "黑体"
 font.size = "18pt"
+```
+
+**中文宋体 + 西文 Times New Roman，行距固定 20 磅**
+
+```toml
+[document]
+font.name = "宋体"          # 中文
+font.latin = "Times New Roman"  # 西文
+line_spacing = "20pt"       # 固定值（不写 pt 则是倍数）
 ```
 
 **正文首行缩进 2 字符，但署名行不缩进**

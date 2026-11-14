@@ -65,8 +65,8 @@ color = "#222"
 
 | 用途 | 例 |
 |---|---|
-| 字体 | `font.bold` / `font.color` / `font.name` / `font.size` / `font.italic` |
-| 段落 | `line_spacing` / `first_line_chars` / `alignment` / `space_before` / `space_after` |
+| 字体 | `font.bold` / `font.color` / `font.name` / `font.latin` / `font.size` / `font.italic` |
+| 段落 | `line_spacing`（数字=倍数；`"20pt"`=固定磅值）/ `first_line_chars` / `alignment` / `space_before` / `space_after` |
 | 代码块 | `[code_block] background` / `border` |
 
 ### 段落间距：`space_before` / `space_after`
@@ -116,7 +116,7 @@ font.size = "9pt"
 font.name = "黑体"
 ```
 
-表格文字默认继承 `Normal`；`[table.text]` 只写显式配置的键。字段语义与 `[styles.*]` 相同（`font.*` / `line_spacing` / `space_*`）。
+表格文字默认继承 `Normal`；`[table.text]` 只写显式配置的键。字段语义与 `[styles.*]` 相同（`font.*` / `line_spacing` / `space_*`），字体支持中文（`font.name`）与西文（`font.latin`）分开设置。
 
 ### 表格线：`[table] style` / `line_*` / `edges` / `row_lines`
 

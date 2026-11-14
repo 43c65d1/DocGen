@@ -12,7 +12,7 @@ config_version = "0.1"
 [document]
 font.name = "宋体"
 font.size = "12pt"
-line_spacing = 1.5            # 1.15（母版默认）/ 1.5 / 2
+line_spacing = 1.5            # 数字=倍数；"20pt"=固定磅值
 heading_numbering = true      # 标题多级编号（默认开）
 
 # ── 标题 ────────────────────────────────
@@ -62,8 +62,8 @@ logfile = ""
 ### `[document]`
 | 字段 | 默认 | 例 |
 |---|---|---|
-| `font.name` / `font.size` | 主题字体 / 11pt | `"宋体"` / `"12pt"` |
-| `line_spacing` | 1.15 | `1.5` |
+| `font.name` / `font.latin` / `font.size` | 主题字体 / 无 / 11pt | `"宋体"` + 西文 `font.latin = "Times New Roman"`；`"12pt"` |
+| `line_spacing` | 1.15（倍数） | `1.5`（倍数）/ `"20pt"`（固定值） |
 | `heading_numbering` | `true` | `false` |
 | `heading_indent` | 母版（`left 720 hanging 360`） | `false` / `0` / 表 |
 | `alignment` | 继承 | `"center"` |
@@ -116,7 +116,7 @@ logfile = ""
 | `decimal_align` | 无（不对齐） | `[2, 4]`：数值列按小数点/个位对齐 |
 | `space_before` / `space_after` | 无 | 表格与上下文间距 |
 | `header_bold` | `true` | `false` = 表头不加粗 |
-| `[table.text]` | 无 | 单元格文字：`font.size` / `font.name` / `line_spacing` / `space_*` |
+| `[table.text]` | 无 | 单元格文字：`font.size` / `font.name` / `font.latin` / `line_spacing` / `space_*` |
 
 `edges` 可用的边：`top` `left` `bottom` `right` `insideH` `insideV`。
 `[[aux]]` 写在单元格里 = 该行上方加辅助线（合计行常用），标记不渲染文字。

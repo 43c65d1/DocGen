@@ -6,6 +6,21 @@
 
 ## [Unreleased]
 
+### 新增（固定行距 + 中西文字体分离）
+
+- **行距固定值**：`line_spacing` 现在区分两种语义——数字 = 倍数（`1.5`），
+  `"20pt"` / `"20磅"` = **固定磅值**（`w:lineRule="exact"`）；`[document]`、
+  `[styles.*]`、`[table.text]` 全部生效。
+- **修复崩溃**：此前 `line_spacing = "20pt"` 会抛未捕获的
+  `ValueError: could not convert string to float`（CLI traceback）；现在统一解析，
+  非法值报 `E5001` 并给出写法提示。`docs/manual.md` 里「`"20pt"` 按倍数」的错误说明已更正。
+- **中西文字体分离**：新增 `font.latin`（src: ascii/hAnsi/cs）。`font.name` 保持中文
+  （eastAsia）语义；只写 `font.name` 时西文也用它（旧行为不变）。
+  `[document]` / `[styles.*]` / `[table.text]` 均支持。
+- Word COM 实测：正文 `lineRule=exact` 20 磅、表格 18 磅；西文 Times New Roman、
+  中文 SimSun/SimHei 各自生效，文档正常打开。
+- 新增 `tests/test_line_spacing.py`、`tests/test_font_latin.py`（27 项）。
+
 ### 新增（表格文字格式与行距）
 
 - `[table.text]`：单元格文字与行距的独立控制（此前只能全局改正文）：

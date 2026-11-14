@@ -18,7 +18,9 @@ from typing import Any
 
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from docx.shared import Length
+from docx.shared import Length, Pt
+
+from ..errors import E_CONFIG, DocGenError
 
 __all__ = [
     "CHILD_ORDER",
@@ -50,6 +52,7 @@ __all__ = [
     "merge_cell_vertical",
     "normalise_document_root",
     "page_content_width",
+    "parse_line_spacing",
     "repeat_table_header",
     "set_cell_alignment",
     "set_cell_border",
@@ -59,6 +62,7 @@ __all__ = [
     "set_paragraph_alignment",
     "set_paragraph_border",
     "set_paragraph_indent",
+    "set_paragraph_line_spacing",
     "set_paragraph_numbering_none",
     "set_paragraph_shading",
     "set_paragraph_spacing",
@@ -358,12 +362,65 @@ def _rgb(value: str) -> Any:
     return RGBColor.from_string(value.lstrip("#").upper())
 
 
+LINE_SPACING_HELP = '行距写法：数字 = 倍数（1.5），"20pt"/"20磅" = 固定磅值，非法值报 E5001'
+
+
+def parse_line_spacing(value: Any) -> float | Length:
+    """解析 ``line_spacing``：数字（含数字字符串）= 倍数；``"20pt"`` / ``"20磅"`` = 固定值。
+
+    Word 的 ``w:spacing`` 用 ``w:lineRule`` 区分两种语义：
+    ``auto``（倍数，``line`` = 240 × 倍数）与 ``exact``（固定磅值，``line`` = 缇）。
+    python-docx 里传 ``float`` 走倍数、传 ``Length`` 走固定值。
+    """
+    if isinstance(value, bool):  # bool 是 int 子类，单独拒绝
+        raise DocGenError(E_CONFIG, f"line_spacing 不能是布尔值: {value!r}（{LINE_SPACING_HELP}）")
+    if isinstance(value, (int, float)):
+        number = float(value)
+        if number <= 0:
+            raise DocGenError(
+                E_CONFIG, f"line_spacing 必须大于 0: {value!r}（{LINE_SPACING_HELP}）"
+            )
+        return number
+    text = str(value).strip().lower()
+    for suffix in ("pt", "磅"):
+        if text.endswith(suffix):
+            try:
+                points = float(text[: -len(suffix)])
+            except ValueError:
+                raise DocGenError(
+                    E_CONFIG, f"line_spacing 无法识别: {value!r}（{LINE_SPACING_HELP}）"
+                ) from None
+            if points <= 0:
+                raise DocGenError(
+                    E_CONFIG, f"line_spacing 必须大于 0: {value!r}（{LINE_SPACING_HELP}）"
+                )
+            return Pt(points)
+    for suffix in ("lines", "line", "倍"):
+        if text.endswith(suffix):
+            text = text[: -len(suffix)].strip()
+            break
+    try:
+        number = float(text)
+    except ValueError:
+        raise DocGenError(
+            E_CONFIG, f"line_spacing 无法识别: {value!r}（{LINE_SPACING_HELP}）"
+        ) from None
+    if number <= 0:
+        raise DocGenError(E_CONFIG, f"line_spacing 必须大于 0: {value!r}（{LINE_SPACING_HELP}）")
+    return number
+
+
+def set_paragraph_line_spacing(paragraph: Any, value: Any) -> None:
+    """把 ``line_spacing`` 写进段落（或样式）的 ``paragraph_format``。"""
+    paragraph.paragraph_format.line_spacing = parse_line_spacing(value)
+
+
 def set_paragraph_spacing(
     paragraph: Any,
     *,
     before_points: float | None = None,
     after_points: float | None = None,
-    line_spacing: float | None = None,
+    line_spacing: float | str | Length | None = None,
     before_lines: float | None = None,
     after_lines: float | None = None,
 ) -> None:
@@ -385,7 +442,7 @@ def set_paragraph_spacing(
         if after_lines is not None:
             spacing.set(qn("w:afterLines"), str(round(after_lines * 100)))
     if line_spacing is not None:
-        pf.line_spacing = line_spacing
+        pf.line_spacing = parse_line_spacing(line_spacing)
 
 
 def set_paragraph_indent(

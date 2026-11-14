@@ -75,6 +75,7 @@ from .ooxml import (
     merge_cell_horizontal,
     merge_cell_vertical,
     page_content_width,
+    parse_line_spacing,
     repeat_table_header,
     set_cell_alignment,
     set_cell_border,
@@ -423,7 +424,7 @@ def _apply_paragraph_properties(
     if "line_spacing" in keys:
         spacing = properties.get("line_spacing")
         if spacing is not None:
-            set_paragraph_spacing(paragraph, line_spacing=float(spacing))
+            set_paragraph_spacing(paragraph, line_spacing=spacing)
     if "first_line_chars" in keys:
         indent = properties.get("first_line_chars")
         if indent is not None:
@@ -1106,14 +1107,8 @@ def _table_properties(state: _RenderState) -> dict[str, Any]:
     if isinstance(text_props, dict):
         spacing = text_props.get("line_spacing")
         if spacing is not None:
-            try:
-                value = float(spacing)
-            except (TypeError, ValueError):
-                raise DocGenError(
-                    E_CONFIG, f"[table.text] line_spacing 必须是数字倍数: {spacing!r}"
-                ) from None
-            if value <= 0:
-                raise DocGenError(E_CONFIG, f"[table.text] line_spacing 必须大于 0: {spacing!r}")
+            # 统一解析：数字=倍数，"20pt"=固定磅值；非法值报 E5001
+            parse_line_spacing(spacing)
     # header_bold 用与其它布尔开关相同的严格校验（写错不静默）
     _table_flag(table, "header_bold", True)
     return table
@@ -1618,6 +1613,7 @@ def _apply_run_style(
     font = font if isinstance(font, dict) else {}
 
     name = font.get("name", properties.get("font.name"))
+    latin = font.get("latin", properties.get("font.latin"))
     size = font.get("size", properties.get("font.size"))
     color = font.get("color", properties.get("font.color"))
     bold = font.get("bold", properties.get("font.bold"))
@@ -1625,9 +1621,11 @@ def _apply_run_style(
     strike = properties.get("strike", font.get("strike"))
     underline = font.get("underline", properties.get("font.underline"))
 
+    # 中文（eastAsia）与西文（ascii/hAnsi/cs）可分开：latin 给了就只写西文
+    western = latin if latin else name
     apply_font(
         run,
-        str(name) if name else None,
+        str(western) if western else None,
         size=to_points(size) if size is not None else None,
         bold=bool(bold) if bold is not None else None,
         italic=bool(italic) if italic is not None else None,

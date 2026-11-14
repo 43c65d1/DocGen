@@ -25,7 +25,7 @@ from docx.oxml.ns import qn
 from ..config import Config, build_style_table
 from ..errors import E_CONFIG, DocGenError
 from ..units import to_points
-from .ooxml import insert_child, set_document_language, set_style_outline_level
+from .ooxml import insert_child, parse_line_spacing, set_document_language, set_style_outline_level
 
 __all__ = [
     "MONO_EAST_ASIA",
@@ -338,7 +338,7 @@ def apply_document_defaults(document: Any, config: Config) -> None:
     _apply_font_properties(normal, body)
     line_spacing = body.get("line_spacing", doc_settings.get("line_spacing"))
     if line_spacing is not None:
-        normal.paragraph_format.line_spacing = float(line_spacing)
+        normal.paragraph_format.line_spacing = parse_line_spacing(line_spacing)
 
     # 题注：段落用的是内置 Caption 样式，所以把 config 写在样式上
     raw_caption = table.get("caption", {})
@@ -460,6 +460,7 @@ def _apply_font_properties(style: Any, properties: dict[str, Any]) -> None:
         return properties.get(f"font.{key}")
 
     name = pick("name")
+    latin = pick("latin")
     size = pick("size")
     color = pick("color")
     bold = pick("bold")
@@ -467,8 +468,8 @@ def _apply_font_properties(style: Any, properties: dict[str, Any]) -> None:
     underline = pick("underline")
     strike = pick("strike")
 
-    if name:
-        _set_style_fonts(style, str(name))
+    if name or latin:
+        _set_style_fonts(style, str(name) if name else None, latin=str(latin) if latin else None)
     if size is not None:
         style.font.size = to_points(size)
         # szCs：复杂文种字号。只写 w:sz 时中文在部分场景不跟随
@@ -551,8 +552,12 @@ def _style_by_id(document: Any, style_id: str) -> Any:
     raise KeyError(f"母版缺少样式: {style_id}")
 
 
-def _set_style_fonts(style: Any, name: str) -> None:
-    """样式级字体：四个 ``rFonts`` 属性一起写（缺 eastAsia 中文会回退）。
+def _set_style_fonts(style: Any, name: str | None, latin: str | None = None) -> None:
+    """样式级字体：中文（``eastAsia``）与西文（``ascii``/``hAnsi``/``cs``）可分开。
+
+    - 只给 ``name``：四个属性都写它（旧行为，兼容既有 config）；
+    - ``name`` + ``latin``：中文用 ``name``，西文用 ``latin``；
+    - 只给 ``latin``：只写西文，中文继承母版/上级样式。
 
     还要**清掉主题字体属性**（``w:asciiTheme`` 等）：OOXML 里主题属性优先于
     显式值，留着它们会让 ``font.name = "黑体"`` 只对外文生效、
@@ -563,10 +568,15 @@ def _set_style_fonts(style: Any, name: str) -> None:
     if fonts is None:
         fonts = OxmlElement("w:rFonts")
         rpr.insert(0, fonts)
-    for theme in ("w:asciiTheme", "w:hAnsiTheme", "w:eastAsiaTheme", "w:cstheme"):
-        fonts.attrib.pop(qn(theme), None)
-    for attribute in ("w:ascii", "w:hAnsi", "w:eastAsia", "w:cs"):
-        fonts.set(qn(attribute), name)
+    western = latin or name
+    if western is not None:
+        for theme in ("w:asciiTheme", "w:hAnsiTheme", "w:cstheme"):
+            fonts.attrib.pop(qn(theme), None)
+        for attribute in ("w:ascii", "w:hAnsi", "w:cs"):
+            fonts.set(qn(attribute), western)
+    if name is not None:
+        fonts.attrib.pop(qn("w:eastAsiaTheme"), None)
+        fonts.set(qn("w:eastAsia"), name)
 
 
 def iter_styles(document: Any) -> list[tuple[str, str]]:

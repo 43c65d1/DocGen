@@ -6,6 +6,21 @@
 
 ## [Unreleased]
 
+### 新增（参考文献表规范化）
+
+- **条目编号**：参考文献表条目现在默认带 `[n]` 前缀（顺序编码制要求）。
+  此前条目只有正文、没有序号，属实现缺陷；可用 `[bibliography] entry_number = false` 关闭。
+- **悬挂缩进**：`[bibliography] hanging_chars = 2`（字符数），按正文字号换算；
+  同时写 `w:hangingChars` 与数值版 `w:left`/`w:hanging`，WPS/旧版 Word 兼容。
+- **引用上标**：`citation_superscript = true` 时正文 `[[cite:...]]` 显示为上标。
+- **作者截断**：`author_truncate = 3` 时作者数组超过 3 名截断为「前 3 名 + 等/et al.」；
+  中文自动用「等」、西文用「et al.」，`et_al = "..."` 可覆盖。3 名以内不截断；
+  字符串形式的 `author` 不截断（无法安全拆分）。
+- 非法设置（负数、非整数、非布尔）报 `E5001`，`check` 也会报出。
+- Word 实测：条目显示 `[1] 张三, 李四, 王五, 等. …`、悬挂缩进 2 字符、
+  正文引用上标，文档正常打开。
+- 测试：`tests/test_bibliography.py` 新增 9 项（共 28 项）。
+
 ### 新增（中文字号：号数制换算）
 
 - `font.size` 现在接受**中文字号**：`"小四"`（12pt）/ `"三号"`（16pt）/ `"五号"`（10.5pt）

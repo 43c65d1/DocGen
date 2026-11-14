@@ -450,16 +450,31 @@ def set_paragraph_indent(
     *,
     first_line_chars: int | None = None,
     left_chars: int | None = None,
+    hanging_chars: int | None = None,
+    base_points: float = 12.0,
 ) -> None:
-    """首行缩进用 ``firstLineChars``（字符单位，200 = 2 字符），不用 ``firstLine``。
+    """段落缩进：首行 / 左缩进 / **悬挂缩进**（都用字符单位）。
 
-    两个属性都挂在 ``w:ind`` 上，**属性名不同**（``w:firstLineChars`` / ``w:leftChars``），
-    别写成 ``w:val``。``w:ind`` 在 schema 里排在 ``w:spacing`` 之后、``w:jc`` 之前。
+    ``firstLineChars`` / ``leftChars`` / ``hangingChars`` 的单位是 1/100 字符
+    （200 = 2 字符）；``w:ind`` 在 schema 里排在 ``w:spacing`` 之后、``w:jc`` 之前。
+    ``hanging_chars`` 同时写数值版 ``w:left`` + ``w:hanging``（twips），
+    因为旧版 Word/WPS 对 ``hangingChars`` 支持不一致；数值按 ``base_points`` 估算。
     """
     if first_line_chars is not None:
         _set_indent_child(paragraph, "w:firstLineChars", str(first_line_chars))
     if left_chars is not None:
         _set_indent_child(paragraph, "w:leftChars", str(left_chars * 100))
+    if hanging_chars is not None and hanging_chars > 0:
+        _set_indent_child(paragraph, "w:hangingChars", str(hanging_chars * 100))
+        twips = max(1, round(hanging_chars * base_points * 20))
+        _set_indent_attrs(paragraph, {"w:left": str(twips), "w:hanging": str(twips)})
+
+
+def _set_indent_attrs(paragraph: Any, attrs: dict[str, str]) -> None:
+    ppr = paragraph._p.get_or_add_pPr()
+    indent = insert_child(ppr, "w:ind")
+    for attribute, value in attrs.items():
+        indent.set(qn(attribute), value)
 
 
 def _set_indent_child(paragraph: Any, attribute: str, value: str) -> None:

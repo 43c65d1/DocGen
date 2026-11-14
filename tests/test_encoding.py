@@ -127,4 +127,4 @@ def test_bibliography_plan_with_gbk_refs(tmp_path: Path) -> None:
     plan = plan_bibliography(
         blocks, load_config(_write(tmp_path / "c.toml", BASE, "gbk")), refs=refs
     )
-    assert plan is not None and plan.entries[0].startswith("张三. 中文标题")
+    assert plan is not None and plan.entries[0].startswith("[1] 张三. 中文标题")

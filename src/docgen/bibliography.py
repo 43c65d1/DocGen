@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -37,6 +38,8 @@ from .validate import ContentError
 
 __all__ = [
     "BibliographyPlan",
+    "BibliographySettings",
+    "bibliography_settings",
     "citation_text",
     "collect_citations",
     "format_reference",
@@ -73,6 +76,64 @@ class BibliographyPlan:
     title: str
     numbers: dict[str, int] = field(default_factory=dict)
     entries: tuple[str, ...] = ()
+    #: 条目是否带 ``[n]`` 前缀（顺序编码制默认带）
+    entry_number: bool = True
+    #: 正文 ``[[cite:]]`` 上标
+    citation_superscript: bool = False
+    #: 条目悬挂缩进（字符数）
+    hanging_chars: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class BibliographySettings:
+    """``[bibliography]`` 的规范化设置。"""
+
+    title: str = "参考文献"
+    entry_number: bool = True
+    citation_superscript: bool = False
+    hanging_chars: int = 0
+    author_truncate: int = 0
+    et_al: str = ""
+
+
+def _bool_setting(settings: dict[str, Any], key: str, default: bool) -> bool:
+    value = settings.get(key)
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in ("true", "1", "yes", "on"):
+        return True
+    if text in ("false", "0", "no", "off"):
+        return False
+    raise DocGenError(E_CONFIG, f"[bibliography] {key} 需要 true/false，收到 {value!r}")
+
+
+def _int_setting(settings: dict[str, Any], key: str, default: int) -> int:
+    value = settings.get(key)
+    if value is None:
+        return default
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        raise DocGenError(E_CONFIG, f"[bibliography] {key} 需要整数，收到 {value!r}") from None
+    if number < 0:
+        raise DocGenError(E_CONFIG, f"[bibliography] {key} 不能为负数，收到 {value!r}")
+    return number
+
+
+def bibliography_settings(config: Config) -> BibliographySettings:
+    """解析 ``[bibliography]``：条目编号 / 引用上标 / 悬挂缩进 / 作者截断。"""
+    raw = config.namespace("bibliography")
+    return BibliographySettings(
+        title=str(raw.get("title", "参考文献") or "参考文献"),
+        entry_number=_bool_setting(raw, "entry_number", True),
+        citation_superscript=_bool_setting(raw, "citation_superscript", False),
+        hanging_chars=_int_setting(raw, "hanging_chars", 0),
+        author_truncate=_int_setting(raw, "author_truncate", 0),
+        et_al=str(raw.get("et_al", "") or ""),
+    )
 
 
 # --------------------------------------------------------------------------
@@ -217,10 +278,24 @@ def plan_bibliography(
                 raise DocGenError(E_UNKNOWN_REF, f"引用不存在: {key}")
             numbers[key] = len(numbers) + 1
 
-    entries = tuple(format_reference(references[key], number) for key, number in numbers.items())
-    settings = config.namespace("bibliography")
-    title = str(settings.get("title", "参考文献") or "参考文献")
-    return BibliographyPlan(title=title, numbers=numbers, entries=entries)
+    settings = bibliography_settings(config)
+    entries: list[str] = []
+    for key, number in numbers.items():
+        body = format_reference(
+            references[key],
+            number,
+            truncate=settings.author_truncate,
+            et_al=settings.et_al,
+        )
+        entries.append(f"[{number}] {body}" if settings.entry_number else body)
+    return BibliographyPlan(
+        title=settings.title,
+        numbers=numbers,
+        entries=tuple(entries),
+        entry_number=settings.entry_number,
+        citation_superscript=settings.citation_superscript,
+        hanging_chars=settings.hanging_chars,
+    )
 
 
 def validate_bibliography(
@@ -234,6 +309,11 @@ def validate_bibliography(
     """与 :func:`plan_bibliography` 同规则，但返回错误列表（供 ``check`` 用）。"""
     errors: list[ContentError] = []
     file_name = str(source) if source is not None else ""
+    try:
+        bibliography_settings(config)
+    except DocGenError as err:
+        errors.append(ContentError(code=err.code, message=str(err), file=file_name, line=0))
+
     markers = _bibliography_markers(blocks)
     if len(markers) > 1:
         errors.append(
@@ -326,9 +406,18 @@ def _text(value: Any) -> str:
     return str(value).strip()
 
 
-def _authors(value: Any) -> str:
+_CJK_RE = re.compile(r"[\u3400-\u9fff\uf900-\ufaff]")
+
+
+def _authors(value: Any, *, truncate: int = 0, et_al: str = "") -> str:
+    """作者列表 → 字符串；``truncate > 0`` 时按 GB/T「前 N 名 + 等/et al」。"""
     if isinstance(value, (list, tuple)):
-        return ", ".join(part for part in (_text(item) for item in value) if part)
+        names = [part for part in (_text(item) for item in value) if part]
+        if truncate > 0 and len(names) > truncate:
+            kept = names[:truncate]
+            suffix = et_al or ("等" if any(_CJK_RE.search(name) for name in kept) else "et al.")
+            return ", ".join(kept) + ", " + suffix
+        return ", ".join(names)
     return _text(value)
 
 
@@ -344,11 +433,13 @@ def _tail(values: list[str], pages: str = "") -> str:
     return text
 
 
-def format_reference(entry: dict[str, Any], number: int) -> str:
+def format_reference(
+    entry: dict[str, Any], number: int, *, truncate: int = 0, et_al: str = ""
+) -> str:
     """格式化单条文献（不含序号），返回类似 ``张三. 标题[J]. 期刊, 2024, 12(3): 45-52.``。"""
     kind = _text(entry.get("type")).lower() or "misc"
     mark = TYPE_MARKS.get(kind, "")
-    authors = _authors(entry.get("author"))
+    authors = _authors(entry.get("author"), truncate=truncate, et_al=et_al)
     title = _text(entry.get("title"))
     year = _text(entry.get("year"))
     pages = _text(entry.get("pages"))

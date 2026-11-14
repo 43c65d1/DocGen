@@ -380,6 +380,22 @@ def _render_heading(
     _render_inlines(state, paragraph, block.content, f"heading{level}")
 
 
+def _body_font_points(state: _RenderState) -> float:
+    """正文字号（pt）：悬挂缩进的字符数 → twips 换算用。"""
+    properties = {**state.doc_settings, **state.styles.get("body", {})}
+    font = properties.get("font")
+    font = font if isinstance(font, dict) else {}
+    size = font.get("size", properties.get("font.size"))
+    if size is None:
+        return 12.0
+    from ..units import to_points
+
+    try:
+        return float(to_points(size).pt)
+    except DocGenError:
+        return 12.0
+
+
 def _apply_body_paragraph(
     state: _RenderState,
     paragraph: Any,
@@ -1434,7 +1450,9 @@ def _render_inline(
         plan = state.bibliography
         text = citation_text(node.keys, plan.numbers) if plan is not None else ""
         if text:
-            paragraph.add_run(text)
+            run = paragraph.add_run(text)
+            if plan is not None and getattr(plan, "citation_superscript", False):
+                run.font.superscript = True
 
 
 def _render_bibliography(state: _RenderState) -> None:
@@ -1449,10 +1467,14 @@ def _render_bibliography(state: _RenderState) -> None:
     heading = state.document.add_paragraph(style="Heading 1")
     set_paragraph_numbering_none(heading)
     heading.add_run(plan.title)
+    hanging = getattr(plan, "hanging_chars", 0)
+    base_points = _body_font_points(state)
     for entry in plan.entries:
         paragraph = state.document.add_paragraph()
         _apply_body_paragraph(state, paragraph)
         set_paragraph_indent(paragraph, first_line_chars=0)
+        if hanging:
+            set_paragraph_indent(paragraph, hanging_chars=hanging, base_points=base_points)
         paragraph.add_run(entry)
 
 

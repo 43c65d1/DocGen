@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from docgen.bibliography import (
+    bibliography_settings,
     citation_text,
     collect_citations,
     format_reference,
@@ -128,8 +129,8 @@ def test_plan_numbers_by_first_appearance(tmp_path: Path) -> None:
     plan = plan_bibliography(blocks, _config(tmp_path), refs=_refs(tmp_path))
     assert plan is not None
     assert plan.numbers == {"wang2023": 1, "zhang2024": 2}
-    assert plan.entries[0].startswith("王五. 现代文档工程[M]")
-    assert plan.entries[1].startswith("张三, 李四. 中文排版中的行首禁则研究[J]")
+    assert plan.entries[0].startswith("[1] 王五. 现代文档工程[M]")
+    assert plan.entries[1].startswith("[2] 张三, 李四. 中文排版中的行首禁则研究[J]")
 
 
 def test_plan_missing_refs_file_raises(tmp_path: Path) -> None:
@@ -291,7 +292,7 @@ def test_chinese_reference_key(tmp_path: Path) -> None:
     plan = plan_bibliography(blocks, _config(tmp_path), refs=refs)
     assert plan is not None
     assert plan.numbers == {"张三2024": 1}
-    assert plan.entries[0].startswith("张三. 中文条目[J]")
+    assert plan.entries[0].startswith("[1] 张三. 中文条目[J]")
 
     data = render_docx_bytes(parse_dfm("引用[[cite:张三2024]]。\n"), _config(tmp_path), refs=refs)
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
@@ -357,3 +358,116 @@ def test_render_without_citations_has_no_bibliography(tmp_path: Path) -> None:
     document = _render(tmp_path, "没有引用。\n")
     joined = "".join(re.findall(r"<w:t(?: [^>]*)?>(.*?)</w:t>", document, re.DOTALL))
     assert "参考文献" not in joined
+
+
+# --------------------------------------------------------------------------
+# 参考文献表设置：条目编号 / 悬挂缩进 / 引用上标 / 作者截断
+# --------------------------------------------------------------------------
+MULTI_REFS = """\
+[cn5]
+type = "article"
+author = ["张三", "李四", "王五", "赵六", "钱七"]
+title = "中文五作者"
+journal = "期刊"
+year = "2024"
+
+[en5]
+type = "article"
+author = ["Alpha A", "Beta B", "Gamma C", "Delta D", "Epsilon E"]
+title = "English Five"
+journal = "Journal"
+year = "2023"
+"""
+
+
+def _multi_refs(tmp_path: Path) -> Path:
+    path = tmp_path / "refs.toml"
+    path.write_text(MULTI_REFS, encoding="utf-8")
+    return path
+
+
+def test_entry_number_can_be_disabled(tmp_path: Path) -> None:
+    blocks = parse_dfm("引用[[cite:zhang2024]]。\n")
+    plan = plan_bibliography(
+        blocks,
+        _config(tmp_path, "\n[bibliography]\nentry_number = false\n"),
+        refs=_refs(tmp_path),
+    )
+    assert plan is not None
+    assert plan.entries[0].startswith("张三, 李四.")
+
+
+def test_author_truncate_cjk_and_western(tmp_path: Path) -> None:
+    blocks = parse_dfm("引用[[cite:cn5,en5]]。\n")
+    plan = plan_bibliography(
+        blocks,
+        _config(tmp_path, "\n[bibliography]\nauthor_truncate = 3\n"),
+        refs=_multi_refs(tmp_path),
+    )
+    assert plan is not None
+    assert plan.entries[0].startswith("[1] 张三, 李四, 王五, 等.")
+    assert plan.entries[1].startswith("[2] Alpha A, Beta B, Gamma C, et al.")
+
+
+def test_author_truncate_custom_suffix(tmp_path: Path) -> None:
+    blocks = parse_dfm("引用[[cite:cn5]]。\n")
+    plan = plan_bibliography(
+        blocks,
+        _config(
+            tmp_path,
+            '\n[bibliography]\nauthor_truncate = 2\net_al = "等 人"\n',
+        ),
+        refs=_multi_refs(tmp_path),
+    )
+    assert plan is not None
+    assert "张三, 李四, 等 人." in plan.entries[0]
+
+
+def test_author_truncate_does_not_touch_string_author(tmp_path: Path) -> None:
+    blocks = parse_dfm("引用[[cite:wang2023]]。\n")
+    plan = plan_bibliography(
+        blocks,
+        _config(tmp_path, "\n[bibliography]\nauthor_truncate = 1\n"),
+        refs=_refs(tmp_path),
+    )
+    assert plan is not None
+    assert "王五." in plan.entries[0]
+
+
+def test_citation_superscript_render(tmp_path: Path) -> None:
+    document = _render(
+        tmp_path,
+        "引用[[cite:zhang2024]]。\n",
+        _refs(tmp_path),
+        extra="\n[bibliography]\ncitation_superscript = true\n",
+    )
+    assert 'w:vertAlign w:val="superscript"' in document
+
+
+def test_citation_superscript_default_off(tmp_path: Path) -> None:
+    document = _render(tmp_path, "引用[[cite:zhang2024]]。\n", _refs(tmp_path))
+    assert 'w:vertAlign w:val="superscript"' not in document
+
+
+def test_hanging_indent_render(tmp_path: Path) -> None:
+    document = _render(
+        tmp_path,
+        "引用[[cite:zhang2024]]。\n",
+        _refs(tmp_path),
+        extra="\n[bibliography]\nhanging_chars = 2\n",
+    )
+    # 正文 12pt：2 字符 = 24pt = 480 twips
+    assert 'w:hangingChars="200"' in document
+    assert 'w:left="480"' in document
+    assert 'w:hanging="480"' in document
+
+
+def test_bibliography_settings_validation(tmp_path: Path) -> None:
+    for extra in (
+        "\n[bibliography]\nhanging_chars = -1\n",
+        '\n[bibliography]\nentry_number = "maybe"\n',
+        '\n[bibliography]\nauthor_truncate = "x"\n',
+    ):
+        with pytest.raises(DocGenError) as caught:
+            bibliography_settings(_config(tmp_path, extra))
+        assert caught.value.code == "E5001"

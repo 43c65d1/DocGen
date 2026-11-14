@@ -158,6 +158,11 @@ logfile = ""
 |---|---|---|
 | `file` | 无 | 文献库 TOML（相对输入文件目录；也可 `--refs`） |
 | `title` | `"参考文献"` | 文献表标题（Heading 1 样式，取消编号） |
+| `entry_number` | `true` | 条目带 `[n]` 前缀 |
+| `hanging_chars` | `0` | 悬挂缩进（字符数，如 `2`） |
+| `citation_superscript` | `false` | 正文引用上标 |
+| `author_truncate` | `0` | 超过 N 名截断（`3` = 前 3 + 等/et al.） |
+| `et_al` | 自动 | 截断后缀；空 = 中文「等」/西文「et al.」 |
 
 ### `[math]`
 | 字段 | 默认 | 说明 |

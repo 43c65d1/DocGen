@@ -295,6 +295,11 @@ timeout = 120           # 秒
 [bibliography]
 file = "references.toml"   # 文献库；相对输入文件所在目录（也可用 --refs 覆盖）
 title = "参考文献"          # 文献表标题（借 Heading 1 样式但取消编号）
+entry_number = true        # 条目带 [n] 前缀（默认 true）
+hanging_chars = 2          # 悬挂缩进（字符数，默认 0）
+citation_superscript = false  # 正文引用上标（默认 false）
+author_truncate = 3        # 作者超过 N 名截断（默认 0 = 不截断）
+et_al = ""                 # 截断后缀；空 = 中文「等」/ 西文「et al.」
 ```
 
 文献库是独立 TOML，每个条目一个 `[key]` 表：

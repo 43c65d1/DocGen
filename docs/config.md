@@ -65,7 +65,7 @@ color = "#222"
 
 | 用途 | 例 |
 |---|---|
-| 字体 | `font.bold` / `font.color` / `font.name` / `font.latin` / `font.size` / `font.italic` |
+| 字体 | `font.bold` / `font.color` / `font.name` / `font.latin` / `font.size`（支持 `12pt` 或中文字号 `小四`）/ `font.italic` |
 | 段落 | `line_spacing`（数字=倍数；`"20pt"`=固定磅值）/ `first_line_chars` / `alignment` / `space_before` / `space_after` |
 | 代码块 | `[code_block] background` / `border` |
 

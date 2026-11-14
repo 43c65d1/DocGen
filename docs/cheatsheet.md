@@ -62,7 +62,7 @@ logfile = ""
 ### `[document]`
 | 字段 | 默认 | 例 |
 |---|---|---|
-| `font.name` / `font.latin` / `font.size` | 主题字体 / 无 / 11pt | `"宋体"` + 西文 `font.latin = "Times New Roman"`；`"12pt"` |
+| `font.name` / `font.latin` / `font.size` | 主题字体 / 无 / 11pt | `"宋体"` + 西文 `font.latin = "Times New Roman"`；字号写 `"小四"` 或 `"12pt"` |
 | `line_spacing` | 1.15（倍数） | `1.5`（倍数）/ `"20pt"`（固定值） |
 | `heading_numbering` | `true` | `false` |
 | `heading_indent` | 母版（`left 720 hanging 360`） | `false` / `0` / 表 |

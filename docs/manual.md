@@ -28,7 +28,7 @@
 |---|---|---|
 | `font.name` | 主题字体（西文 minorHAnsi / 中文 minorEastAsia） | 中文字体；只写它时西文也用它 |
 | `font.latin` | 无（跟随 `font.name`） | **西文字体**（ascii/hAnsi/cs）；写它就只换西文，中文仍用 `font.name` |
-| `font.size` | 11pt | 同上 |
+| `font.size` | 11pt | 字号：`12pt` / `1.5em` / `16px`，或**中文字号**（`小四` / `三号`） |
 | `font.east_asia` | 无 | 代码块里中文的回退字体（可选） |
 | `line_spacing` | 1.15 倍（276/240） | 正文行距：数字 = **倍数**（`1.5`）；带 `pt`/`磅` = **固定磅值**（`"20pt"` → `w:lineRule="exact"`） |
 | `heading_numbering` | **开** | 标题多级编号；`false` 关闭 |
@@ -49,6 +49,12 @@
 > `font.*` 是点号键，展开后是嵌套表。`[document] font.name = "宋体"` 与
 > `[document.font] name = "宋体"` 等价。
 
+> **中文字号（号数制）**：`font.size = "小四"` 会换算成 12pt（Word/WPS 同口径）。
+> 常用换算：初号 42 / 小初 36 / 一号 26 / 小一 24 / 二号 22 / 小二 18 /
+> 三号 16 / 小三 15 / 四号 14 / 小四 12 / 五号 10.5 / 小五 9 /
+> 六号 7.5 / 小六 6.5 / 七号 5.5 / 八号 5（单位 pt）；写「小四号」也认。
+> 严格印刷标准按毫米定义号数，与这套软件口径差异 <1%，文档排版可忽略。
+
 ## 2. 标题：`[styles.heading1]` … `[styles.heading9]`
 
 不写 config 时的母版值：
@@ -62,6 +68,8 @@
 
 可用字段：`font.name` / `font.latin` / `font.size` / `font.bold` / `font.italic` / `font.color` /
 `font.underline` / `font.strike` / `alignment` / `space_before` / `space_after`。
+
+> `font.size` 同样接受中文字号（`三号` / `小四` …），换算表见 §1。
 
 - **编号**：`[document] heading_numbering = false` 关闭；缩进用 `heading_indent`。
 - `heading_indent` 的三种写法：
@@ -196,6 +204,7 @@ font.name = "黑体"
 
 - 只写**显式配置**的键；不写就保持原样（继承 `Normal`）。字体字段与样式一致，
   支持 `font.name`（中文）+ `font.latin`（西文）分开设置。
+  `font.size` 也接受中文字号（`五号` / `小五` …）。
 - `header_bold` 是根级开关；`[table.text] font.bold` 显式写了则以它为准。
 - 行距与样式一致：数字 = 倍数（`1.0` / `1.5`）；`"18pt"` / `"18磅"` = 固定磅值。
 

@@ -28,6 +28,9 @@ from typing import Any
 from docx.enum.section import WD_SECTION_START
 from docx.shared import Cm
 
+from ..errors import E_SECTION_CONFIG, DocGenError
+from ..units import to_points
+
 __all__ = ["SectionController", "apply_sections", "page_sizes"]
 
 #: 纸张尺寸（厘米）：Word 常用几种
@@ -50,6 +53,17 @@ NUMBER_FORMATS = {
 }
 
 _W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+#: 页眉底部线可用的 OOXML 边框线型（``double`` 映射到粗上细下）
+_BORDER_STYLES = {
+    "single",
+    "double",
+    "thickThinSmallGap",
+    "thinThickSmallGap",
+    "dotted",
+    "dashed",
+    "none",
+}
 
 
 def apply_sections(
@@ -81,6 +95,10 @@ class SectionController:
         self._document_sections = list(document.sections)
         if not specs:
             return
+        if any(_has_even_page(spec) for spec in specs):
+            from .ooxml import set_even_and_odd_headers
+
+            set_even_and_odd_headers(document)
         self._apply(0)
         if not lazy:
             for _ in range(1, len(specs)):
@@ -189,43 +207,197 @@ def _drop_rsids(section: Any) -> None:
         sect_pr.attrib.pop(qn(attribute), None)
 
 
-def _apply_header_footer(section: Any, spec: dict[str, Any]) -> None:
-    """页眉页脚：每节独立（``is_linked_to_previous = False``）。"""
-    header_text = _text_setting(spec, "header")
-    footer_text = _text_setting(spec, "footer")
+def _has_even_page(spec: dict[str, Any]) -> bool:
+    """该节是否配置了偶数页页眉/页脚（需要文档级 evenAndOddHeaders）。"""
+    for key in ("header", "footer"):
+        config = _header_config(spec, key)
+        if config.get("even") is not None:
+            return True
+    return False
 
-    if header_text:
-        section.header.is_linked_to_previous = False
-        _write_paragraph(section.header.paragraphs[0], header_text, align="center")
-    if footer_text:
-        section.footer.is_linked_to_previous = False
+
+def _apply_header_footer(section: Any, spec: dict[str, Any]) -> None:
+    """页眉页脚：每节独立；支持奇偶页/首页不同、字体、粗细双线、距边界。"""
+    header = _header_config(spec, "header")
+    footer = _header_config(spec, "footer")
+
+    _write_header_footer(section, "header", header)
+    _write_header_footer(section, "footer", footer)
+
+    if "distance" in header:
+        section.header_distance = Cm(_number(header["distance"], "header.distance"))
+    if "distance" in footer:
+        section.footer_distance = Cm(_number(footer["distance"], "footer.distance"))
+    if header.get("first") or footer.get("first"):
+        section.different_first_page_header_footer = True
+
+
+def _header_config(spec: dict[str, Any], key: str) -> dict[str, Any]:
+    """把 ``header`` / ``header.*`` 的两种写法（嵌套表 / 点号键）统一成嵌套表。"""
+    raw = spec.get(key)
+    config: dict[str, Any] = {}
+    if isinstance(raw, dict):
+        config.update(raw)
+    prefix = f"{key}."
+    for name, value in spec.items():
+        if isinstance(name, str) and name.startswith(prefix):
+            _set_dotted(config, name[len(prefix) :], value)
+    return config
+
+
+def _set_dotted(target: dict[str, Any], dotted: str, value: Any) -> None:
+    parts = dotted.split(".")
+    cursor = target
+    for part in parts[:-1]:
+        child = cursor.get(part)
+        if not isinstance(child, dict):
+            child = {}
+            cursor[part] = child
+        cursor = child
+    cursor[parts[-1]] = value
+
+
+def _write_header_footer(section: Any, kind: str, config: dict[str, Any]) -> None:
+    """写 ``header`` 或 ``footer``：base(odd) / even / first 三种页。"""
+    odd_variant = _variant(config.get("odd")) or {}
+    variants: list[tuple[str, dict[str, Any] | None]] = [
+        ("odd", {**config, **odd_variant}),
+        ("even", _variant(config.get("even"))),
+        ("first", _variant(config.get("first"))),
+    ]
+    for variant, variant_config in variants:
+        if variant == "even" and variant_config is None:
+            continue
+        if variant == "first" and variant_config is None:
+            continue
+        payload = config if variant_config is None else {**config, **variant_config}
+        if not payload:
+            continue
+        target = _part_for(section, kind, variant)
+        if target is None:
+            continue
+        target.is_linked_to_previous = False
+        paragraph = target.paragraphs[0]
         _write_paragraph(
-            section.footer.paragraphs[0], footer_text, align="center", with_page_field=True
+            paragraph,
+            payload,
+            with_page_field=("PAGE" in str(payload.get("text", ""))),
         )
 
 
-def _text_setting(spec: dict[str, Any], key: str) -> str:
-    """``header = {text = "..."}`` 与 ``header.text = "..."`` 两种写法都支持。"""
-    value = spec.get(key)
+def _variant(value: Any) -> dict[str, Any] | None:
     if isinstance(value, dict):
-        return str(value.get("text", "") or "")
-    nested = spec.get(f"{key}.text")
-    return str(nested) if nested else ""
+        return value
+    if isinstance(value, str):
+        return {"text": value}
+    return None
 
 
-def _write_paragraph(
-    paragraph: Any, text: str, *, align: str = "center", with_page_field: bool = False
-) -> None:
-    """写页眉页脚段落；文本里的 ``PAGE`` 会变成页码域。"""
-    from .ooxml import append_field, append_text, set_paragraph_alignment
+def _part_for(section: Any, kind: str, variant: str) -> Any:
+    """``header``/``footer`` × ``odd``/``even``/``first`` → python-docx part。"""
+    if variant == "odd":
+        return section.header if kind == "header" else section.footer
+    if variant == "even":
+        return section.even_page_header if kind == "header" else section.even_page_footer
+    return section.first_page_header if kind == "header" else section.first_page_footer
 
+
+def _write_paragraph(paragraph: Any, config: dict[str, Any], *, with_page_field: bool) -> None:
+    """写页眉页脚段落：文字 + ``PAGE`` 域 + 对齐 + 字体 + 底部边框线。"""
+    from .ooxml import (
+        append_field,
+        append_text,
+        set_paragraph_alignment,
+    )
+
+    text = str(config.get("text", "") or "")
+    align = str(config.get("alignment", "center") or "center")
+    if align not in ("left", "center", "right"):
+        raise DocGenError(
+            E_SECTION_CONFIG,
+            f"页眉/页脚 alignment 不支持: {align!r}（可用 left / center / right）",
+        )
+    paragraph.text = ""
     set_paragraph_alignment(paragraph, align)
-    if with_page_field and "PAGE" in text:
-        before, _, after = text.partition("PAGE")
-        if before:
-            append_text(paragraph, before)
-        append_field(paragraph, "PAGE", "1")
-        if after:
-            append_text(paragraph, after)
+    if text:
+        if with_page_field and "PAGE" in text:
+            before, _, after = text.partition("PAGE")
+            if before:
+                append_text(paragraph, before)
+            append_field(paragraph, "PAGE", "1")
+            if after:
+                append_text(paragraph, after)
+        else:
+            append_text(paragraph, text)
+
+    _apply_border(paragraph, config)
+    _apply_font(paragraph, config)
+
+
+def _apply_border(paragraph: Any, config: dict[str, Any]) -> None:
+    from .ooxml import set_paragraph_border
+
+    line = config.get("line")
+    style = ""
+    size: Any = None
+    color: Any = None
+    if isinstance(line, str):
+        style = line
+    elif isinstance(line, dict):
+        style = str(line.get("style", "double") or "double")
+        size = line.get("size")
+        color = line.get("color")
+    elif line is not None and line is not False:
+        raise DocGenError(E_SECTION_CONFIG, f"页眉/页脚 line 写法不支持: {line!r}")
+    if not style:
         return
-    append_text(paragraph, text)
+    if style.lower() in ("none", "false"):
+        return
+    # 中文规范「粗、细双线（粗线在上）」= thickThinSmallGap；double 作为别名
+    if style.lower() == "double":
+        style = "thickThinSmallGap"
+    if style not in _BORDER_STYLES:
+        raise DocGenError(
+            E_SECTION_CONFIG,
+            f"页眉/页脚 line 线型不支持: {style!r}（可用 {' / '.join(sorted(_BORDER_STYLES))}）",
+        )
+    size_value = size if size is not None else config.get("line_size", "1pt")
+    color_value = str(color if color is not None else config.get("line_color", "000000"))
+    points = float(to_points(size_value).pt)
+    set_paragraph_border(
+        paragraph,
+        "bottom",
+        style=style,
+        size=str(max(2, round(points * 8))),
+        color=color_value,
+    )
+
+
+def _apply_font(paragraph: Any, config: dict[str, Any]) -> None:
+    from .ooxml import apply_font
+
+    font = config.get("font")
+    font = font if isinstance(font, dict) else {}
+    name = font.get("name", config.get("font.name"))
+    latin = font.get("latin", config.get("font.latin"))
+    size = font.get("size", config.get("font.size"))
+    color = font.get("color", config.get("font.color"))
+    bold = font.get("bold", config.get("font.bold"))
+    italic = font.get("italic", config.get("font.italic"))
+    for run in paragraph.runs:
+        apply_font(
+            run,
+            str(latin or name) if (latin or name) else None,
+            east_asia=str(name) if name else None,
+            size=to_points(size) if size is not None else None,
+            bold=bool(bold) if bold is not None else None,
+            italic=bool(italic) if italic is not None else None,
+            color=str(color) if color else None,
+        )
+
+
+def _number(value: Any, label: str) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        raise DocGenError(E_SECTION_CONFIG, f"{label} 需要数字（厘米）：{value!r}") from None

@@ -58,6 +58,7 @@ __all__ = [
     "set_cell_border",
     "set_cell_width",
     "set_document_language",
+    "set_even_and_odd_headers",
     "set_list_numbering",
     "set_paragraph_alignment",
     "set_paragraph_border",
@@ -1008,6 +1009,13 @@ def _set_row_bottom_border(row: Any, style: str, spec: dict[str, str] | None = N
     spec = dict(spec or {})
     for cell in row.cells:
         set_cell_border(cell, "bottom", val=style, space="0", **spec)
+
+
+def set_even_and_odd_headers(document: Any) -> None:
+    """打开 ``w:evenAndOddHeaders``：奇偶页用不同的页眉页脚。"""
+    settings = document.settings.element
+    if settings.find(qn("w:evenAndOddHeaders")) is None:
+        insert_child(settings, "w:evenAndOddHeaders")
 
 
 def set_document_language(document: Any, *, east_asia: str) -> None:

@@ -6,6 +6,25 @@
 
 ## [Unreleased]
 
+### 新增（页眉页脚增强）
+
+- **奇偶页不同**：`header.odd.text` / `header.even.text`（footer 同理），
+  自动打开文档级 `w:evenAndOddHeaders`。
+- **首页不同**：`header.first.text` / `footer.first.text`，自动设置该节 `titlePg`。
+- **页眉底部线**：`header.line = "double"` 映射到 OOXML `thickThinSmallGap`
+  （粗线在上、细线在下）；也支持 `single` / `thinThickSmallGap` / `dotted` /
+  `dashed` / `none`，线宽 `line_size`、线色 `line_color` 可配。
+- **字体**：`header.font.name`（中文）/ `font.latin`（西文）/ `font.size`
+  （支持 `小五` 等中文字号）/ `font.color` / `font.bold` / `font.italic`；
+  `PAGE` 域同样套用字体。
+- **对齐/距边界**：`header.alignment`（left/center/right）、
+  `header.distance` / `footer.distance`（cm）。
+- 非法配置（对齐、线型、距离）报 `E5003`。
+- Word COM 实测：奇数页「第一章 论文题目」/ 偶数页「XX大学硕士学位论文」，
+  9pt 宋体、居中、底部 thickThinSmallGap 线（1.5pt），页眉距边界 1.5cm、
+  页脚 1cm，页脚「第 1 页」，文档正常打开。
+- 新增 `tests/test_header_footer_rich.py`（9 项）。
+
 ### 新增（图/表按章编号）
 
 - `[document] caption_numbering = "chapter"`：图/表编号变为「章号-序号」

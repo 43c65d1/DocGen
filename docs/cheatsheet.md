@@ -225,6 +225,7 @@ docgen check  input.md -c config.toml --refs references.toml              # 校�
 docgen dump-ir input.md                                     # 看解析出的 IR（排查语法）
 docgen dump-styles -c config.toml                           # 看展开后的样式（排查样式）
 docgen bug-report --output r.txt                            # 打包环境信息
+docgen -V | --version                                       # 版本号
 ```
 
 `--pdf` 的配套：`--pdf-engine auto|word|libreoffice`（缺省 `auto`，优先 Word）、

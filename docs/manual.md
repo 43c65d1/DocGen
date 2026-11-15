@@ -32,6 +32,7 @@
 | `font.east_asia` | 无 | 代码块里中文的回退字体（可选） |
 | `line_spacing` | 1.15 倍（276/240） | 正文行距：数字 = **倍数**（`1.5`）；带 `pt`/`磅` = **固定磅值**（`"20pt"` → `w:lineRule="exact"`） |
 | `heading_numbering` | **开**（decimal） | 标题编号：`false` 关闭；`decimal` / `chapter`（第一章）/ `chinese`（一、） |
+| `caption_numbering` | `continuous` | 图/表编号：`chapter` = 按章编号（图 2-1） |
 | `heading_indent` | 母版缩进（`left=720` + `hanging=360`） | 三种写法：`false` / 表 / 数字，见 §2 |
 | `alignment` | 无（继承） | 段落对齐，会被 `[styles.*]` 覆盖，见 §3 |
 | `space_before` / `space_after` | 无 | 段前/段后，见 §3 |
@@ -305,6 +306,13 @@ DFM 语法（IR 支持 `colspan/rowspan`，但解析器不产生）。
 - 域缓存值**已烘焙**：`SEQ` / `REF` 写的是真实编号，WPS/预览也能看到正确编号；
   `PAGE` / `TOC` 仍需查看器更新（分页相关）。
 - 题注编号按类型独立计数（图 1、图 2、表 1…）。
+- **按章编号**：`[document] caption_numbering = "chapter"` 时，图/表编号变成
+  「章号-序号」（图 2-1、表 2-1），以一级标题（Heading 1）分章；第一个一级标题之前
+  的题注不加章号前缀（保持图 1、图 2）。与 `heading_numbering` 预设无关，
+  章号按一级标题顺序计算。
+- 按章模式下题注编号是**静态文本**（不再用 `SEQ` 域）：`SEQ` 只会给章内整数，
+  更新域会把「2-1」改回「1」；书签仍包住编号，`[[ref:...]]` 的 `REF` 域取到的
+  也是「2-1」。
 
 ### 文献引用（顺序编码制）
 

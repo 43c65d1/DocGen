@@ -65,6 +65,7 @@ logfile = ""
 | `font.name` / `font.latin` / `font.size` | 主题字体 / 无 / 11pt | `"宋体"` + 西文 `font.latin = "Times New Roman"`；字号写 `"小四"` 或 `"12pt"` |
 | `line_spacing` | 1.15（倍数） | `1.5`（倍数）/ `"20pt"`（固定值） |
 | `heading_numbering` | `true`（decimal） | `false` / `"chapter"`（第一章）/ `"chinese"`（一、） |
+| `caption_numbering` | `continuous` | `"chapter"` = 图/表按章编号（图 2-1） |
 | `heading_indent` | 母版（`left 720 hanging 360`） | `false` / `0` / 表 |
 | `alignment` | 继承 | `"center"` |
 | `space_before` / `space_after` | 无 | `"6pt"` / `"0.5 line"` |

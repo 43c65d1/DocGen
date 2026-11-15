@@ -56,6 +56,18 @@ color = "#222"
 | `[styles.*]` | 内容样式（标题、正文、`[文字]{.样式名}`） | `styles.heading1` 等 |
 | `[code_block]` / `[code_block.<lang>]` | 代码块样式 | `code_block`、`code_block.python` |
 
+### 图/表按章编号
+
+```toml
+[document]
+caption_numbering = "chapter"   # 图 2-1 / 表 2-1（默认 continuous：图 1、图 2）
+```
+
+以一级标题（Heading 1）分章；第一个一级标题之前的题注保持连续编号。
+按章模式下图/表编号写成静态文本（书签仍供 `[[ref:...]]` 使用），
+不再用 `SEQ` 域，避免更新域把「2-1」改回「1」。
+
+
 `[code_block]` 里的**点号键**（`font.name`）会被识别为「基座属性」而不是语言变体；
 语言变体只认 `[code_block.<语言>]` 这种表头写法。
 

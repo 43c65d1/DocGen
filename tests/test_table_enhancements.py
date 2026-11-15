@@ -145,6 +145,7 @@ def test_column_widths_are_normalised(tmp_path: Path) -> None:
 # 合并（IR 直接构造，GFM 不支持合并语法）
 # --------------------------------------------------------------------------
 def _merged_table() -> Table:
+    """3×3 网格：第一行横并 2 格，第一列纵并 2 行（续行给占位格）。"""
     return Table(
         source_line=1,
         rows=[],
@@ -156,6 +157,11 @@ def _merged_table() -> Table:
             ],
             [
                 TableCell(blocks=[], rowspan=2),
+                TableCell(blocks=[]),
+                TableCell(blocks=[]),
+            ],
+            [
+                TableCell(blocks=[], is_merge_continuation=True),
                 TableCell(blocks=[]),
                 TableCell(blocks=[]),
             ],

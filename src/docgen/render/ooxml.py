@@ -56,6 +56,7 @@ __all__ = [
     "repeat_table_header",
     "set_cell_alignment",
     "set_cell_border",
+    "set_cell_vertical_alignment",
     "set_cell_width",
     "set_document_language",
     "set_even_and_odd_headers",
@@ -68,6 +69,7 @@ __all__ = [
     "set_paragraph_shading",
     "set_paragraph_spacing",
     "set_row_cant_split",
+    "set_row_height",
     "set_run_color",
     "set_run_shading",
     "set_run_size",
@@ -941,6 +943,21 @@ def repeat_table_header(row: Any) -> None:
     trpr = row._tr.get_or_add_trPr()
     # 走 insert_child：``cantSplit`` 可能先写进来，append 会造出非法顺序
     insert_child(trpr, "w:tblHeader")
+
+
+def set_row_height(row: Any, height_twips: int, *, rule: str = "atLeast") -> None:
+    """行高：``w:trHeight``（缇）+ ``w:hRule``（``atLeast``/``exact``/``auto``）。"""
+    trpr = row._tr.get_or_add_trPr()
+    element = insert_child(trpr, "w:trHeight")
+    element.set(qn("w:val"), str(max(0, height_twips)))
+    element.set(qn("w:hRule"), rule)
+
+
+def set_cell_vertical_alignment(cell: Any, value: str) -> None:
+    """单元格垂直对齐：``w:tcPr/w:vAlign``（``top``/``center``/``bottom``）。"""
+    tcpr = cell._tc.get_or_add_tcPr()
+    element = insert_child(tcpr, "w:vAlign")
+    element.set(qn("w:val"), value)
 
 
 def set_row_cant_split(row: Any) -> None:

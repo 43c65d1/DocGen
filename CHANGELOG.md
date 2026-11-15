@@ -6,6 +6,21 @@
 
 ## [Unreleased]
 
+### 新增（表格布局与合并语法）
+
+- **行高**：`[table] row_height`（如 `"0.8cm"` / `"20pt"`）、`header_row_height`
+  （表头单独设）、`row_height_rule`（`atLeast` / `exact` / `auto`）。
+- **按厘米列宽**：`col_widths = ["3cm", "5cm"]`（绝对宽度）；数字数组仍按比例。
+- **单元格垂直居中**：`cell_vertical_align = "top" / "center" / "bottom"`。
+- **DFM 合并语法**：表格单元格里写 `[[merge:2]]`（横并 2 列）、
+  `[[merge:1,2]]`（纵并 2 行）、`[[merge:2,3]]`（2 列 × 3 行）；
+  横并后的占位格与纵并续行的占位格按网格列补空即可。
+- **合并渲染修正**：改用 python-docx `cell.merge()` 真正合并（正确的
+  `w:gridSpan` / `w:vMerge`），不再只写属性却留着重复 `w:tc`。
+- Word COM 实测：表头 1cm/正文 0.8cm 行高（atLeast）、3cm/5cm 列宽、
+  单元格垂直居中；3×3 表格横并 + 纵并后 Word 识别为合并区域，文档正常打开。
+- 测试：`tests/test_table_layout.py`（9 项）+ `tests/test_table_merge_syntax.py`（9 项）。
+
 ### 新增（页眉页脚增强）
 
 - **奇偶页不同**：`header.odd.text` / `header.even.text`（footer 同理），

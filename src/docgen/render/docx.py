@@ -72,13 +72,12 @@ from .ooxml import (
     make_math_paragraph,
     make_page_break,
     make_reference_field,
-    merge_cell_horizontal,
-    merge_cell_vertical,
     page_content_width,
     parse_line_spacing,
     repeat_table_header,
     set_cell_alignment,
     set_cell_border,
+    set_cell_vertical_alignment,
     set_cell_width,
     set_list_numbering,
     set_paragraph_alignment,
@@ -88,6 +87,7 @@ from .ooxml import (
     set_paragraph_shading,
     set_paragraph_spacing,
     set_row_cant_split,
+    set_row_height,
     set_run_shading,
     set_table_borders,
     set_table_width,
@@ -937,6 +937,7 @@ def _render_table(state: _RenderState, block: Table) -> None:
     aux_spec = _three_line_aux_spec(properties)
     aux_style = str(properties.get("line_style", "single"))
     decimal_columns = _decimal_columns(properties, columns)
+    valign = str(properties.get("cell_vertical_align", "") or "")
     for row_index, row in enumerate(block.rows):
         # 辅助线：任一单元格写了 [[aux]]，整行上方加线（三线表的「合计线」）
         aux_row = any(
@@ -980,12 +981,15 @@ def _render_table(state: _RenderState, block: Table) -> None:
             if row_index == 0 and diagonal is None:
                 for run in cell.paragraphs[0].runs:
                     run.bold = True
-            _apply_cell_format(cell, widths[column_index], _column_alignment(block, column_index))
+            _apply_cell_format(
+                cell, widths[column_index], _column_alignment(block, column_index), valign
+            )
             _apply_table_text(state, cell, properties, header=row_index == 0)
         if aux_row:
             for cell in table.rows[row_index].cells:
                 set_cell_border(cell, "top", val=aux_style, space="0", **aux_spec)
 
+    _apply_row_heights(table, properties)
     _apply_table_header_behavior(table, properties)
     _apply_table_borders(table, properties, header_rows=1)
 
@@ -1074,10 +1078,16 @@ def _fit_grid(table: Any, columns: int) -> int:
 
 
 def _render_cell_table(state: _RenderState, block: Table) -> None:
-    """结构化单元格（支持合并）。"""
+    """结构化单元格（支持 ``colspan`` / ``rowspan`` 合并）。
+
+    用 python-docx 的 ``cell.merge()`` 真正合并单元格（生成正确的
+    ``w:gridSpan`` / ``w:vMerge``），而不是只写属性、留着重复的 ``w:tc``。
+    """
     properties = _table_properties(state)
     rows = block.cells
-    columns = sum(cell.colspan for cell in rows[0]) if rows else 0
+    if not rows:
+        return
+    columns = max(len(row) for row in rows)
     if not columns:
         return
     table = state.document.add_table(rows=len(rows), cols=columns)
@@ -1087,24 +1097,26 @@ def _render_cell_table(state: _RenderState, block: Table) -> None:
 
     widths = _column_widths(properties, columns, state)
     set_table_width(table, widths)
+    valign = str(properties.get("cell_vertical_align", "") or "")
     for row_index, row in enumerate(rows):
-        column_index = 0
-        for cell_spec in row:
-            cell = table.cell(row_index, column_index)
-            drop_empty_runs(cell.paragraphs[0])
+        for column_index, cell_spec in enumerate(row):
             if cell_spec.is_merge_continuation:
-                merge_cell_horizontal(table, row_index, column_index)
+                continue
+            colspan = max(1, cell_spec.colspan)
+            rowspan = max(1, cell_spec.rowspan)
+            if colspan > 1 or rowspan > 1:
+                cell = table.cell(row_index, column_index).merge(
+                    table.cell(row_index + rowspan - 1, column_index + colspan - 1)
+                )
             else:
-                span = max(1, cell_spec.colspan)
-                if span > 1:
-                    merge_cell_horizontal(table, row_index, column_index, span)
-                if cell_spec.rowspan > 1:
-                    for offset in range(1, cell_spec.rowspan):
-                        merge_cell_vertical(table, row_index, column_index, offset)
-                _write_cell_content(state, cell, cell_spec)
-                _apply_table_text(state, cell, properties, header=row_index == 0)
-            column_index += max(1, cell_spec.colspan)
+                cell = table.cell(row_index, column_index)
+            drop_empty_runs(cell.paragraphs[0])
+            _write_cell_content(state, cell, cell_spec)
+            if valign:
+                set_cell_vertical_alignment(cell, valign)
+            _apply_table_text(state, cell, properties, header=row_index == 0)
 
+    _apply_row_heights(table, properties)
     _apply_table_header_behavior(table, properties)
     _apply_table_borders(table, properties, header_rows=1)
 
@@ -1153,11 +1165,43 @@ def _table_properties(state: _RenderState) -> dict[str, Any]:
             parse_line_spacing(spacing)
     # header_bold 用与其它布尔开关相同的严格校验（写错不静默）
     _table_flag(table, "header_bold", True)
+
+    # 行高 / 垂直对齐：值先校验，渲染时再写（写错不静默）
+    for key in ("row_height", "header_row_height"):
+        value = table.get(key)
+        if value is not None and _height_twips(value, key) is None:
+            raise DocGenError(E_CONFIG, f"[table] {key} 无法识别: {value!r}")
+    rule = str(table.get("row_height_rule", "atLeast"))
+    if rule not in ("atLeast", "exact", "auto"):
+        raise DocGenError(
+            E_CONFIG, f"[table] row_height_rule 不支持: {rule!r}（可用 atLeast / exact / auto）"
+        )
+    valign = str(table.get("cell_vertical_align", "") or "")
+    if valign and valign not in ("top", "center", "bottom"):
+        raise DocGenError(
+            E_CONFIG,
+            f"[table] cell_vertical_align 不支持: {valign!r}（可用 top / center / bottom）",
+        )
     return table
 
 
 #: 表格边框预设 + ``custom``（逐边配置）
 TABLE_STYLES = ("three_line", "grid", "none", "custom")
+
+
+def _height_twips(value: Any, label: str) -> int | None:
+    """把 ``"0.8cm"`` / ``"20pt"`` / 数字（磅）换算成缇；无法识别返回 ``None``。"""
+    if isinstance(value, bool):
+        return None
+    try:
+        if isinstance(value, (int, float)):
+            return round(float(value) * 20)
+        length = length_from_text(str(value))
+        if length is None:
+            return None
+        return round(float(length.twips))
+    except (TypeError, ValueError, AttributeError):
+        return None
 
 
 def _column_widths(properties: dict[str, Any], columns: int, state: _RenderState) -> list[int]:
@@ -1178,6 +1222,20 @@ def _column_widths(properties: dict[str, Any], columns: int, state: _RenderState
         # 取整误差可能让总和略超，最后一列吸收掉
         widths[-1] = max(1, widths[-1] - (sum(widths) - total))
         return widths
+    if isinstance(ratios, list) and len(ratios) == columns:
+        # 绝对宽度：[table] col_widths = ["3cm", "5cm"]
+        if not all(isinstance(item, str) for item in ratios):
+            raise DocGenError(
+                E_CONFIG,
+                '[table] col_widths 需全部是相对比例（数字）或全部带单位（如 "3cm"），不能混用',
+            )
+        absolute = [_height_twips(item, "col_widths") for item in ratios]
+        if all(item is not None for item in absolute):
+            return [int(item or 0) for item in absolute]
+        raise DocGenError(
+            E_CONFIG,
+            '[table] col_widths 需全部是相对比例（数字）或全部带单位（如 "3cm"），不能混用',
+        )
     return [total // columns] * columns
 
 
@@ -1187,10 +1245,27 @@ def _column_alignment(block: Table, index: int) -> str:
     return ""
 
 
-def _apply_cell_format(cell: Any, width: int, alignment: str) -> None:
+def _apply_row_heights(table: Any, properties: dict[str, Any]) -> None:
+    """行高：``[table] row_height`` / ``header_row_height``。"""
+    body_height = properties.get("row_height")
+    header_height = properties.get("header_row_height", body_height)
+    rule = str(properties.get("row_height_rule", "atLeast"))
+    for index, row in enumerate(table.rows):
+        value = header_height if index == 0 else body_height
+        if value is None:
+            continue
+        twips = _height_twips(value, "row_height")
+        if twips is None:
+            continue
+        set_row_height(row, twips, rule=rule)
+
+
+def _apply_cell_format(cell: Any, width: int, alignment: str, valign: str = "") -> None:
     set_cell_width(cell, width)
     if alignment:
         set_cell_alignment(cell, alignment)
+    if valign:
+        set_cell_vertical_alignment(cell, valign)
 
 
 def _apply_table_text(

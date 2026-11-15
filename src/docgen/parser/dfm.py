@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from markdown_it import MarkdownIt
 
@@ -39,6 +39,7 @@ from ..ir import (
     SectionBreak,
     Styled,
     Table,
+    TableCell,
     Text,
     ThematicBreak,
     Toc,
@@ -432,12 +433,136 @@ def _blockquote(tokens: list[Token], start: int, end: int) -> tuple[BlockQuote, 
     return BlockQuote(content=[], source_line=_line_of(open_token)), i
 
 
+def _merge_span(content: str) -> tuple[int, int]:
+    """``[[merge:2]]`` / ``[[merge:2,3]]`` / ``[[merge:2x3]]`` → (colspan, rowspan)。"""
+    text = content.strip().lower().replace("×", "x")
+    for separator in (",", "x"):
+        if separator in text:
+            left, _, right = text.partition(separator)
+            break
+    else:
+        left, right = text, "1"
+    try:
+        colspan = max(1, min(20, int(left or "1")))
+        rowspan = max(1, min(20, int(right or "1")))
+    except ValueError:
+        return (1, 1)
+    return (colspan, rowspan)
+
+
+def _cell_text_from_children(children: list[Any]) -> str:
+    """与 :func:`_cell_text` 同口径，但直接吃已剔除标记的子 token。"""
+    if not children:
+        return ""
+    pieces: list[str] = []
+    for tok in children:
+        if tok.type in ("text", "code_inline"):
+            pieces.append(tok.content)
+        elif tok.type in ("softbreak", "hardbreak"):
+            pieces.append(" ")
+        elif tok.type == "dfm_math":
+            pieces.append(f"${tok.content}$")
+    return "".join(pieces).strip()
+
+
+def _table_with_cells(
+    rows: list[list[str]],
+    cell_nodes: list[list[list[InlineNode]]],
+    merge_specs: list[list[tuple[int, int]]],
+    alignments: list[str],
+    source_line: int,
+) -> Table:
+    """把 GFM 行 + 合并标记整理成 ``cells``（含合并占位）；没有合并标记时保持 old 结构。"""
+    if not any(span != (1, 1) for row in merge_specs for span in row):
+        return Table(
+            rows=rows, source_line=source_line, alignments=alignments, cell_nodes=cell_nodes
+        )
+
+    row_count = len(rows)
+    column_count = max((len(row) for row in rows), default=0)
+    if not row_count or not column_count:
+        return Table(
+            rows=rows, source_line=source_line, alignments=alignments, cell_nodes=cell_nodes
+        )
+
+    occupied = [[False] * column_count for _ in range(row_count)]
+    grid: list[list[TableCell | None]] = [[None] * column_count for _ in range(row_count)]
+
+    for row_index in range(row_count):
+        source = list(zip(cell_nodes[row_index], merge_specs[row_index], strict=False))
+        free = [c for c in range(column_count) if not occupied[row_index][c]]
+        if not free:
+            continue
+
+        def place(
+            column: int,
+            nodes: list[Any],
+            span: tuple[int, int],
+            row_index: int = row_index,
+        ) -> None:
+            colspan, rowspan = span
+            colspan = max(1, min(colspan, column_count - column))
+            rowspan = max(1, min(rowspan, row_count - row_index))
+            blocks: list[BlockNode] = (
+                [Paragraph(content=list(nodes), source_line=source_line)] if nodes else []
+            )
+            grid[row_index][column] = TableCell(blocks=blocks, colspan=colspan, rowspan=rowspan)
+            for dr in range(rowspan):
+                for dc in range(colspan):
+                    occupied[row_index + dr][column + dc] = True
+                    if (dr, dc) != (0, 0):
+                        grid[row_index + dr][column + dc] = TableCell(is_merge_continuation=True)
+
+        if len(source) == len(free):
+            # 续行没写占位格：按剩余列依次放
+            free_index = 0
+            for nodes, span in source:
+                if free_index >= len(free):
+                    break
+                column = free[free_index]
+                free_index += 1
+                place(column, nodes, span)
+                while free_index < len(free) and free[free_index] <= column + span[0] - 1:
+                    free_index += 1
+        else:
+            # 续行写了占位格（与网格列数一致）：占位格只消耗、不放内容
+            column = 0
+            source_index = 0
+            while source_index < len(source) and column < column_count:
+                while column < column_count and occupied[row_index][column]:
+                    column += 1
+                    source_index += 1
+                if source_index >= len(source) or column >= column_count:
+                    break
+                nodes, span = source[source_index]
+                source_index += 1
+                place(column, nodes, span)
+                column += max(1, span[0])
+
+    cells: list[list[TableCell]] = []
+    for row_index in range(row_count):
+        grid_row: list[TableCell] = []
+        for column in range(column_count):
+            cell = grid[row_index][column]
+            grid_row.append(cell if cell is not None else TableCell())
+        cells.append(grid_row)
+    return Table(
+        rows=rows,
+        source_line=source_line,
+        alignments=alignments,
+        cell_nodes=cell_nodes,
+        cells=cells,
+    )
+
+
 def _table(tokens: list[Token], start: int, end: int) -> tuple[Table, int]:
     open_token = tokens[start]
     rows: list[list[str]] = []
     row: list[str] = []
     cell_nodes: list[list[list[InlineNode]]] = []
     nodes_row: list[list[InlineNode]] = []
+    merge_specs: list[list[tuple[int, int]]] = []
+    specs_row: list[tuple[int, int]] = []
     row_alignments: list[str] = []
     alignments: list[str] = []
     i = start
@@ -446,39 +571,40 @@ def _table(tokens: list[Token], start: int, end: int) -> tuple[Table, int]:
         token = tokens[i]
         if token.type == "table_close":
             return (
-                Table(
-                    rows=rows,
-                    source_line=_line_of(open_token),
-                    alignments=alignments,
-                    cell_nodes=cell_nodes,
-                ),
+                _table_with_cells(rows, cell_nodes, merge_specs, alignments, _line_of(open_token)),
                 i + 1,
             )
         if token.type == "tr_open":
             row = []
             nodes_row = []
+            specs_row = []
             row_alignments = []
         elif token.type == "tr_close":
             rows.append(row)
             cell_nodes.append(nodes_row)
+            merge_specs.append(specs_row)
             if not alignments and any(row_alignments):
                 alignments = list(row_alignments)
         elif token.type in ("th_open", "td_open"):
             inline = tokens[i + 1] if i + 1 < end else None
-            row.append(_cell_text(inline))
+            children = list(inline.children or []) if inline else []
+            span = (1, 1)
+            kept: list[Any] = []
+            for child in children:
+                if child.type == "dfm_merge":
+                    span = _merge_span(child.content)
+                else:
+                    kept.append(child)
+            row.append(_cell_text_from_children(kept))
             # 同时保留行内 IR：单元格里的粗体/代码/公式不能被拍平
-            nodes_row.append(_inline_to_ir(inline.children or []) if inline else [])
+            nodes_row.append(_inline_to_ir(kept))
+            specs_row.append(span)
             if token.type == "th_open":
                 row_alignments.append(_alignment_of(_attr(token, "style")))
         i += 1
 
     return (
-        Table(
-            rows=rows,
-            source_line=_line_of(open_token),
-            alignments=alignments,
-            cell_nodes=cell_nodes,
-        ),
+        _table_with_cells(rows, cell_nodes, merge_specs, alignments, _line_of(open_token)),
         i,
     )
 

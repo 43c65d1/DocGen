@@ -138,8 +138,11 @@ def _build(
     ``[bibliography] file``。
     """
     source = _read_source(path)
+    _OUTPUT.log(f"读取源文件: {path}（{len(source)} 字符）")
     blocks = parse_dfm(source)
+    _OUTPUT.log(f"解析完成: {len(blocks)} 个块级节点")
     config = load_config(config_path or (path.parent / "config.toml"))
+    _OUTPUT.log(f"加载 config: {config_path or (path.parent / 'config.toml')}")
     _apply_output_config(config)
     target = _resolve_format(fmt)
     _warn_table_default(config, blocks)
@@ -149,11 +152,13 @@ def _build(
         for err in errors:
             _OUTPUT.error(str(err))
         return EXIT_CONTENT_ERROR
+    _OUTPUT.log("内容校验通过")
 
     try:
         render_docx(blocks, config, output, base_dir=path.parent, refs=refs)
     except OSError as exc:
         raise DocGenError(E_CONFIG, f"无法写入输出文件: {output}: {exc}") from None
+    _OUTPUT.log(f"渲染完成: {output}")
     _OUTPUT.results(f"已生成 {output}（{target}，{len(blocks)} 个块级节点）")
 
     if _pdf_wanted(config, pdf=pdf, no_pdf=no_pdf):
@@ -211,8 +216,11 @@ def _check(
     refs: Path | None = None,
 ) -> int:
     text = _read_source(path)
+    _OUTPUT.log(f"读取源文件: {path}（{len(text)} 字符）")
     blocks = parse_dfm(text)
+    _OUTPUT.log(f"解析完成: {len(blocks)} 个块级节点")
     config = load_config(config_path or (path.parent / "config.toml"))
+    _OUTPUT.log(f"加载 config: {config_path or (path.parent / 'config.toml')}")
     _apply_output_config(config)
 
     if strict:
@@ -222,6 +230,7 @@ def _check(
     else:
         errors = validate_content(blocks, config, source=path, refs=refs)
 
+    _OUTPUT.log(f"校验完成: {len(errors)} 个问题")
     if as_json:
         # stdout 只允许 JSON：诊断走 stderr（_OUTPUT.error 已保证）
         _OUTPUT.results(
@@ -339,6 +348,13 @@ def _build_parser() -> argparse.ArgumentParser:
             "退出码：0 成功 / 1 内容错误 / 2 用法或 config 错误 / 130 被中断。\n"
             "输出级别与 logfile 由 [output] 控制，也可用 -q/-v/--logfile 覆盖。"
         ),
+    )
+    parser.add_argument(
+        "-V",
+        "--version",
+        action="version",
+        version=f"docgen {version_string()}",
+        help="显示版本号并退出",
     )
     # 全局输出开关：放在子命令前，如 `docgen -v build ...`
     parser.add_argument(

@@ -12,11 +12,21 @@ from pathlib import Path
 import pytest
 
 from docgen import errors
-from docgen.cli import main
+from docgen.cli import main, version_string
 from docgen.ir import BlockNode
 
 FIXTURES = Path(__file__).parent / "fixtures"
 CONFIG = str(FIXTURES / "minimal.toml")
+
+
+@pytest.mark.parametrize("flag", ["-V", "--version"])
+def test_version_flag(capsys: pytest.CaptureFixture[str], flag: str) -> None:
+    with pytest.raises(SystemExit) as caught:
+        main([flag])
+    assert caught.value.code == 0
+    output = capsys.readouterr().out
+    assert output.startswith("docgen ")
+    assert version_string() in output
 
 
 def test_no_arguments_shows_usage_and_exits_2(capsys: pytest.CaptureFixture[str]) -> None:
@@ -234,6 +244,24 @@ def test_build_writes_docx_end_to_end(tmp_path: Path, capsys: pytest.CaptureFixt
     assert "Heading1" in document  # 标题走标题样式
     assert "w:br" in document or "lastRenderedPageBreak" in document  # 分页符落地
     assert "已生成" in capsys.readouterr().out
+
+
+def test_verbose_prints_log_lines(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    source = tmp_path / "doc.md"
+    source.write_text("# 标题\n\n正文。\n", encoding="utf-8")
+    output = tmp_path / "out.docx"
+    assert main(["-v", "build", str(source), "-c", CONFIG, "-o", str(output)]) == 0
+    err = capsys.readouterr().err
+    assert "[log]" in err
+    assert "解析完成" in err
+
+
+def test_default_hides_log_lines(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    source = tmp_path / "doc.md"
+    source.write_text("# 标题\n\n正文。\n", encoding="utf-8")
+    output = tmp_path / "out.docx"
+    assert main(["build", str(source), "-c", CONFIG, "-o", str(output)]) == 0
+    assert "[log]" not in capsys.readouterr().err
 
 
 def test_build_reports_content_errors_and_writes_nothing(

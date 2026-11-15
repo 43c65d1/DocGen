@@ -168,10 +168,11 @@ def validate_content(
     errors.extend(validate_bibliography(blocks, config, source=source, base_dir=root, refs=refs))
 
     # 标题编号预设（decimal / chapter / chinese / false）：非法值在 check 时也报
-    from .numbering import heading_numbering_mode
+    from .numbering import caption_numbering_mode, heading_numbering_mode
 
-    try:
-        heading_numbering_mode(config)
-    except DocGenError as err:
-        errors.append(ContentError(code=err.code, message=str(err), file=file_name, line=0))
+    for parse in (heading_numbering_mode, caption_numbering_mode):
+        try:
+            parse(config)
+        except DocGenError as err:
+            errors.append(ContentError(code=err.code, message=str(err), file=file_name, line=0))
     return errors

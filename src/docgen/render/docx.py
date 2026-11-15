@@ -187,9 +187,14 @@ def _build_document(
     )
     state.sections = sections
     # 域缓存值：渲染时把真实编号写进产物，别指望查看器去更新域
-    from ..numbering import baked_fields, baked_heading_labels
+    from ..numbering import (
+        baked_fields,
+        baked_heading_labels,
+        caption_numbering_mode,
+    )
 
-    state.caption_fields = baked_fields(blocks)
+    state.caption_fields = baked_fields(blocks, config)
+    state.caption_static = caption_numbering_mode(config) == "chapter"
     state.heading_labels = baked_heading_labels(blocks, config)
     # 文献引用：先分配编号、生成条目（没有 [[cite:]] 时为 None）
     from ..bibliography import has_bibliography_marker, plan_bibliography
@@ -243,6 +248,7 @@ class _RenderState:
         "base_dir",
         "bibliography",
         "caption_fields",
+        "caption_static",
         "config",
         "default_east_asia",
         "doc_settings",
@@ -272,6 +278,7 @@ class _RenderState:
         self.math_engine, self.math_on_fail, self.math_xsl = math_settings(config)
         self.sections: Any = None
         self.caption_fields: dict[str, str] = {}
+        self.caption_static = False
         self.heading_labels: dict[int, str] = {}
         self.bibliography: Any = None
         self._bookmark_id = 1000
@@ -821,14 +828,23 @@ def _render_caption(
     _apply_paragraph_properties(paragraph, state.styles.get("caption", {}))
     _apply_table_gap(state, paragraph, previous=previous, following=following)
     append_text(paragraph, f"{label} ")
-    append_field(
-        paragraph,
-        make_caption_field(label),
-        # 缓存值写**真实序号**：Word 会自动重算，但 WPS/预览/解包 XML 只认这个值
-        state.caption_fields.get(block.label, "1"),
-        bookmark=block.label,
-        bookmark_id=state.next_bookmark_id(),
-    )
+    number = state.caption_fields.get(block.label, "1")
+    if state.caption_static:
+        # 按章编号（图 2-1）不能用 SEQ 域：SEQ 只给章内整数，更新域会把 "2-1" 改回 "1"。
+        # 这里把编号烘成静态文本，书签仍包住编号，REF 交叉引用取到的也是 "2-1"。
+        bookmark_id = state.next_bookmark_id()
+        paragraph._p.append(make_bookmark_start(block.label, bookmark_id))
+        append_text(paragraph, number)
+        paragraph._p.append(make_bookmark_end(bookmark_id))
+    else:
+        append_field(
+            paragraph,
+            make_caption_field(label),
+            # 缓存值写**真实序号**：Word 会自动重算，但 WPS/预览/解包 XML 只认这个值
+            number,
+            bookmark=block.label,
+            bookmark_id=state.next_bookmark_id(),
+        )
     text = _caption_text(block)
     if text:
         append_text(paragraph, f" {text}")

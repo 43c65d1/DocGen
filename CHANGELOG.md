@@ -6,6 +6,22 @@
 
 ## [Unreleased]
 
+### 新增（图/表按章编号）
+
+- `[document] caption_numbering = "chapter"`：图/表编号变为「章号-序号」
+  （图 2-1、表 2-1），以一级标题（Heading 1）分章；默认 `continuous`
+  保持原行为（图 1、图 2）。第一个一级标题之前的题注不加章号前缀。
+- 按章模式题注编号写成**静态文本**（不再用 `SEQ` 域）：`SEQ` 只给章内整数，
+  更新域会把「2-1」改回「1」；书签仍包住编号，`[[ref:...]]` 的 `REF`
+  取到的也是「2-1」。
+- 与 `heading_numbering` 预设联动无关（章号按一级标题顺序算）：
+  `heading_numbering = "chapter"` + `caption_numbering = "chapter"` 可同时用。
+- 非法取值报 `E5001`，`docgen check` 同样报出。
+- Word COM 实测（Fields.Update 后仍稳定）：第一章 绪论 / 图 1-1 / 表 1-1 /
+  图 1-2 / 第二章 方法 / 图 2-1 / 表 2-1，REF 显示 1-1，文档正常打开。
+- 新增 `tests/test_caption_chapter.py`（16 项：模式解析、编号分配、
+  章前题注、静态文本/书签、与标题预设组合、公式不受影响、非法值）。
+
 ### 新增（标题中文编号格式）
 
 - `[document] heading_numbering` 从布尔开关扩展为预设：

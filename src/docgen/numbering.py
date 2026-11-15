@@ -28,6 +28,8 @@ __all__ = [
     "baked_heading_labels",
     "caption_counters",
     "caption_kind",
+    "caption_numbering_mode",
+    "caption_numbers",
     "collect_labels",
     "collect_refs",
     "format_heading_label",
@@ -248,12 +250,66 @@ def caption_counters(blocks: list[BlockNode]) -> dict[str, int]:
     return counters
 
 
+def caption_numbering_mode(config: Config) -> str:
+    """``[document] caption_numbering``：``continuous``（默认）或 ``chapter``。"""
+    raw = config.setting("caption_numbering", "continuous")
+    if isinstance(raw, bool):
+        return "chapter" if raw else "continuous"
+    text = str(raw).strip().lower()
+    aliases = {
+        "continuous": "continuous",
+        "false": "continuous",
+        "off": "continuous",
+        "0": "continuous",
+        "chapter": "chapter",
+        "by-chapter": "chapter",
+        "true": "chapter",
+        "1": "chapter",
+    }
+    if text in aliases:
+        return aliases[text]
+    raise DocGenError(
+        E_CONFIG,
+        f"[document] caption_numbering 不支持: {raw!r}（可用 continuous / chapter）",
+    )
+
+
+def caption_numbers(blocks: list[BlockNode], config: Config) -> dict[str, str]:
+    """题注标签 → 显示编号：连续模式 ``"3"``，按章模式 ``"2-1"``。
+
+    ``chapter`` 模式以一级标题（Heading 1）分章；第一个一级标题之前的内容算
+    「第 0 章」，题注不加章号前缀（保持连续编号），避免出现「0-1」。
+    公式（``equation``）不参与：它的编号由 ``number`` 属性手写。
+    """
+    mode = caption_numbering_mode(config)
+    if mode != "chapter":
+        return {label: str(number) for label, number in caption_counters(blocks).items()}
+
+    chapter = 0
+    local: dict[str, int] = {}
+    numbers: dict[str, str] = {}
+    for block in iter_blocks(blocks):
+        if isinstance(block, Heading):
+            if max(1, min(9, block.level)) == 1:
+                chapter += 1
+                local = {}
+            continue
+        if not isinstance(block, NamedBlock) or not block.label:
+            continue
+        kind = caption_kind(block)
+        if kind == "equation":
+            continue
+        local[kind] = local.get(kind, 0) + 1
+        numbers[block.label] = f"{chapter}-{local[kind]}" if chapter > 0 else str(local[kind])
+    return numbers
+
+
 def caption_number(blocks: list[BlockNode], label: str) -> int | None:
     """某个标签的题注序号（不存在返回 None）。"""
     return caption_counters(blocks).get(label)
 
 
-def baked_fields(blocks: list[BlockNode]) -> dict[str, str]:
+def baked_fields(blocks: list[BlockNode], config: Config | None = None) -> dict[str, str]:
     """标签 -> **域缓存值**（写进 docx 里的字面结果）。
 
     为什么需要：Word 打开文档时会按 ``updateFields`` 重算域，所以缓存值写错也
@@ -264,7 +320,12 @@ def baked_fields(blocks: list[BlockNode]) -> dict[str, str]:
     - 编号公式：书签包住的是 ``(N)``，所以引用它的缓存值也带括号；
     - 其它带 ``#id`` 的命名块：按题注序号。
     """
-    counters = caption_counters(blocks)
+    if config is None:
+        counters: dict[str, str] = {
+            label: str(number) for label, number in caption_counters(blocks).items()
+        }
+    else:
+        counters = caption_numbers(blocks, config)
     baked: dict[str, str] = {}
     for block in iter_blocks(blocks):
         if not isinstance(block, NamedBlock) or not block.label:
@@ -276,7 +337,7 @@ def baked_fields(blocks: list[BlockNode]) -> dict[str, str]:
             if number:
                 baked[block.label] = f"({number})"
         elif block.label in counters:
-            baked[block.label] = str(counters[block.label])
+            baked[block.label] = counters[block.label]
     return baked
 
 

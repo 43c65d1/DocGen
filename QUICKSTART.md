@@ -32,7 +32,7 @@ docgen build content.md -c config.toml -o out.docx
 **按你的终端挑一行**（三个入口做同一件事）：
 
 ```bash
-cd docgen-0.1.0b1-src
+cd docgen-*-src
 
 bash scripts/setup.sh --dev           # Git Bash / macOS / Linux
 # 或（PowerShell 7）
@@ -66,7 +66,7 @@ scripts\setup.cmd --dev
 ### 方式 B：用标准 venv + pip
 
 ```bash
-cd docgen-0.1.0b1-src
+cd docgen-*-src
 python -m venv .venv
 .venv\Scripts\Activate.ps1          # Windows
 # source .venv/bin/activate          # macOS/Linux

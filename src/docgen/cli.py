@@ -47,7 +47,7 @@ EXIT_ENV_ERROR = 3  # 环境/外部工具错误（如 PDF 引擎缺失或转换�
 
 #: 回退版本号（包未安装时用）。改版本请改 pyproject.toml——这里是兜底，
 #: 两者一致性由 tests/test_release.py::test_version_matches_pyproject 守住。
-VERSION = "0.1.0b1"
+VERSION = "0.1.0b2"
 
 
 def version_string() -> str:

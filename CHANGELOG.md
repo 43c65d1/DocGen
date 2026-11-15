@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.1.0b2] - 2026-11-15
+
 ### 新增（表格布局与合并语法）
 
 - **行高**：`[table] row_height`（如 `"0.8cm"` / `"20pt"`）、`header_row_height`
@@ -696,7 +698,6 @@ Word 16 复核：打开显示 1/2/3，`Fields.Update()` 后仍为 1/2/3，无修
 - 文档：[docs/word.md](docs/word.md)
 
 ### 计划中
-
 
 ## [0.1.0] - 2026-10-10
 

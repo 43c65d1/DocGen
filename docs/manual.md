@@ -189,7 +189,10 @@ alignment = "center"
 | `style` | `three_line` | `three_line` / `grid` / `none` / `custom` |
 | `header_repeat` | `true` | 跨页时表头重复 |
 | `header_keep_with_body` | `true` | 表头与首行同页：表头段落 `keepNext` + 表头行 `cantSplit`。关掉会出现「表头单独留在页底」的排版缺陷 |
-| `col_widths` | 均分 | 相对比例数组，如 `[3, 2, 5]` |
+| `col_widths` | 均分 | 相对比例数组 `[3, 2, 5]`，或**绝对宽度** `["3cm", "5cm"]` |
+| `row_height` / `header_row_height` | 无 | 行高（如 `"0.8cm"` / `"20pt"`）；表头可单独设 |
+| `row_height_rule` | `atLeast` | `atLeast` / `exact` / `auto` |
+| `cell_vertical_align` | 无（Word 默认 top） | 单元格垂直对齐：`top` / `center` / `bottom` |
 | `line_style` | `single` | 线型：`single` / `double` / `dashed` / `dotted` / `none` |
 | `outer_line_size` | `1.5pt` | 顶线/底线（粗线） |
 | `header_line_size` | `0.5pt` | 栏目线（表头下，细线） |
@@ -234,6 +237,20 @@ font.name = "黑体"
 
 **二线表**：横向阅读逻辑的表格更适合二线表（`header_line = false`），
 强行套三线表反而破坏可读性。
+
+**合并单元格**：在单元格开头写 `[[merge:列数]]`（横并）或 `[[merge:列数,行数]]`（横并 + 纵并）：
+
+```markdown
+| 项目 | 说明 [[merge:2]] | |
+| --- | --- | --- |
+| 合并 [[merge:1,2]] | B | C |
+| | D | E |
+```
+
+- `[[merge:2]]` = 横跨 2 列；`[[merge:1,2]]` = 纵跨 2 行；`[[merge:2,2]]` = 2×2。
+- 标记本身不渲染文字；横并时同一行后面要补占位格（`| |`）保证列数对齐。
+- **纵并的续行要写占位格**（可以空着）：`| | D | E |` 里的第一个空单元格
+  代表「被上面合并掉的那一列」。
 
 **逐边线型**（`custom`）：
 

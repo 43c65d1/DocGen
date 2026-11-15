@@ -39,6 +39,7 @@ DFM = DocGen Flavored Markdown。当前实现的是手册 §5.1 定义的子集�
 | `[[diag:右上;左下]]` | `DiagonalHeader(upper="右上", lower="左下")`（表格单元格里的斜线表头；用 `;` 分隔） |
 | `[[aux]]` | `AuxLine()`（表格**该行上方**加一条辅助横线，用于合计/小计行；标记不渲染文字） |
 | `[[cite:key1,key2]]` | `Cite(keys=("key1", "key2"))`（文献引用；文献库用 `--refs` 或 `[bibliography] file`） |
+| `[[merge:2]]` / `[[merge:2,3]]` | `TableCell(colspan=2[, rowspan=3])`（仅表格单元格内；合并标记本身不渲染） |
 | `$x^2$` | `Math(latex="x^2", display=False)` |
 | `H~2~O` | `Styled(content=[Text("2")], style_name="sub")` |
 | `E=mc^2^` | `Styled(content=[Text("2")], style_name="sup")` |

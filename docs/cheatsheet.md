@@ -104,7 +104,9 @@ logfile = ""
 | `style` | `three_line` | `grid` / `none` / `custom` |
 | `header_repeat` | `true` | `false` |
 | `header_keep_with_body` | `true` | 表头与首行同页（防「表头孤行」） |
-| `col_widths` | 均分 | `[3, 2, 5]` |
+| `col_widths` | 均分 | `[3, 2, 5]`（比例）/ `["3cm", "5cm"]`（绝对） |
+| `row_height` / `header_row_height` | 无 | `"0.8cm"`；`row_height_rule = "atLeast"` / `"exact"` |
+| `cell_vertical_align` | 无 | `"center"` / `"top"` / `"bottom"` |
 | `line_style` | `single` | `double` / `dashed` / `dotted` |
 | `outer_line_size` | `1.5pt`（顶/底粗线） | `"1pt"` |
 | `header_line_size` | `0.5pt`（栏目线细线） | `"0.75pt"` |
@@ -121,6 +123,7 @@ logfile = ""
 
 `edges` 可用的边：`top` `left` `bottom` `right` `insideH` `insideV`。
 `[[aux]]` 写在单元格里 = 该行上方加辅助线（合计行常用），标记不渲染文字。
+`[[merge:2]]` / `[[merge:2,3]]` = 表格单元格横并/纵横并（标记不渲染）。
 表格文字默认继承正文（Normal）；要更紧凑就写 `[table.text]`：`line_spacing = 1.0`、`space_before = "0pt"`、`font.size = "9pt"`。
 
 ### `[image]`

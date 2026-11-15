@@ -388,10 +388,36 @@ DFM 语法（IR 支持 `colspan/rowspan`，但解析器不产生）。
 | `numbering.format` | 无 | `decimal` / `upperRoman` / `lowerRoman` / `upperLetter` / `lowerLetter` |
 | `numbering.start` | 无 | 重启页码（1 起） |
 | `header.text` / `footer.text` | 无 | 页眉/页脚文字；`PAGE` 变成页码域 |
+| `header.alignment` / `footer.alignment` | `center` | `left` / `center` / `right` |
+| `header.font.*` / `footer.font.*` | 无 | 字体：`name`（中文）/ `latin`（西文）/ `size`（支持中文字号）/ `color` / `bold` / `italic` |
+| `header.line` | 无 | 页眉底部线：`single` / `double`（粗上细下）/ `thickThinSmallGap` / `thinThickSmallGap` / `dotted` / `dashed` / `none` |
+| `header.line_size` / `line_color` | `1pt` / `000000` | 线宽（`pt`）/ 线色 |
+| `header.distance` / `footer.distance` | 母版 | 页眉/页脚距边界（cm） |
+| `header.odd` / `header.even` / `header.first` | 无 | 奇数页 / 偶数页 / 首页专用页眉（可写 `text`、`font.*`、`line` 等；`footer` 同理） |
 | `cover` | `false` | `true` = 该节页面垂直居中（不是"生成封面内容"） |
 
 正文里用 `[[sectionbreak]]` 切到下一节；不写标记时内容全部落在最后一节
 （旧行为，前面各节是空页）。详见 [word.md](word.md) 的「分节」一节。
+
+**奇偶页不同 + 粗细双线**（学位论文常见）：
+
+```toml
+[[sections]]
+header.odd.text = "第一章 论文题目"
+header.even.text = "XX大学硕士学位论文"
+header.line = "double"           # 粗线在上、细线在下
+header.line_size = "1.5pt"
+header.font.name = "宋体"
+header.font.size = "小五"
+header.distance = 1.5            # cm
+footer.text = "第 PAGE 页"
+footer.font.size = "小五"
+footer.distance = 1.0
+```
+
+- 配了 `header.even` / `footer.even` 会自动打开文档级 `evenAndOddHeaders`；
+- 配了 `header.first` / `footer.first` 会自动设置该节 `titlePg`（首页不同）；
+- 页眉页脚**每节独立**（不继承上一节），没配文字时仍会写空段落防止串页眉。
 
 ## 12. 输出与日志：`[output]`
 

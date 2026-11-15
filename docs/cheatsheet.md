@@ -138,6 +138,12 @@ logfile = ""
 | `numbering.format` | 无 | `decimal` / `upperRoman` |
 | `numbering.start` | 无 | `1` |
 | `header.text` / `footer.text` | 无 | `"第 PAGE 页"` |
+| `header.odd.text` / `header.even.text` / `header.first.text` | 无 | 奇偶页/首页不同页眉 |
+| `header.line` | 无 | `"double"`（粗上细下）/ `single` / `dotted` / `none` |
+| `header.line_size` / `line_color` | `1pt` / `000000` | 线宽 / 线色 |
+| `header.font.name/latin/size/color` | 无 | 页眉字体（支持中文字号） |
+| `header.alignment` | `center` | `left` / `center` / `right` |
+| `header.distance` / `footer.distance` | 母版 | 距边界（cm） |
 | `cover` | `false` | `true`（该节垂直居中） |
 
 ### `[output]`

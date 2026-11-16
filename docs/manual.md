@@ -317,9 +317,13 @@ DFM 语法（IR 支持 `colspan/rowspan`，但解析器不产生）。
 | `\begin{table #tab:1}` | 同上，前缀「表」 | 同上 |
 | `\begin{equation #eq:1 number=1}` | 无框三列表格：左空 / 公式居中 / 右编号 `(1)`，编号带书签 | 编号值由作者给 |
 | `[[ref:fig:1]]` | `REF` 域，显示目标编号 | 无 |
-| `[[toc]]` | `TOC` 域（Word 打开时填充） | 无 |
+| `[[toc]]` | `TOC` 域（Word 打开时填充）；级别由 `[toc] levels` 控制 | `[toc] levels` |
 | `[[fn:文字]]` | 脚注，编号由 Word 自动生成；`FootnoteText` 单倍行距 | `[styles.footnote] line_spacing`（倍数） |
 
+- **目录级别**：`[toc] levels = 3`（或 `"2-4"`）控制 TOC 域只收录到第几级标题，
+  默认 `1-9`；条目仍需 Word 更新域（`updateFields` 已开）。
+- **目录条目样式**：Word 内置 `TOC 1..9` 由 Word 管理（实测更新目录时会重置为内置值），
+  DocGen 不预置字体/段距；需要改样式请在 Word 里更新目录后手动调 `TOC 1..9`。
 - 域缓存值**已烘焙**：`SEQ` / `REF` 写的是真实编号，WPS/预览也能看到正确编号；
   `PAGE` / `TOC` 仍需查看器更新（分页相关）。
 - 题注编号按类型独立计数（图 1、图 2、表 1…）。

@@ -16,6 +16,7 @@ __all__ = [
     "Block",
     "BlockQuote",
     "Break",
+    "CaptionList",
     "Cite",
     "Code",
     "CodeBlock",
@@ -304,6 +305,16 @@ class Table(Block):
 
 
 @dataclass(frozen=True, slots=True)
+class CaptionList(Block):
+    """``[[list:figures]]`` / ``[[list:tables]]``：插图清单 / 附表清单占位。
+
+    条目由题注自动生成（编号 + 题注文字 + PAGEREF 页码域）；页码依赖查看器更新。
+    """
+
+    kind: str = "figures"
+
+
+@dataclass(frozen=True, slots=True)
 class Bibliography(Block):
     """``[[bibliography]]``：参考文献表占位（生成在当前位置）。
 
@@ -326,4 +337,5 @@ BlockNode = (
     | BlockQuote
     | Table
     | Bibliography
+    | CaptionList
 )

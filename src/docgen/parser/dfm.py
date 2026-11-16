@@ -20,6 +20,7 @@ from ..ir import (
     BlockNode,
     BlockQuote,
     Break,
+    CaptionList,
     Cite,
     Code,
     CodeBlock,
@@ -284,6 +285,9 @@ def _paragraph_block(open_token: Token, inline_token: Token | None) -> BlockNode
         return Toc(source_line=source_line)
     if len(children) == 1 and children[0].type == "dfm_bibliography":
         return Bibliography(source_line=source_line)
+    if len(children) == 1 and children[0].type == "dfm_list":
+        kind = children[0].content.strip().lower()
+        return CaptionList(kind=kind or "figures", source_line=source_line)
 
     content = _inline_to_ir(children)
     if len(content) == 1 and isinstance(content[0], Image):

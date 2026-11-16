@@ -28,6 +28,7 @@ from ..ir import (
     BlockNode,
     BlockQuote,
     Break,
+    CaptionList,
     Cite,
     Code,
     CodeBlock,
@@ -186,14 +187,17 @@ def _build_document(
         base_dir=base_dir,
     )
     state.sections = sections
+    state.blocks = blocks
     # 域缓存值：渲染时把真实编号写进产物，别指望查看器去更新域
     from ..numbering import (
         baked_fields,
         baked_heading_labels,
         caption_numbering_mode,
+        caption_numbers,
     )
 
     state.caption_fields = baked_fields(blocks, config)
+    state.caption_numbers = caption_numbers(blocks, config)
     state.caption_static = caption_numbering_mode(config) == "chapter"
     state.heading_labels = baked_heading_labels(blocks, config)
     # 文献引用：先分配编号、生成条目（没有 [[cite:]] 时为 None）
@@ -247,7 +251,9 @@ class _RenderState:
         "_bookmark_id",
         "base_dir",
         "bibliography",
+        "blocks",
         "caption_fields",
+        "caption_numbers",
         "caption_static",
         "config",
         "default_east_asia",
@@ -277,7 +283,9 @@ class _RenderState:
         self.doc_settings = dict(config.document)
         self.math_engine, self.math_on_fail, self.math_xsl = math_settings(config)
         self.sections: Any = None
+        self.blocks: list[BlockNode] = []
         self.caption_fields: dict[str, str] = {}
+        self.caption_numbers: dict[str, str] = {}
         self.caption_static = False
         self.heading_labels: dict[int, str] = {}
         self.bibliography: Any = None
@@ -330,6 +338,8 @@ def _render_block(
         _render_heading(state, block, previous=previous, following=following)
     elif isinstance(block, Bibliography):
         _render_bibliography(state)
+    elif isinstance(block, CaptionList):
+        _render_caption_list(state, block)
     elif isinstance(block, Paragraph):
         paragraph = state.document.add_paragraph()
         _apply_body_paragraph(state, paragraph, previous=previous, following=following)
@@ -1577,6 +1587,51 @@ def _render_bibliography(state: _RenderState) -> None:
         if hanging:
             set_paragraph_indent(paragraph, hanging_chars=hanging, base_points=base_points)
         paragraph.add_run(entry)
+
+
+def _render_caption_list(state: _RenderState, block: CaptionList) -> None:
+    """插图清单 / 附表清单：题注编号 + 文字 + ``PAGEREF`` 页码域。"""
+    from docx.enum.text import WD_TAB_ALIGNMENT, WD_TAB_LEADER
+    from docx.shared import Twips
+
+    from ..numbering import CAPTION_KINDS, caption_kind, iter_blocks
+
+    kind = "figures" if block.kind.strip().lower() in ("figures", "figure") else "tables"
+    target_kind = "figure" if kind == "figures" else "table"
+    settings = state.config.namespace("list")
+    title = str(settings.get(kind) or ("插图清单" if kind == "figures" else "附表清单"))
+    level = settings.get("heading_level", 1)
+    try:
+        level_int = int(level)
+    except (TypeError, ValueError):
+        raise DocGenError(E_CONFIG, f"[list] heading_level 需要整数: {level!r}") from None
+    if not 1 <= level_int <= 9:
+        raise DocGenError(E_CONFIG, f"[list] heading_level 需要在 1–9: {level!r}")
+
+    heading = state.document.add_paragraph(style=f"Heading {level_int}")
+    set_paragraph_numbering_none(heading)
+    heading.add_run(title)
+
+    page_width = page_content_width(state.document)
+    for caption in iter_blocks(state.blocks):
+        if not isinstance(caption, NamedBlock) or not caption.label:
+            continue
+        if caption_kind(caption) != target_kind:
+            continue
+        number = state.caption_numbers.get(caption.label, "")
+        text = _caption_text(caption)
+        paragraph = state.document.add_paragraph()
+        _apply_body_paragraph(state, paragraph)
+        set_paragraph_indent(paragraph, first_line_chars=0)
+        paragraph.paragraph_format.tab_stops.add_tab_stop(
+            Twips(page_width), WD_TAB_ALIGNMENT.RIGHT, WD_TAB_LEADER.DOTS
+        )
+        line = f"{CAPTION_KINDS[target_kind]} {number}"
+        if text:
+            line += f" {text}"
+        paragraph.add_run(line)
+        paragraph.add_run().add_tab()
+        append_field(paragraph, f"PAGEREF {caption.label} \\h", "1")
 
 
 def _render_link(

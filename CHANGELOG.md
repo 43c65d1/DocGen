@@ -6,6 +6,20 @@
 
 ## [Unreleased]
 
+### 新增（插图清单 / 附表清单）
+
+- 新增 `[[list:figures]]` / `[[list:tables]]`：按全文题注自动生成
+  「图/表编号 + 题注文字 + `PAGEREF` 页码域」，右对齐点线制表位。
+- `[list]` 配置：`figures` / `tables`（标题，默认「插图清单」「附表清单」）、
+  `heading_level`（1–9，用 Heading N 样式但取消编号）；非法值报 `E5001`。
+- 与题注编号模式联动：连续编号显示「图 1」，`caption_numbering = "chapter"`
+  显示「图 2-1」；清单可放在正文任意位置。
+- 页码是 `PAGEREF` 域：Word 打开时随 `updateFields` 计算；不更新域的预览
+  显示占位 1（与目录/页码同一类限制，已补进 LIMITATIONS B13）。
+- Word COM 实测：两页文档中「插图清单」条目页码更新后为 1 / 2，
+  附表清单为 1，标题为无编号 Heading 1，文档正常打开。
+- 新增 `tests/test_caption_lists.py`（11 项）。
+
 ## [0.1.0b2] - 2026-11-15
 
 ### 新增（表格布局与合并语法）

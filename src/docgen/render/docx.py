@@ -894,9 +894,12 @@ def _plain_text(node: InlineNode) -> str:
 
 
 def _render_toc(state: _RenderState) -> None:
-    """``[[toc]]`` → Word 的 TOC 域；``updateFields`` 已就位，打开时自动填充。"""
+    """``[[toc]]`` → Word 的 TOC 域；级别由 ``[toc] levels`` 控制。"""
+    from ..numbering import toc_levels
+
+    levels = toc_levels(state.config)
     paragraph = state.document.add_paragraph()
-    append_field(paragraph, 'TOC \\o "1-9" \\h \\z \\u', "按 F9 更新目录")
+    append_field(paragraph, f'TOC \\o "{levels}" \\h \\z \\u', "按 F9 更新目录")
 
 
 def _render_ref(state: _RenderState, paragraph: Any, target: str) -> None:

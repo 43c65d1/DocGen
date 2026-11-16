@@ -35,6 +35,7 @@ __all__ = [
     "format_heading_label",
     "heading_numbering",
     "heading_numbering_mode",
+    "toc_levels",
     "validate_numbering",
 ]
 
@@ -151,6 +152,38 @@ def format_heading_label(mode: str, level: int, counters: list[int]) -> str:
             return f"（{counters[4]}）"
         return f"{counters[level]})"
     return ".".join(str(counters[index]) for index in range(1, level + 1))
+
+
+def toc_levels(config: Config) -> str:
+    r"""``[toc] levels`` → TOC 域的 ``\o "A-B"`` 参数（默认 ``1-9``）。
+
+    ``levels = 3`` 等价于 ``1-3``；也可写字符串 ``"2-4"``。范围 1–9，非法值报 E5001。
+    """
+    raw = config.namespace("toc").get("levels", "1-9")
+    if isinstance(raw, bool):
+        raise DocGenError(E_CONFIG, f"[toc] levels 不能是布尔值: {raw!r}")
+    if isinstance(raw, int):
+        start, end = 1, raw
+    else:
+        text = str(raw).strip()
+        if "-" in text:
+            left, _, right = text.partition("-")
+            try:
+                start, end = int(left), int(right)
+            except ValueError:
+                raise DocGenError(
+                    E_CONFIG, f'[toc] levels 无法识别: {raw!r}（可用 3 或 "1-3"）'
+                ) from None
+        else:
+            try:
+                start, end = 1, int(text)
+            except ValueError:
+                raise DocGenError(
+                    E_CONFIG, f'[toc] levels 无法识别: {raw!r}（可用 3 或 "1-3"）'
+                ) from None
+    if not (1 <= start <= end <= 9):
+        raise DocGenError(E_CONFIG, f"[toc] levels 需要在 1–9 且 start<=end: {raw!r}")
+    return f"{start}-{end}"
 
 
 def baked_heading_labels(blocks: list[BlockNode], config: Config) -> dict[int, str]:

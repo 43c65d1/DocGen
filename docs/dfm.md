@@ -21,6 +21,7 @@ DFM = DocGen Flavored Markdown。当前实现的是手册 §5.1 定义的子集�
 | 独立一行的 `[[toc]]` | `Toc()`（Word 的 TOC 域） |
 | 独立一行的 `[[sectionbreak]]` | `SectionBreak()`（切到下一个 `[[sections]]` 配置的新节） |
 | 独立一行的 `[[bibliography]]` | `Bibliography()`（参考文献表占位；不写则自动追加到文末） |
+| 独立一行的 `[[list:figures]]` / `[[list:tables]]` | `CaptionList(kind="figures"|"tables")`（插图/附表清单） |
 | 独立成段的 `$$ ... $$` | `Formula(latex="...")` |
 
 ## 行内

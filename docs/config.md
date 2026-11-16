@@ -335,6 +335,19 @@ pages = "45-52"
 - 引用不存在的 key 报 `E5004`；有 `[[cite:]]` 但没配文献库报 `E5001`。
 - 不支持 BibTeX 完整语法与 CSL 多风格（APA/IEEE）引擎；不做 Word 原生引文域。
 
+## `[list]`：插图清单 / 附表清单
+
+配合 `[[list:figures]]` / `[[list:tables]]` 使用：
+
+```toml
+[list]
+figures = "插图清单"
+tables = "附表清单"
+heading_level = 1      # 1–9；用 Heading N 样式但取消编号
+```
+
+条目由题注自动生成（编号 + 题注文字 + `PAGEREF` 页码域）；页码依赖查看器更新。
+
 ## `[inline]`：语义名 -> 样式名映射
 
 Markdown/DFM 语法产出的是**语义名**（`**粗体**` → `strong` 等），默认**同名**，

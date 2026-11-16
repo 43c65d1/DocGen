@@ -380,6 +380,28 @@ DFM 语法（IR 支持 `colspan/rowspan`，但解析器不产生）。
 - 限制：只做 **GB/T 7714 数字制**的常见类型；不做 BibTeX 完整语法、CSL 多风格
   （APA/IEEE）引擎，也不生成 Word 原生 `CITATION` 域。
 
+### 插图清单 / 附表清单
+
+```markdown
+[[list:figures]]
+
+[[list:tables]]
+```
+
+- 条目由题注自动生成：图/表编号 + 题注文字 + **PAGEREF 页码域**；
+  标题默认「插图清单」/「附表清单」，可配：
+
+  ```toml
+  [list]
+  figures = "插图清单"
+  tables = "附表清单"
+  heading_level = 1      # 标题用哪一级 Heading（1–9）
+  ```
+
+- 页码是 `PAGEREF` 域，依赖查看器更新（Word 打开时 `updateFields` 会算；
+  不更新域的预览显示占位 1）——与目录/页码同一类限制。
+- 清单位置任意：渲染时按全文题注顺序生成，放在正文前也可以。
+
 ## 10. 公式：`[math]`
 
 | 字段 | 默认 | 说明 |

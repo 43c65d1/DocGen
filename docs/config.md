@@ -81,6 +81,25 @@ caption_numbering = "chapter"   # 图 2-1 / 表 2-1（默认 continuous：图 1�
 | 段落 | `line_spacing`（数字=倍数；`"20pt"`=固定磅值）/ `first_line_chars` / `alignment` / `space_before` / `space_after` |
 | 代码块 | `[code_block] background` / `border` |
 
+### 超链接：`[styles.hyperlink]`
+
+默认是 Word 惯例「蓝色 `0563C1` + 单下划线」；需要论文式纯黑可覆盖：
+
+```toml
+[styles.hyperlink]
+font.color = "000000"   # auto = 不写颜色，跟随正文
+underline = "none"      # 去下划线；false 会被样式层当成“删除继承键”
+```
+
+| 键 | 默认 | 说明 |
+|---|---|---|
+| `font.color` | `0563C1` | 6 位十六进制；`auto` 表示跟随段落（正文黑） |
+| `underline` | `true` | `true` / `"single"` 开；`"none"` / `"off"` 关 |
+
+> 这里不要写 `underline = false`：样式层把 `false` 统一当作“删除继承键”，
+> 该键会在展开时消失；要关下划线请写字符串 `"none"`。
+
+
 ### 段落间距：`space_before` / `space_after`
 
 `[document]` 给默认值，`[styles.body]` / `[styles.headingN]` / `[styles.caption]`

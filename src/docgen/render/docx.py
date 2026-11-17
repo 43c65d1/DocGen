@@ -1667,21 +1667,71 @@ def _render_link(
             run.font.underline = True
         return
     hyperlink = wrap_external_hyperlink(state.document.part, paragraph, node.url, start)
+    _apply_hyperlink_style(state, hyperlink)
+
+
+def _apply_hyperlink_style(state: _RenderState, hyperlink: Any) -> None:
+    """超链接颜色/下划线：默认 Word 蓝 + 单下划线，可用 ``[styles.hyperlink]`` 覆盖。
+
+    ``font.color = "auto"`` 表示不写颜色、跟随段落样式（正文黑）；``underline = false``
+    去掉下划线。只支持这两个键，别的一律忽略——超链接字体/字号跟随所在段落。
+    """
+    properties = state.styles.get("hyperlink")
+    properties = properties if isinstance(properties, dict) else {}
+    font_raw = properties.get("font")
+    font = font_raw if isinstance(font_raw, dict) else {}
+    raw_color = font.get("color", properties.get("color", properties.get("font.color", "0563C1")))
+    raw_underline = font.get(
+        "underline", properties.get("underline", properties.get("font.underline", True))
+    )
+    color = str(raw_color).strip() if raw_color is not None else "0563C1"
+    if color.lower() in ("", "auto"):
+        color = ""
+    elif not re.fullmatch(r"#?[0-9A-Fa-f]{6}", color):
+        raise DocGenError(
+            E_CONFIG,
+            f"[styles.hyperlink] font.color 需要 6 位十六进制或 auto: {raw_color!r}",
+        )
+    else:
+        color = color.lstrip("#").upper()
+    underline = _hyperlink_underline(raw_underline)
+
     for run in hyperlink.findall(f"{_W_NS}r"):
         rpr = run.find(f"{_W_NS}rPr")
         if rpr is None:
             rpr = OxmlElement("w:rPr")
             run.insert(0, rpr)
-        color = rpr.find(f"{_W_NS}color")
-        if color is None:
-            color = OxmlElement("w:color")
-            rpr.append(color)
-        color.set(f"{_W_NS}val", "0563C1")  # Word 默认超链接蓝
-        underline = rpr.find(f"{_W_NS}u")
-        if underline is None:
-            underline = OxmlElement("w:u")
-            rpr.append(underline)
-        underline.set(f"{_W_NS}val", "single")
+        if color:
+            element = rpr.find(f"{_W_NS}color")
+            if element is None:
+                element = OxmlElement("w:color")
+                rpr.append(element)
+            element.set(f"{_W_NS}val", color)
+        else:
+            existing = rpr.find(f"{_W_NS}color")
+            if existing is not None:
+                rpr.remove(existing)
+        if underline:
+            element = rpr.find(f"{_W_NS}u")
+            if element is None:
+                element = OxmlElement("w:u")
+                rpr.append(element)
+            element.set(f"{_W_NS}val", "single")
+        else:
+            existing = rpr.find(f"{_W_NS}u")
+            if existing is not None:
+                rpr.remove(existing)
+
+
+def _hyperlink_underline(raw: Any) -> bool:
+    if isinstance(raw, bool):
+        return raw
+    text = str(raw).strip().lower()
+    if text in ("true", "1", "yes", "single", "on"):
+        return True
+    if text in ("false", "0", "no", "none", "off", ""):
+        return False
+    raise DocGenError(E_CONFIG, f"[styles.hyperlink] underline 需要 true/false，收到 {raw!r}")
 
 
 def _render_inline_code(state: _RenderState, paragraph: Any, text: str) -> Any:

@@ -6,6 +6,17 @@
 
 ## [Unreleased]
 
+### 新增（超链接颜色/下划线可配）
+
+- `[styles.hyperlink]`：`font.color`（默认 Word 蓝 `0563C1`；`auto` = 跟随正文）、
+  `underline`（默认开；`"none"` / `"off"` 关闭）。
+- 解决「论文要求全文纯黑，但超链接写死蓝色」的缺口；链接仍是真正的
+  `w:hyperlink` 关系项，点击可跳转。
+- 注意 `underline = false` 不生效：样式层把 `false` 当作“删除继承键”；
+  关下划线请写字符串 `"none"`（已在文档中说明）。
+- 非法颜色（非 6 位十六进制/`auto`）或非法下划线值报 `E5001`。
+- 新增 `tests/test_hyperlink_style.py`（8 项）。
+
 ### 新增（`$$...$$` 参与公式编号，opt-in）
 
 - `[math] number_display_math = true` 时，独立 `$$...$$` 与 `\begin{equation}`

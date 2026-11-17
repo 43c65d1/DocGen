@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 from .config import Config
 from .errors import E_CONFIG, E_SYNTAX, E_UNKNOWN_REF, DocGenError
-from .ir import BlockNode, BlockQuote, Heading, InlineNode, ListBlock, NamedBlock, Ref
+from .ir import BlockNode, BlockQuote, Formula, Heading, InlineNode, ListBlock, NamedBlock, Ref
 from .validate import ContentError
 
 __all__ = [
@@ -32,6 +32,8 @@ __all__ = [
     "caption_numbers",
     "collect_labels",
     "collect_refs",
+    "equation_numbering_mode",
+    "equation_numbers",
     "format_heading_label",
     "heading_numbering",
     "heading_numbering_mode",
@@ -184,6 +186,68 @@ def toc_levels(config: Config) -> str:
     if not (1 <= start <= end <= 9):
         raise DocGenError(E_CONFIG, f"[toc] levels 需要在 1–9 且 start<=end: {raw!r}")
     return f"{start}-{end}"
+
+
+def equation_numbering_mode(config: Config) -> str:
+    """``[math] numbering``：``none``（默认，仅手动 number）/ ``auto`` / ``chapter``。"""
+    raw = config.namespace("math").get("numbering", "none")
+    if isinstance(raw, bool):
+        return "auto" if raw else "none"
+    text = str(raw).strip().lower()
+    aliases = {
+        "none": "none",
+        "false": "none",
+        "off": "none",
+        "0": "none",
+        "auto": "auto",
+        "true": "auto",
+        "1": "auto",
+        "chapter": "chapter",
+        "by-chapter": "chapter",
+    }
+    if text in aliases:
+        return aliases[text]
+    raise DocGenError(
+        E_CONFIG,
+        f"[math] numbering 不支持: {raw!r}（可用 none / auto / chapter）",
+    )
+
+
+def equation_numbers(blocks: list[BlockNode], config: Config) -> dict[int, str]:
+    """公式块 -> 编号文本（``id(NamedBlock)`` 关联）。
+
+    - 手动 ``number=...`` 优先（也支持非数字，如 ``2-1``）；
+    - ``numbering = "auto"``：按出现顺序 1、2、3…；
+    - ``numbering = "chapter"``：按一级标题分章，编号「章-序」（2-1）。
+    只处理含 ``Formula`` 子节点的 ``\begin{equation}``；普通 ``$$…$$`` 不参与。
+    """
+    mode = equation_numbering_mode(config)
+    numbers: dict[int, str] = {}
+    chapter = 0
+    counter = 0
+    for block in iter_blocks(blocks):
+        if isinstance(block, Heading):
+            if max(1, min(9, block.level)) == 1:
+                chapter += 1
+                counter = 0
+            continue
+        if not isinstance(block, NamedBlock) or block.name != "equation":
+            continue
+        if not any(isinstance(child, Formula) for child in block.content):
+            continue
+        manual = str(block.attributes.get("number", "") or "")
+        if manual:
+            numbers[id(block)] = manual
+            if manual.isdigit():
+                counter = max(counter, int(manual))
+            continue
+        if mode == "none":
+            continue
+        counter += 1
+        numbers[id(block)] = (
+            f"{chapter}-{counter}" if mode == "chapter" and chapter > 0 else str(counter)
+        )
+    return numbers
 
 
 def baked_heading_labels(blocks: list[BlockNode], config: Config) -> dict[int, str]:
@@ -357,18 +421,20 @@ def baked_fields(blocks: list[BlockNode], config: Config | None = None) -> dict[
         counters: dict[str, str] = {
             label: str(number) for label, number in caption_counters(blocks).items()
         }
+        equations: dict[int, str] = {}
     else:
         counters = caption_numbers(blocks, config)
+        equations = equation_numbers(blocks, config)
     baked: dict[str, str] = {}
     for block in iter_blocks(blocks):
         if not isinstance(block, NamedBlock) or not block.label:
             continue
         number = block.attributes.get("number")
         if block.name == "equation":
-            # 编号公式的书签包住 ``(N)``；无 number 的公式没有编号，也没有书签，
-            # 不能凭空烘出一个数字来（引用它会由 REF 域自行重算/报错）
-            if number:
-                baked[block.label] = f"({number})"
+            # 编号公式的书签包住 ``(N)``；手动 number 优先，其次自动/按章编号
+            value = equations.get(id(block)) or (str(number) if number else "")
+            if value:
+                baked[block.label] = f"({value})"
         elif block.label in counters:
             baked[block.label] = counters[block.label]
     return baked

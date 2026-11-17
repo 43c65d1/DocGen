@@ -6,6 +6,18 @@
 
 ## [Unreleased]
 
+### 新增（公式自动编号 + 引用）
+
+- `[math] numbering`：`none`（默认，仅 `number=` 手写）/ `auto`（1、2、3…）/
+  `chapter`（按一级标题分章，2-1）。
+- 只作用于 `\begin{equation}` 命名块（普通 `$$…$$` 仍不编号）；手动 `number=` 优先，
+  并把自动计数同步到该值（`number=7` 后下一项为 8）。
+- 带 `#id` 的公式自动编号后仍写书签，`[[ref:eq:id]]` 的 `REF` 域缓存值同步为
+  真实编号；`baked_fields` 也覆盖自动编号。
+- `chapter` 模式下第一个一级标题之前的公式按连续编号（1、2…），不出现 0-1。
+- 非法 `numbering` 值报 `E5001`，`docgen check` 同样报出。
+- 新增 `tests/test_formula_auto_numbering.py`（14 项）。
+
 ### 新增（目录级别）
 
 - `[toc] levels`：控制 `[[toc]]` 只收录到第几级标题，默认 `1-9`；

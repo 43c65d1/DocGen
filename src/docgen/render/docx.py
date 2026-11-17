@@ -194,12 +194,14 @@ def _build_document(
         baked_heading_labels,
         caption_numbering_mode,
         caption_numbers,
+        equation_numbers,
     )
 
     state.caption_fields = baked_fields(blocks, config)
     state.caption_numbers = caption_numbers(blocks, config)
     state.caption_static = caption_numbering_mode(config) == "chapter"
     state.heading_labels = baked_heading_labels(blocks, config)
+    state.equation_numbers = equation_numbers(blocks, config)
     # 文献引用：先分配编号、生成条目（没有 [[cite:]] 时为 None）
     from ..bibliography import has_bibliography_marker, plan_bibliography
 
@@ -259,6 +261,7 @@ class _RenderState:
         "default_east_asia",
         "doc_settings",
         "document",
+        "equation_numbers",
         "footnote_reference_maker",
         "footnotes",
         "heading_labels",
@@ -284,6 +287,7 @@ class _RenderState:
         self.math_engine, self.math_on_fail, self.math_xsl = math_settings(config)
         self.sections: Any = None
         self.blocks: list[BlockNode] = []
+        self.equation_numbers: dict[int, str] = {}
         self.caption_fields: dict[str, str] = {}
         self.caption_numbers: dict[str, str] = {}
         self.caption_static = False
@@ -759,8 +763,8 @@ def _render_named_block(
     """
     kind = caption_kind(block)
     if kind == "equation":
-        # 方程：带 number 走三列表格，否则就是普通块级公式（不套题注语义）
-        if block.attributes.get("number"):
+        # 方程：手动 number 或自动/按章编号时走三列表格；否则是普通块级公式
+        if block.attributes.get("number") or id(block) in state.equation_numbers:
             _render_numbered_formula(state, block)
             return
     elif block.label and kind in CAPTION_KINDS:
@@ -798,7 +802,7 @@ def _render_numbered_formula(state: _RenderState, block: NamedBlock) -> None:
     _fill_formula_cell(state, middle, formula)
 
     number_cell = table.cell(0, 2)
-    number = str(block.attributes.get("number", ""))
+    number = state.equation_numbers.get(id(block)) or str(block.attributes.get("number", ""))
     paragraph = number_cell.paragraphs[0]
     # 先放文本，再整体包书签：反过来会得到「空书签」，REF 域取不到东西
     append_text(paragraph, f"({number})")

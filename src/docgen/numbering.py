@@ -32,11 +32,13 @@ __all__ = [
     "caption_numbers",
     "collect_labels",
     "collect_refs",
+    "display_math_numbered",
     "equation_numbering_mode",
     "equation_numbers",
     "format_heading_label",
     "heading_numbering",
     "heading_numbering_mode",
+    "math_numbering_settings",
     "toc_levels",
     "validate_numbering",
 ]
@@ -213,6 +215,31 @@ def equation_numbering_mode(config: Config) -> str:
     )
 
 
+def display_math_numbered(config: Config) -> bool:
+    """``[math] number_display_math``：是否让独立 ``$$...$$`` 也参与编号。"""
+    raw = config.namespace("math").get("number_display_math", False)
+    if isinstance(raw, bool):
+        return raw
+    text = str(raw).strip().lower()
+    if text in ("true", "1", "yes", "on"):
+        return True
+    if text in ("false", "0", "no", "off", ""):
+        return False
+    raise DocGenError(E_CONFIG, f"[math] number_display_math 需要 true/false，收到 {raw!r}")
+
+
+def math_numbering_settings(config: Config) -> tuple[str, bool]:
+    """``(numbering 模式, 是否给 $$...$$ 编号)``；开了显示公式编号却关掉 numbering 报错。"""
+    mode = equation_numbering_mode(config)
+    numbered_display = display_math_numbered(config)
+    if numbered_display and mode == "none":
+        raise DocGenError(
+            E_CONFIG,
+            "[math] number_display_math = true 需要同时设 numbering = auto 或 chapter",
+        )
+    return mode, numbered_display
+
+
 def equation_numbers(blocks: list[BlockNode], config: Config) -> dict[int, str]:
     """公式块 -> 编号文本（``id(NamedBlock)`` 关联）。
 
@@ -221,20 +248,32 @@ def equation_numbers(blocks: list[BlockNode], config: Config) -> dict[int, str]:
     - ``numbering = "chapter"``：按一级标题分章，编号「章-序」（2-1）。
     只处理含 ``Formula`` 子节点的 ``\begin{equation}``；普通 ``$$…$$`` 不参与。
     """
-    mode = equation_numbering_mode(config)
+    mode, numbered_display = math_numbering_settings(config)
     numbers: dict[int, str] = {}
     chapter = 0
     counter = 0
+    skip: set[int] = set()
     for block in iter_blocks(blocks):
         if isinstance(block, Heading):
             if max(1, min(9, block.level)) == 1:
                 chapter += 1
                 counter = 0
             continue
+        if isinstance(block, Formula):
+            if not numbered_display or not block.display or id(block) in skip:
+                continue
+            counter += 1
+            numbers[id(block)] = (
+                f"{chapter}-{counter}" if mode == "chapter" and chapter > 0 else str(counter)
+            )
+            continue
         if not isinstance(block, NamedBlock) or block.name != "equation":
             continue
         if not any(isinstance(child, Formula) for child in block.content):
             continue
+        for child in block.content:
+            if isinstance(child, Formula):
+                skip.add(id(child))
         manual = str(block.attributes.get("number", "") or "")
         if manual:
             numbers[id(block)] = manual

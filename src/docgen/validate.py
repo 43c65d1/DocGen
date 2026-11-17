@@ -170,8 +170,8 @@ def validate_content(
     # 标题编号预设（decimal / chapter / chinese / false）：非法值在 check 时也报
     from .numbering import (
         caption_numbering_mode,
-        equation_numbering_mode,
         heading_numbering_mode,
+        math_numbering_settings,
         toc_levels,
     )
 
@@ -179,7 +179,7 @@ def validate_content(
         heading_numbering_mode,
         caption_numbering_mode,
         toc_levels,
-        equation_numbering_mode,
+        math_numbering_settings,
     ):
         try:
             parse(config)

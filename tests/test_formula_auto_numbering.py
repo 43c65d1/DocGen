@@ -141,3 +141,75 @@ def test_equation_numbers_map(tmp_path: Path) -> None:
     blocks = parse_dfm(DOC)
     numbers = equation_numbers(blocks, _config(tmp_path, '\n[math]\nnumbering = "auto"\n'))
     assert sorted(numbers.values()) == ["1", "2", "3"]
+
+
+# --------------------------------------------------------------------------
+# number_display_math：让独立 $$...$$ 也参与编号（默认关）
+# --------------------------------------------------------------------------
+DISPLAY_DOC = """\
+$$a=1$$
+
+\\begin{equation #eq:x}
+$$b=2$$
+\\end{equation}
+
+$$c=3$$
+"""
+CHAPTER_DISPLAY = """\
+# 第一章
+
+$$a=1$$
+
+\\begin{equation #eq:x}
+$$b=2$$
+\\end{equation}
+
+# 第二章
+
+$$c=3$$
+"""
+
+
+def test_display_math_unnumbered_by_default(tmp_path: Path) -> None:
+    document = _document(tmp_path, '\n[math]\nnumbering = "auto"\n', markdown=DISPLAY_DOC)
+    assert _numbers(document) == ["(1)"]  # 只有 equation 块
+    assert 'w:name="eq:x"' in document
+
+
+def test_display_math_numbered_when_enabled(tmp_path: Path) -> None:
+    document = _document(
+        tmp_path,
+        '\n[math]\nnumbering = "auto"\nnumber_display_math = true\n',
+        markdown=DISPLAY_DOC,
+    )
+    assert _numbers(document) == ["(1)", "(2)", "(3)"]
+    assert 'w:name="eq:x"' in document
+
+
+def test_display_math_chapter_numbering(tmp_path: Path) -> None:
+    document = _document(
+        tmp_path,
+        '\n[math]\nnumbering = "chapter"\nnumber_display_math = true\n',
+        markdown=CHAPTER_DISPLAY,
+    )
+    assert _numbers(document) == ["(1-1)", "(1-2)", "(2-1)"]
+
+
+def test_display_math_requires_auto_or_chapter(tmp_path: Path) -> None:
+    with pytest.raises(DocGenError) as caught:
+        _document(
+            tmp_path,
+            '\n[math]\nnumbering = "none"\nnumber_display_math = true\n',
+            markdown="$$a=1$$\n",
+        )
+    assert caught.value.code == "E5001"
+
+
+def test_invalid_display_flag(tmp_path: Path) -> None:
+    with pytest.raises(DocGenError) as caught:
+        _document(
+            tmp_path,
+            '\n[math]\nnumbering = "auto"\nnumber_display_math = "maybe"\n',
+            markdown="$$a=1$$\n",
+        )
+    assert caught.value.code == "E5001"

@@ -641,7 +641,11 @@ def _render_code_block(state: _RenderState, block: CodeBlock) -> None:
 
 
 def _render_formula(state: _RenderState, block: Formula) -> None:
-    """块级公式：LaTeX → OMML 插进居中段落；引擎不可用时降级成 LaTeX 文本。"""
+    """块级公式：编号模式走三列表格；否则 LaTeX → OMML 居中段落。"""
+    number = state.equation_numbers.get(id(block))
+    if number:
+        _render_numbered_table(state, block, number)
+        return
     paragraph = state.document.add_paragraph()
     result = latex_to_omml(
         block.latex.strip(),
@@ -775,16 +779,23 @@ def _render_named_block(
 
 
 def _render_numbered_formula(state: _RenderState, block: NamedBlock) -> None:
-    """公式编号：无边框三列表格（左空 / 中公式 / 右编号），编号带书签。
-
-    用表格是为了让编号贴右边界——段落制表位在不同 Word 版本里表现不一致。
-    """
+    """公式编号：无边框三列表格（左空 / 中公式 / 右编号），编号带书签。"""
     formula = next((child for child in block.content if isinstance(child, Formula)), None)
     if formula is None:
         for child in block.content:
             _render_block(state, child)
         return
+    number = state.equation_numbers.get(id(block)) or str(block.attributes.get("number", ""))
+    _render_numbered_table(state, formula, number, label=block.label)
 
+
+def _render_numbered_table(
+    state: _RenderState, formula: Formula, number: str, *, label: str = ""
+) -> None:
+    """编号公式三列表格（左空 / 中公式 / 右编号）；有 label 时编号包书签。
+
+    用表格是为了让编号贴右边界——段落制表位在不同 Word 版本里表现不一致。
+    """
     table = state.document.add_table(rows=1, cols=3)
     set_table_borders(
         table,
@@ -802,12 +813,11 @@ def _render_numbered_formula(state: _RenderState, block: NamedBlock) -> None:
     _fill_formula_cell(state, middle, formula)
 
     number_cell = table.cell(0, 2)
-    number = state.equation_numbers.get(id(block)) or str(block.attributes.get("number", ""))
     paragraph = number_cell.paragraphs[0]
     # 先放文本，再整体包书签：反过来会得到「空书签」，REF 域取不到东西
     append_text(paragraph, f"({number})")
-    if block.label:
-        set_paragraph_bookmark(paragraph, block.label, state.next_bookmark_id())
+    if label:
+        set_paragraph_bookmark(paragraph, label, state.next_bookmark_id())
 
 
 def _fill_formula_cell(state: _RenderState, cell: Any, formula: Formula) -> None:

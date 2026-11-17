@@ -6,6 +6,16 @@
 
 ## [Unreleased]
 
+### 新增（`$$...$$` 参与公式编号，opt-in）
+
+- `[math] number_display_math = true` 时，独立 `$$...$$` 与 `\begin{equation}`
+  共用同一编号序列（auto 1、2、3… / chapter 2-1）。
+- 默认 `false`：`$$...$$` 保持无编号——推导中间式通常不需要编号，
+  需要编号/引用时写带 `#id` 的 `\begin{equation}`（`$$...$$` 无标签，不能 `[[ref:...]]`）。
+- 开启该开关但 `numbering = "none"` 时明确报 `E5001`（避免「开了却不生效」）；
+  非法布尔值同样报错。
+- 测试：新增 5 项，`tests/test_formula_auto_numbering.py` 共 19 项。
+
 ### 新增（公式自动编号 + 引用）
 
 - `[math] numbering`：`none`（默认，仅 `number=` 手写）/ `auto`（1、2、3…）/

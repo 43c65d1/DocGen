@@ -63,6 +63,11 @@ def _texts(document: str) -> list[str]:
     return [t for t in re.findall(r"<w:t(?: [^>]*)?>(.*?)</w:t>", document, re.DOTALL) if t.strip()]
 
 
+def _numbers(document: str) -> list[str]:
+    """文档里所有 ``(N)`` / ``(2-1)``（公式编号 + REF 缓存值）。"""
+    return re.findall(r"\(\d+(?:-\d+)?\)", document)
+
+
 @pytest.mark.parametrize(
     ("snippet", "mode"),
     [
@@ -92,8 +97,8 @@ def test_invalid_mode_reported_by_validate(tmp_path: Path) -> None:
 
 
 def test_auto_numbering(tmp_path: Path) -> None:
-    texts = _texts(_document(tmp_path, '\n[math]\nnumbering = "auto"\n'))
-    assert texts == ["引用", "(1)", "。", "(1)", "(2)", "(3)"]
+    document = _document(tmp_path, '\n[math]\nnumbering = "auto"\n')
+    assert _numbers(document) == ["(1)", "(1)", "(2)", "(3)"]
 
 
 def test_auto_numbering_bookmarks_only_labeled(tmp_path: Path) -> None:
@@ -104,8 +109,8 @@ def test_auto_numbering_bookmarks_only_labeled(tmp_path: Path) -> None:
 
 
 def test_chapter_numbering(tmp_path: Path) -> None:
-    texts = _texts(_document(tmp_path, '\n[math]\nnumbering = "chapter"\n', markdown=CHAPTER))
-    assert texts == ["第一章", "(1-1)", "第二章", "(2-1)"]
+    document = _document(tmp_path, '\n[math]\nnumbering = "chapter"\n', markdown=CHAPTER)
+    assert _numbers(document) == ["(1-1)", "(2-1)"]
 
 
 def test_manual_number_wins_and_syncs_counter(tmp_path: Path) -> None:
@@ -117,19 +122,19 @@ $$x$$
 $$y$$
 \\end{equation}
 """
-    texts = _texts(_document(tmp_path, '\n[math]\nnumbering = "auto"\n', markdown=markdown))
-    assert texts == ["(7)", "(8)"]
+    document = _document(tmp_path, '\n[math]\nnumbering = "auto"\n', markdown=markdown)
+    assert _numbers(document) == ["(7)", "(8)"]
 
 
 def test_default_none_keeps_formula_without_number_plain(tmp_path: Path) -> None:
     document = _document(tmp_path)
     assert "<w:tbl>" not in document
-    assert "(1)" not in document
+    assert _numbers(document) == []
 
 
 def test_manual_number_without_auto_mode(tmp_path: Path) -> None:
     markdown = "\\begin{equation #eq:a number=5}\n$$x$$\n\\end{equation}\n"
-    assert "(5)" in _texts(_document(tmp_path, markdown=markdown))
+    assert _numbers(_document(tmp_path, markdown=markdown)) == ["(5)"]
 
 
 def test_equation_numbers_map(tmp_path: Path) -> None:

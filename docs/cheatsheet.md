@@ -187,6 +187,11 @@ logfile = ""
 | `tables` | `"附表清单"` | 附表清单标题 |
 | `heading_level` | `1` | 标题级别（1–9，取消编号） |
 
+### `[subfigure]`
+| 字段 | 默认 | 说明 |
+|---|---|---|
+| `width` | 自动（n 张平分 90%） | 子图图片宽度，如 `"45%"` |
+
 ### `[math]`
 | 字段 | 默认 | 说明 |
 |---|---|---|
@@ -210,6 +215,7 @@ logfile = ""
 | `[[cite:key1,key2]]` | 文献引用（顺序编码制，需文献库 `--refs` / `[bibliography] file`） |
 | `[[bibliography]]` | 参考文献表位置（不写则自动追加到文末） |
 | `[[list:figures]]` / `[[list:tables]]` | 插图清单 / 附表清单（题注自动生成，PAGEREF 页码） |
+| `\\begin{subfigures}` … `\\begin{subfigure #fig:a}` | 子图并排 + 子题注；总图题仍用 figure caption |
 | `` `code` `` | 行内代码（Consolas + 灰底） |
 | `$x^2$` / `$$…$$` | 行内 / 块级公式 |
 | `**粗**` `*斜*` `~~删~~` `^上^` `~下~` | 行内语义（需在 config 声明样式） |

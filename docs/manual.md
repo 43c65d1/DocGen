@@ -312,6 +312,37 @@ DFM 语法（IR 支持 `colspan/rowspan`，但解析器不产生）。
 图片后**紧跟图题**时：图片段落自动 `keepNext`（不会图题跑到下一页）、
 图题段落 `keepLines`（图题不被拆开）。图题默认居中。
 
+### 子图：`\\begin{subfigures}`
+
+```markdown
+\\begin{subfigures}
+\\begin{subfigure #fig:a}
+![左图](pics/a.png)
+
+左图说明
+\\end{subfigure}
+\\begin{subfigure #fig:b}
+![右图](pics/b.png)
+
+右图说明
+\\end{subfigure}
+\\end{subfigures}
+
+\\begin{caption #fig:1}
+总图题
+\\end{caption}
+```
+
+- 子图并排成**无边框表格**：上行图片居中，下行子题注 `（a）说明`、`（b）说明`；
+- 子题注可以写在图片下一行（同一段），也可以空一行单独成段；
+- 子编号 a/b/c… 按容器内顺序自动生成；**总图题仍由后面的 figure 题注负责**，
+  编号/插图清单/REF 都复用现有机制；
+- 引用：`图 [[ref:fig:a]]` → `图 1（a）`，按章模式 `图 2-1（a）`。
+  子图引用是**构建期静态文本**（不写 REF 域）：因为书签包的是整段子题注，
+  REF 域更新后会返回整段说明而不是编号；
+- 宽度：默认 n 张平分正文宽的 90%；`[[img:... width=3cm]]` 或
+  `[subfigure] width = "45%"` 可覆盖。
+
 ## 9. 题注 / 交叉引用 / 目录 / 公式 / 脚注
 
 | 语法 | 默认效果 | 相关字段 |

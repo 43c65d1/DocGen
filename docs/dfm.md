@@ -79,6 +79,7 @@ print("hi")          <!-- 内部可以再出现 ``` -->
 |---|---|
 | `\begin{code:lang}` / `\end{code:lang}` | 与 fence 等价的代码块，**内容原样保留**（内部不解析任何标记） |
 | `\begin{名字 属性}` / `\end{名字}` | 命名块容器（`caption`/`equation`/`abstract`…），内容按 DFM 继续解析、可嵌套 |
+| `\begin{subfigures}` / `\begin{subfigure #fig:a}` | 子图容器；子图内图片 + 子题注，总图题仍用 figure caption |
 | 属性 | Pandoc 语法：`{.class #id key=value}` → `{"classes": ..., "id": ..., ...}` |
 | 首尾名字 | 必须一致 → 否则 `E3002` |
 | 独占一行 | `\begin` 必须独占一行；夹在段落中间报 `E4001` |

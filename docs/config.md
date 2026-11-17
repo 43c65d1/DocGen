@@ -364,6 +364,16 @@ levels = 3      # 只收录 1–3 级标题（默认 1-9；也可写 "2-4"）
 条目样式（Word 内置 `TOC 1..9`）由 Word 管理：Word 更新目录时会重置这些样式，
 DocGen 不预置字体/段距；需要改样式请在 Word 更新目录后手动调整。
 
+## `[subfigure]`：子图
+
+```toml
+[subfigure]
+width = "45%"      # 子图图片宽度；空 = n 张平分正文宽的 90%
+```
+
+配合 `\\begin{subfigures}` / `\\begin{subfigure #fig:a}` 使用。单个子图的
+`[[img:... width=...]]` 优先于这里的默认值。
+
 ## `[math]`：公式
 
 ```toml

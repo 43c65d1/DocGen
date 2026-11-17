@@ -353,6 +353,7 @@ engine = "auto"       # auto / xsl / plain
 on_fail = "plain"     # plain = 降级文本；error = 报 E5002
 xsl = ""              # MML2OMML.XSL 路径；也可用 DOCGEN_MML2OMML
 numbering = "none"    # none / auto / chapter（公式自动编号）
+number_display_math = false  # true = 独立 $$…$$ 也编号（需 numbering=auto/chapter）
 ```
 
 `numbering = "auto"` 给 `\begin{equation}` 按出现顺序编号（1、2、3…）；

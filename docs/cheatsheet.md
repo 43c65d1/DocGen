@@ -193,6 +193,7 @@ logfile = ""
 | `on_fail` | `plain` | `error` 则报 `E5002` |
 | `xsl` | 自动查找 | MML2OMML.XSL 路径 |
 | `numbering` | `none` | `auto`（1、2、3）/ `chapter`（2-1） |
+| `number_display_math` | `false` | `true` = 独立 `$$…$$` 也参与编号 |
 
 ## 3. 语法标记
 

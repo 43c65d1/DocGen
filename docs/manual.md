@@ -414,6 +414,7 @@ DFM 语法（IR 支持 `colspan/rowspan`，但解析器不产生）。
 | `on_fail` | `plain` | 转换失败时降级为 LaTeX 文本；`error` 则报 `E5002` |
 | `xsl` | 自动查找 | `MML2OMML.XSL` 路径；也可用环境变量 `DOCGEN_MML2OMML` |
 | `numbering` | `none` | 公式编号：`none`（只用 `number=` 手写）/ `auto`（1、2、3…）/ `chapter`（按一级标题分章，2-1） |
+| `number_display_math` | `false` | 让独立 `$$…$$` 也参与同一编号序列；需同时设 `numbering = auto/chapter` |
 
 行内公式 `$x^2$` 与块级 `$$…$$` 都转 OMML（Word 里可编辑）。
 没有 XSL（如 Linux CI）时降级为文本，不中断构建。
@@ -421,6 +422,9 @@ DFM 语法（IR 支持 `colspan/rowspan`，但解析器不产生）。
 - 自动编号只作用于 **`\begin{equation}` 命名块**（普通 `$$…$$` 仍不编号）；
   `number=` 手写值优先，并把自动计数同步到该值（`number=7` 后下一项为 8）。
 - 带 `#id` 的公式可用 `[[ref:eq:id]]` 引用；编号在构建期烘焙，更新域后仍正确。
+- 独立 `$$…$$` 默认**不编号**（推导中间式通常不需要）；`number_display_math = true`
+  时与 `\begin{equation}` 共用同一序列。`$$…$$` 没有标签，不能 `[[ref:...]]`——
+  需要引用就写成带 `#id` 的 `\begin{equation}`。
 - `chapter` 模式下第一个一级标题之前的公式按连续编号（1、2…），不出现 0-1。
 
 ## 11. 分节 / 页码 / 页眉页脚 / 封面：`[[sections]]`

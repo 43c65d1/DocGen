@@ -39,6 +39,7 @@ __all__ = [
     "heading_numbering",
     "heading_numbering_mode",
     "math_numbering_settings",
+    "subfigure_numbers",
     "toc_levels",
     "validate_numbering",
 ]
@@ -445,6 +446,40 @@ def caption_number(blocks: list[BlockNode], label: str) -> int | None:
     return caption_counters(blocks).get(label)
 
 
+def subfigure_numbers(blocks: list[BlockNode], config: Config) -> dict[str, str]:
+    """子图标签 -> 完整引用值（如 ``2-1（a）``）。
+
+    约定：一个 ``subfigures`` 容器后面跟一个总图题（figure 类型 caption）。
+    子图按容器内顺序分配 a、b、c…，总图号取该题注的编号（按章模式即 2-1）。
+    """
+    counters = caption_numbers(blocks, config)
+    numbers: dict[str, str] = {}
+    pending: list[list[NamedBlock]] = []
+    for block in iter_blocks(blocks):
+        if isinstance(block, NamedBlock) and block.name == "subfigures":
+            children = [
+                child
+                for child in block.content
+                if isinstance(child, NamedBlock) and child.name == "subfigure" and child.label
+            ]
+            if children:
+                pending.append(children)
+            continue
+        if not isinstance(block, NamedBlock) or not block.label:
+            continue
+        if caption_kind(block) != "figure":
+            continue
+        number = counters.get(block.label)
+        if number is None:
+            continue
+        for group in pending:
+            for index, child in enumerate(group):
+                letter = chr(ord("a") + index)
+                numbers[child.label] = f"{number}（{letter}）"
+        pending.clear()
+    return numbers
+
+
 def baked_fields(blocks: list[BlockNode], config: Config | None = None) -> dict[str, str]:
     """标签 -> **域缓存值**（写进 docx 里的字面结果）。
 
@@ -464,6 +499,7 @@ def baked_fields(blocks: list[BlockNode], config: Config | None = None) -> dict[
     else:
         counters = caption_numbers(blocks, config)
         equations = equation_numbers(blocks, config)
+    subfigures = subfigure_numbers(blocks, config) if config is not None else {}
     baked: dict[str, str] = {}
     for block in iter_blocks(blocks):
         if not isinstance(block, NamedBlock) or not block.label:
@@ -474,6 +510,8 @@ def baked_fields(blocks: list[BlockNode], config: Config | None = None) -> dict[
             value = equations.get(id(block)) or (str(number) if number else "")
             if value:
                 baked[block.label] = f"({value})"
+        elif block.name == "subfigure" and block.label in subfigures:
+            baked[block.label] = subfigures[block.label]
         elif block.label in counters:
             baked[block.label] = counters[block.label]
     return baked

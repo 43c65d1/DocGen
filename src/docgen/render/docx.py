@@ -195,6 +195,7 @@ def _build_document(
         caption_numbering_mode,
         caption_numbers,
         equation_numbers,
+        subfigure_numbers,
     )
 
     state.caption_fields = baked_fields(blocks, config)
@@ -202,6 +203,7 @@ def _build_document(
     state.caption_static = caption_numbering_mode(config) == "chapter"
     state.heading_labels = baked_heading_labels(blocks, config)
     state.equation_numbers = equation_numbers(blocks, config)
+    state.subfigure_labels = set(subfigure_numbers(blocks, config))
     # 文献引用：先分配编号、生成条目（没有 [[cite:]] 时为 None）
     from ..bibliography import has_bibliography_marker, plan_bibliography
 
@@ -270,6 +272,7 @@ class _RenderState:
         "math_xsl",
         "sections",
         "styles",
+        "subfigure_labels",
     )
 
     def __init__(
@@ -282,6 +285,7 @@ class _RenderState:
         self.document = document
         self.config = config
         self.styles = styles
+        self.subfigure_labels: set[str] = set()
         self.base_dir = base_dir
         self.doc_settings = dict(config.document)
         self.math_engine, self.math_on_fail, self.math_xsl = math_settings(config)
@@ -708,8 +712,6 @@ def _add_picture(state: _RenderState, paragraph: Any, src: str, width: str = "")
             run.add_picture(str(candidate), width=length)
             return
     run.add_picture(str(candidate))
-    paragraph = state.document.add_paragraph()
-    paragraph.add_run("\u2014" * 20)
 
 
 def _render_thematic_break(state: _RenderState) -> None:
@@ -765,6 +767,9 @@ def _render_named_block(
     ``previous`` / ``following`` 只对题注有用：表格题注也要吃
     ``[table] space_before/space_after``（表格间距写在相邻段落上）。
     """
+    if block.name == "subfigures":
+        _render_subfigures(state, block)
+        return
     kind = caption_kind(block)
     if kind == "equation":
         # 方程：手动 number 或自动/按章编号时走三列表格；否则是普通块级公式
@@ -776,6 +781,81 @@ def _render_named_block(
         return
     for child in block.content:
         _render_block(state, child)
+
+
+def _render_subfigures(state: _RenderState, block: NamedBlock) -> None:
+    """``\\begin{subfigures}``：子图并排 + 子题注 + 各自的编号书签。
+
+    子图编号（a/b/c…）由渲染顺序决定；完整引用值（如 ``2-1（a）``）由
+    :func:`docgen.numbering.subfigure_numbers` 在构建期烘焙。总图题仍由后面的
+    ``\\begin{caption}`` 负责，这样题注编号/插图清单/REF 都复用现有机制。
+    """
+    items: list[tuple[NamedBlock, str, str, str]] = []
+    for child in block.content:
+        if not isinstance(child, NamedBlock) or child.name != "subfigure":
+            continue
+        image_block = next((node for node in child.content if isinstance(node, ImageBlock)), None)
+        if image_block is not None:
+            caption = next((node for node in child.content if isinstance(node, Paragraph)), None)
+            text = "".join(_plain_text(node) for node in caption.content) if caption else ""
+            items.append((child, image_block.src, image_block.width, text))
+            continue
+        # 兼容「图片 + 子题注同一段」：没有空行时 markdown 会合并成一个段落
+        paragraph = next(
+            (
+                node
+                for node in child.content
+                if isinstance(node, Paragraph)
+                and any(isinstance(inline, Image) for inline in node.content)
+            ),
+            None,
+        )
+        if paragraph is None:
+            continue
+        image = next(inline for inline in paragraph.content if isinstance(inline, Image))
+        text = "".join(
+            _plain_text(inline) for inline in paragraph.content if not isinstance(inline, Image)
+        ).strip()
+        items.append((child, image.src, "", text))
+    if not items:
+        for child in block.content:
+            _render_block(state, child)
+        return
+
+    table = state.document.add_table(rows=2, cols=len(items))
+    set_table_borders(
+        table,
+        top="none",
+        left="none",
+        bottom="none",
+        right="none",
+        insideH="none",
+        insideV="none",
+    )
+    width = _subfigure_setting(state, "width") or f"{max(20, 90 // len(items))}%"
+    for index, (child, src, image_width, text) in enumerate(items):
+        top = table.cell(0, index)
+        image_paragraph = top.paragraphs[0]
+        set_paragraph_alignment(image_paragraph, "center")
+        _add_picture(state, image_paragraph, src, image_width or width)
+
+        bottom = table.cell(1, index)
+        subcaption = bottom.paragraphs[0]
+        try:
+            subcaption.style = state.document.styles["Caption"]
+        except KeyError:
+            pass
+        set_paragraph_alignment(subcaption, "center")
+        letter = chr(ord("a") + index)
+        append_text(subcaption, f"（{letter}）{text}" if text else f"（{letter}）")
+        if child.label:
+            set_paragraph_bookmark(subcaption, child.label, state.next_bookmark_id())
+
+
+def _subfigure_setting(state: _RenderState, key: str) -> str:
+    settings = state.config.namespace("subfigure")
+    value = settings.get(key)
+    return str(value) if value else ""
 
 
 def _render_numbered_formula(state: _RenderState, block: NamedBlock) -> None:
@@ -923,11 +1003,13 @@ def _render_ref(state: _RenderState, paragraph: Any, target: str) -> None:
     算不出来时留**空**而不是 ``"1"``——写死 1 会让读者看到错误编号，
     空结果至少不会撒谎，Word 打开时仍会按域指令重算。
     """
-    append_field(
-        paragraph,
-        make_reference_field(target),
-        state.caption_fields.get(target, ""),
-    )
+    value = state.caption_fields.get(target, "")
+    if target in state.subfigure_labels:
+        # 子图书签包住整段子题注，REF 域更新后会返回「（a）说明」而不是编号；
+        # 子图引用因此烘焙成静态文本（与按章题注同一取舍）。
+        append_text(paragraph, value)
+        return
+    append_field(paragraph, make_reference_field(target), value)
 
 
 def _render_footnote(state: _RenderState, paragraph: Any, text: str) -> None:

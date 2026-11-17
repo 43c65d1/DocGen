@@ -192,6 +192,7 @@ logfile = ""
 | `engine` | `auto` | `auto` / `xsl` / `plain` |
 | `on_fail` | `plain` | `error` 则报 `E5002` |
 | `xsl` | 自动查找 | MML2OMML.XSL 路径 |
+| `numbering` | `none` | `auto`（1、2、3）/ `chapter`（2-1） |
 
 ## 3. 语法标记
 
@@ -213,7 +214,7 @@ logfile = ""
 | `[文字]{.样式名}` | 套任意样式；样式里的 `alignment`/`first_line_chars`/`space_*` 作用于该段 |
 | `\begin{caption #fig:1}` … `\end{caption}` | 图题（SEQ 自动编号） |
 | `\begin{table #tab:1}` … | 表题 |
-| `\begin{equation #eq:1 number=1}` … | 编号公式（三列表格，编号带书签） |
+| `\begin{equation #eq:1 number=1}` … | 编号公式（三列表格，书签供 `[[ref:eq:1]]`；可自动编号） |
 
 ## 4. 单位
 

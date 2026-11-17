@@ -315,7 +315,7 @@ DFM 语法（IR 支持 `colspan/rowspan`，但解析器不产生）。
 |---|---|---|
 | `\begin{caption #fig:1}` | 题注段落（`Caption` 样式：跟正文同字体、**居中**）+ `SEQ 图` 域自动编号 | `[styles.caption] font.*` / `alignment` / `space_*` |
 | `\begin{table #tab:1}` | 同上，前缀「表」 | 同上 |
-| `\begin{equation #eq:1 number=1}` | 无框三列表格：左空 / 公式居中 / 右编号 `(1)`，编号带书签 | 编号值由作者给 |
+| `\begin{equation #eq:1 number=1}` | 无框三列表格：左空 / 公式居中 / 右编号；默认只给手动编号，`[math] numbering` 可自动编号 | `number` / `[math] numbering` |
 | `[[ref:fig:1]]` | `REF` 域，显示目标编号 | 无 |
 | `[[toc]]` | `TOC` 域（Word 打开时填充）；级别由 `[toc] levels` 控制 | `[toc] levels` |
 | `[[fn:文字]]` | 脚注，编号由 Word 自动生成；`FootnoteText` 单倍行距 | `[styles.footnote] line_spacing`（倍数） |
@@ -413,9 +413,15 @@ DFM 语法（IR 支持 `colspan/rowspan`，但解析器不产生）。
 | `engine` | `auto` | `auto` / `xsl` / `plain` |
 | `on_fail` | `plain` | 转换失败时降级为 LaTeX 文本；`error` 则报 `E5002` |
 | `xsl` | 自动查找 | `MML2OMML.XSL` 路径；也可用环境变量 `DOCGEN_MML2OMML` |
+| `numbering` | `none` | 公式编号：`none`（只用 `number=` 手写）/ `auto`（1、2、3…）/ `chapter`（按一级标题分章，2-1） |
 
 行内公式 `$x^2$` 与块级 `$$…$$` 都转 OMML（Word 里可编辑）。
 没有 XSL（如 Linux CI）时降级为文本，不中断构建。
+
+- 自动编号只作用于 **`\begin{equation}` 命名块**（普通 `$$…$$` 仍不编号）；
+  `number=` 手写值优先，并把自动计数同步到该值（`number=7` 后下一项为 8）。
+- 带 `#id` 的公式可用 `[[ref:eq:id]]` 引用；编号在构建期烘焙，更新域后仍正确。
+- `chapter` 模式下第一个一级标题之前的公式按连续编号（1、2…），不出现 0-1。
 
 ## 11. 分节 / 页码 / 页眉页脚 / 封面：`[[sections]]`
 

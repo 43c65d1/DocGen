@@ -345,6 +345,20 @@ levels = 3      # 只收录 1–3 级标题（默认 1-9；也可写 "2-4"）
 条目样式（Word 内置 `TOC 1..9`）由 Word 管理：Word 更新目录时会重置这些样式，
 DocGen 不预置字体/段距；需要改样式请在 Word 更新目录后手动调整。
 
+## `[math]`：公式
+
+```toml
+[math]
+engine = "auto"       # auto / xsl / plain
+on_fail = "plain"     # plain = 降级文本；error = 报 E5002
+xsl = ""              # MML2OMML.XSL 路径；也可用 DOCGEN_MML2OMML
+numbering = "none"    # none / auto / chapter（公式自动编号）
+```
+
+`numbering = "auto"` 给 `\begin{equation}` 按出现顺序编号（1、2、3…）；
+`"chapter"` 按一级标题分章（2-1）。手动 `number=` 优先，并同步自动计数。
+带 `#id` 的公式可用 `[[ref:eq:id]]` 引用。
+
 ## `[list]`：插图清单 / 附表清单
 
 配合 `[[list:figures]]` / `[[list:tables]]` 使用：

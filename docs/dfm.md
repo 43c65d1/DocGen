@@ -134,4 +134,3 @@ print("hi")          <!-- 内部可以再出现 ``` -->
 （合并 TOML）。需求登记在 [LIMITATIONS.md](../LIMITATIONS.md) B16，两种候选形式
 （DFM 片段解析插入 / `w:altChunk` 整块插入）待定。
 
-公式的交叉引用（`\ref` 公式）也不做；图表题注的引用不受影响。

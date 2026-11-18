@@ -6,6 +6,16 @@
 
 ## [Unreleased]
 
+### 新增（表格单元格内边距）
+
+- `[table] cell_margin`：表格级 `w:tblCellMar`，四边统一（如 `"0.1cm"`）；
+- `cell_margin_top/bottom/left/right` 逐边覆盖；
+- 不写配置时保留 Word 默认（左右 0.19cm、上下 0），不影响既有文档；
+- 非法长度值报 `E5001`；
+- Word COM 实测：`cell_margin="0.1cm"` + `left="0.2cm"` →
+  LeftPadding 5.65pt、其余 2.85pt。
+- 新增 `tests/test_table_cell_margins.py`（5 项）。
+
 ### 新增（分节双栏）
 
 - `[[sections]] page.columns`：栏数 1–9；可写简写 `2`，或

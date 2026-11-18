@@ -91,6 +91,7 @@ from .ooxml import (
     set_row_height,
     set_run_shading,
     set_table_borders,
+    set_table_cell_margins,
     set_table_width,
 )
 from .template import create_document
@@ -1104,6 +1105,7 @@ def _render_table(state: _RenderState, block: Table) -> None:
     _apply_row_heights(table, properties)
     _apply_table_header_behavior(table, properties)
     _apply_table_row_splitting(table, properties)
+    _apply_cell_margins(table, properties)
     _apply_table_borders(table, properties, header_rows=1)
 
 
@@ -1120,6 +1122,28 @@ def _table_flag(properties: dict[str, Any], key: str, default: bool) -> bool:
     if text in ("false", "0", "no", "off"):
         return False
     raise DocGenError(E_CONFIG, f"[table] {key} 需要 true/false，收到 {value!r}")
+
+
+def _apply_cell_margins(table: Any, properties: dict[str, Any]) -> None:
+    """表格单元格内边距：``cell_margin``（四边统一）或 ``cell_margin_*`` 逐边覆盖。"""
+    margins: dict[str, int] = {}
+
+    def _length(value: Any, label: str) -> int:
+        length = length_from_text(str(value)) if value is not None else None
+        if length is None:
+            raise DocGenError(E_CONFIG, f"[table] {label} 无法识别: {value!r}")
+        return int(length.twips)
+
+    uniform = properties.get("cell_margin")
+    if uniform is not None:
+        value = _length(uniform, "cell_margin")
+        margins = {"top": value, "left": value, "bottom": value, "right": value}
+    for edge in ("top", "left", "bottom", "right"):
+        key = f"cell_margin_{edge}"
+        if key in properties:
+            margins[edge] = _length(properties[key], key)
+    if margins:
+        set_table_cell_margins(table, margins)
 
 
 def _apply_table_row_splitting(table: Any, properties: dict[str, Any]) -> None:
@@ -1244,6 +1268,7 @@ def _render_cell_table(state: _RenderState, block: Table) -> None:
     _apply_row_heights(table, properties)
     _apply_table_header_behavior(table, properties)
     _apply_table_row_splitting(table, properties)
+    _apply_cell_margins(table, properties)
     _apply_table_borders(table, properties, header_rows=1)
 
 

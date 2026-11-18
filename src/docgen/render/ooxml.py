@@ -76,6 +76,7 @@ __all__ = [
     "set_section_columns",
     "set_style_outline_level",
     "set_table_borders",
+    "set_table_cell_margins",
     "set_table_cell_width",
     "set_table_width",
     "set_vert_align",
@@ -909,6 +910,34 @@ def page_content_width(document: Any) -> int:
     section = document.sections[-1]
     usable = int(section.page_width) - int(section.left_margin) - int(section.right_margin)
     return max(1, usable // 635)
+
+
+def set_table_cell_margins(table: Any, margins: dict[str, int]) -> None:
+    """表格级单元格内边距：``w:tblCellMar``（top/left/bottom/right，dxa）。
+
+    ``margins`` 只包含显式配置的边；未写的边保留 Word 默认（左右 0.19cm、上下 0）。
+    """
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    tbl_pr = table._tbl.tblPr
+    mar = tbl_pr.find(qn("w:tblCellMar"))
+    if mar is None:
+        mar = OxmlElement("w:tblCellMar")
+        look = tbl_pr.find(qn("w:tblLook"))
+        if look is not None:
+            look.addprevious(mar)
+        else:
+            tbl_pr.append(mar)
+    for edge in ("top", "left", "bottom", "right"):
+        if edge not in margins:
+            continue
+        existing = mar.find(qn(f"w:{edge}"))
+        if existing is None:
+            existing = OxmlElement(f"w:{edge}")
+            mar.append(existing)
+        existing.set(qn("w:type"), "dxa")
+        existing.set(qn("w:w"), str(max(0, margins[edge])))
 
 
 def set_section_columns(

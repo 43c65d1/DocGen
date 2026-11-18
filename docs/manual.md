@@ -197,6 +197,8 @@ alignment = "center"
 | `row_height` / `header_row_height` | 无 | 行高（如 `"0.8cm"` / `"20pt"`）；表头可单独设 |
 | `row_height_rule` | `atLeast` | `atLeast` / `exact` / `auto` |
 | `cell_vertical_align` | 无（Word 默认 top） | 单元格垂直对齐：`top` / `center` / `bottom` |
+| `cell_margin` | 无（Word 默认：左右 0.19cm、上下 0） | 单元格内边距，四边统一，如 `"0.1cm"` |
+| `cell_margin_top/bottom/left/right` | 无 | 逐边覆盖 `cell_margin`（单位必须写 cm/pt） |
 | `line_style` | `single` | 线型：`single` / `double` / `dashed` / `dotted` / `none` |
 | `outer_line_size` | `1.5pt` | 顶线/底线（粗线） |
 | `header_line_size` | `0.5pt` | 栏目线（表头下，细线） |

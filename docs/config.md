@@ -166,6 +166,7 @@ edges = { ... }                 # 仅 style = "custom"：逐边线型
 header_repeat = true            # 跨页重复表头（默认）
 header_keep_with_body = true    # 表头与首行同页，防止「表头孤行」（默认）
 rows_keep_together = true        # 所有表格行不跨页（默认；false = 允许行内断行）
+cell_margin = "0.1cm"            # 单元格内边距（四边统一；可加 cell_margin_left 等逐边覆盖）
 decimal_align = [2]             # 数值列（1 起）：小数点/个位对齐，可多列
 ```
 
@@ -189,6 +190,8 @@ decimal_align = [2]             # 数值列（1 起）：小数点/个位对齐�
   「表头单独留在页底」的排版缺陷（实测数据见 [word.md](word.md) 的「表头不能孤行」）。
 - `rows_keep_together`：所有行写 `cantSplit`，要求行内不跨页（默认开启）。
   长表格里关闭它 Word 会把一行拆到两页；表头行无论如何都不拆。
+- `cell_margin` 写 `w:tblCellMar`：四边统一；`cell_margin_top/bottom/left/right`
+  可逐边覆盖。不写则保留 Word 默认（左右 0.19cm、上下 0），单位必须带 `cm`/`pt`。
 - **表题同页**：表题写在表格**上方**且 `kind=table` 时，题注段自动 `keepNext`，
   和表格绑在同一页；题注写在表格下方则不绑定（顺序错误应显式改）。
 - 表格与正文的间距仍用 `[table] space_before` / `space_after`（写到相邻段落）。

@@ -106,6 +106,7 @@ logfile = ""
 | `header_repeat` | `true` | `false` |
 | `header_keep_with_body` | `true` | 表头与首行同页（防「表头孤行」） |
 | `rows_keep_together` | `true` | 所有行不跨页（`cantSplit`） |
+| `cell_margin` / `cell_margin_*` | 无 | 单元格内边距（四边统一 / 逐边覆盖） |
 | `col_widths` | 均分 | `[3, 2, 5]`（比例）/ `["3cm", "5cm"]`（绝对） |
 | `row_height` / `header_row_height` | 无 | `"0.8cm"`；`row_height_rule = "atLeast"` / `"exact"` |
 | `cell_vertical_align` | 无 | `"center"` / `"top"` / `"bottom"` |

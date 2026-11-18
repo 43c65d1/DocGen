@@ -139,6 +139,7 @@ logfile = ""
 | 字段 | 默认 | 例 |
 |---|---|---|
 | `page.size` | `A4` | `A4` / `A3` / `Letter` / `Legal` |
+| `page.columns` | `1` | `2` 或 `{ count=2, space="0.63cm", separator=true }` |
 | `page.margin.top/bottom/left/right` | 母版 | `2.5`（cm） |
 | `numbering.format` | 无 | `decimal` / `upperRoman` |
 | `numbering.start` | 无 | `1` |

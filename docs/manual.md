@@ -476,6 +476,7 @@ DFM 语法（IR 支持 `colspan/rowspan`，但解析器不产生）。
 | `page.size` | `A4` | `A4` / `A3` / `A5` / `Letter` / `Legal` |
 | `page.width` / `page.height` | — | 自定义尺寸（cm），覆盖 size |
 | `page.margin.top/bottom/left/right` | 母版 | 单位 cm |
+| `page.columns` | `1` | 栏数：`2`，或 `{ count = 2, space = "0.63cm", separator = true }`；每节独立 |
 | `numbering.format` | 无 | `decimal` / `upperRoman` / `lowerRoman` / `upperLetter` / `lowerLetter` |
 | `numbering.start` | 无 | 重启页码（1 起） |
 | `header.text` / `footer.text` | 无 | 页眉/页脚文字；`PAGE` 变成页码域 |
@@ -486,6 +487,16 @@ DFM 语法（IR 支持 `colspan/rowspan`，但解析器不产生）。
 | `header.distance` / `footer.distance` | 母版 | 页眉/页脚距边界（cm） |
 | `header.odd` / `header.even` / `header.first` | 无 | 奇数页 / 偶数页 / 首页专用页眉（可写 `text`、`font.*`、`line` 等；`footer` 同理） |
 | `cover` | `false` | `true` = 该节页面垂直居中（不是"生成封面内容"） |
+
+分节后每节可独立设栏数——前置单栏、正文双栏：
+
+```toml
+[[sections]]
+page.columns = 1          # 封面/摘要单栏
+
+[[sections]]
+page.columns = { count = 2, space = "0.63cm", separator = false }  # 正文双栏
+```
 
 正文里用 `[[sectionbreak]]` 切到下一节；不写标记时内容全部落在最后一节
 （旧行为，前面各节是空页）。详见 [word.md](word.md) 的「分节」一节。

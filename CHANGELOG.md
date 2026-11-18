@@ -6,6 +6,16 @@
 
 ## [Unreleased]
 
+### 新增（表题同页 / 表格行不跨页）
+
+- 表题写在表格**上方**且 `kind=table` 时，题注段落自动 `keepNext`，与表格绑在同一页；
+  题注写在表格下方不绑定（顺序错误应显式改）。
+- `[table] rows_keep_together`（默认 `true`）：所有表格行写 `cantSplit`，行内不跨页；
+  `false` 时仅表头行保持 `cantSplit`，允许长行拆到两页。
+- Word COM 实测：题注 `KeepWithNext=True`；默认所有行 `AllowBreakAcrossPages=False`，
+  关闭配置后仅表头为 `False`（其余 `True`）。
+- 新增 `tests/test_table_caption_binding.py`（5 项）。
+
 ### 新增（子图 / 分图）
 
 - 新增 `\begin{subfigures}` 容器 + `\begin{subfigure #fig:a}` 子图块：

@@ -928,6 +928,9 @@ def _render_caption(
     paragraph = state.document.add_paragraph(style="Caption")
     # 题注本身不能被分页拆开（两行的图题跨页读起来就是断的）
     paragraph.paragraph_format.keep_together = True
+    # 表题在上：必须和下面的表格同页（否则题注孤零零留在上一页底部）
+    if caption_kind(block) == "table" and isinstance(following, Table):
+        paragraph.paragraph_format.keep_with_next = True
     # 段落级样式键（对齐/缩进/段距）也要吃 config，与正文段落同一套语义
     _apply_paragraph_properties(paragraph, state.styles.get("caption", {}))
     _apply_table_gap(state, paragraph, previous=previous, following=following)
@@ -1100,6 +1103,7 @@ def _render_table(state: _RenderState, block: Table) -> None:
 
     _apply_row_heights(table, properties)
     _apply_table_header_behavior(table, properties)
+    _apply_table_row_splitting(table, properties)
     _apply_table_borders(table, properties, header_rows=1)
 
 
@@ -1116,6 +1120,18 @@ def _table_flag(properties: dict[str, Any], key: str, default: bool) -> bool:
     if text in ("false", "0", "no", "off"):
         return False
     raise DocGenError(E_CONFIG, f"[table] {key} 需要 true/false，收到 {value!r}")
+
+
+def _apply_table_row_splitting(table: Any, properties: dict[str, Any]) -> None:
+    """表格行不跨页：所有行写 ``w:cantSplit``（默认开，可 ``rows_keep_together = false`` 关）。
+
+    学位论文/期刊通常要求「表格行不跨页断行」；Word 的默认行为是允许拆行，
+    长表格里会出现半行在上一页、半行在下一页。表头行始终不拆（见 header behavior）。
+    """
+    if not _table_flag(properties, "rows_keep_together", True):
+        return
+    for row in table.rows:
+        set_row_cant_split(row)
 
 
 def _apply_table_header_behavior(table: Any, properties: dict[str, Any]) -> None:
@@ -1227,6 +1243,7 @@ def _render_cell_table(state: _RenderState, block: Table) -> None:
 
     _apply_row_heights(table, properties)
     _apply_table_header_behavior(table, properties)
+    _apply_table_row_splitting(table, properties)
     _apply_table_borders(table, properties, header_rows=1)
 
 

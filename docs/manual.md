@@ -192,6 +192,7 @@ alignment = "center"
 | `style` | `three_line` | `three_line` / `grid` / `none` / `custom` |
 | `header_repeat` | `true` | 跨页时表头重复 |
 | `header_keep_with_body` | `true` | 表头与首行同页：表头段落 `keepNext` + 表头行 `cantSplit`。关掉会出现「表头单独留在页底」的排版缺陷 |
+| `rows_keep_together` | `true` | 所有表格行 `cantSplit`，行内不跨页；`false` 允许长行拆到两页 |
 | `col_widths` | 均分 | 相对比例数组 `[3, 2, 5]`，或**绝对宽度** `["3cm", "5cm"]` |
 | `row_height` / `header_row_height` | 无 | 行高（如 `"0.8cm"` / `"20pt"`）；表头可单独设 |
 | `row_height_rule` | `atLeast` | `atLeast` / `exact` / `auto` |
@@ -209,6 +210,9 @@ alignment = "center"
 | `space_before` / `space_after` | 无 | 表格与上下文的间距（写到相邻段落） |
 | `header_bold` | `true` | 表头加粗开关（`false` = 表头与正文同粗） |
 | `[table.text]` | 无 | 单元格文字格式（见下）：`font.*` / `line_spacing` / `space_before` / `space_after` |
+
+表题写在表格**上方**且标 `kind=table` 时，题注段自动 `keepNext`，与表格同页；
+表格行默认全部 `cantSplit`（行内不跨页，`rows_keep_together = false` 可关）。
 
 **单元格文字与行距**（`[table.text]`）：表格单元格默认继承 `Normal`
 （与正文段落是两条路径），需要更紧凑时显式配置：

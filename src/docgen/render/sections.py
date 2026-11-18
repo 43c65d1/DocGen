@@ -157,6 +157,55 @@ def _apply_page(section: Any, spec: dict[str, Any]) -> None:
         section.left_margin = Cm(float(margin["left"]))
     if "right" in margin:
         section.right_margin = Cm(float(margin["right"]))
+    _apply_columns(section, page)
+
+
+def _apply_columns(section: Any, page: dict[str, Any]) -> None:
+    """``page.columns``：单栏/双栏/多栏（``w:cols``）。
+
+    支持 ``columns = 2`` 简写，或表：``{ count = 2, space = "0.63cm", separator = true }``。
+    分节后每节独立生效，方便「前置单栏、正文双栏」。
+    """
+    from .ooxml import length_from_text, set_section_columns
+
+    raw = page.get("columns")
+    if raw is None:
+        return
+    if isinstance(raw, bool):
+        raise DocGenError(E_SECTION_CONFIG, "[sections] page.columns 不能是布尔值")
+    if isinstance(raw, dict):
+        count = raw.get("count", 2)
+        space = raw.get("space", "0.63cm")
+        separator = _column_separator(raw.get("separator", False))
+    else:
+        count = raw
+        space = "0.63cm"
+        separator = False
+    try:
+        count_int = int(count)
+    except (TypeError, ValueError):
+        raise DocGenError(
+            E_SECTION_CONFIG, f"[sections] page.columns.count 需要整数: {count!r}"
+        ) from None
+    if not 1 <= count_int <= 9:
+        raise DocGenError(E_SECTION_CONFIG, f"[sections] page.columns 需要在 1–9: {count!r}")
+    length = length_from_text(str(space)) if space else None
+    if length is None:
+        raise DocGenError(E_SECTION_CONFIG, f"[sections] page.columns.space 无法识别: {space!r}")
+    set_section_columns(section, count_int, int(length.twips), separator=separator)
+
+
+def _column_separator(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in ("true", "1", "yes", "on"):
+        return True
+    if text in ("false", "0", "no", "off", ""):
+        return False
+    raise DocGenError(
+        E_SECTION_CONFIG, f"[sections] page.columns.separator 需要 true/false: {value!r}"
+    )
 
 
 def _apply_numbering(section: Any, spec: dict[str, Any]) -> None:

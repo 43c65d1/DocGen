@@ -73,6 +73,7 @@ __all__ = [
     "set_run_color",
     "set_run_shading",
     "set_run_size",
+    "set_section_columns",
     "set_style_outline_level",
     "set_table_borders",
     "set_table_cell_width",
@@ -908,6 +909,34 @@ def page_content_width(document: Any) -> int:
     section = document.sections[-1]
     usable = int(section.page_width) - int(section.left_margin) - int(section.right_margin)
     return max(1, usable // 635)
+
+
+def set_section_columns(
+    section: Any, count: int, space_twips: int, *, separator: bool = False
+) -> None:
+    """节的栏数：``w:cols``（``count`` / ``space`` / ``sep``）。
+
+    ``w:cols`` 必须放在 ``w:pgMar`` 之后、``w:docGrid`` 之前（CT_SectPr 顺序）；
+    已有 ``w:cols`` 时只改属性，不重复插入。
+    """
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    sect_pr = section._sectPr
+    cols = sect_pr.find(qn("w:cols"))
+    if cols is None:
+        cols = OxmlElement("w:cols")
+        doc_grid = sect_pr.find(qn("w:docGrid"))
+        if doc_grid is not None:
+            doc_grid.addprevious(cols)
+        else:
+            sect_pr.append(cols)
+    cols.set(qn("w:num"), str(count))
+    cols.set(qn("w:space"), str(max(0, space_twips)))
+    if separator:
+        cols.set(qn("w:sep"), "1")
+    else:
+        cols.set(qn("w:sep"), "0")
 
 
 def set_cell_width(cell: Any, width_twips: int) -> None:

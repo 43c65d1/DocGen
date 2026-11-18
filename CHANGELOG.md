@@ -6,6 +6,17 @@
 
 ## [Unreleased]
 
+### 新增（分节双栏）
+
+- `[[sections]] page.columns`：栏数 1–9；可写简写 `2`，或
+  `{ count = 2, space = "0.63cm", separator = true }`（栏间距/分隔线）。
+- 每节独立，配合 `[[sectionbreak]]` 可做「前置单栏、正文双栏」；
+  IEEE 式双栏正文不再需要生成后手工分栏。
+- 非法栏数/间距/分隔线值报 `E5003`（分节配置错误）。
+- Word COM 实测：`TextColumns.Count=2`，间距 0.63cm→17.85pt / 0.5cm→14.15pt，
+  `LineBetween` 随配置 true/false。
+- 新增 `tests/test_section_columns.py`（8 项）。
+
 ### 新增（表题同页 / 表格行不跨页）
 
 - 表题写在表格**上方**且 `kind=table` 时，题注段落自动 `keepNext`，与表格绑在同一页；

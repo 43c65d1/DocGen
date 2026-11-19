@@ -499,9 +499,11 @@ row_lines = true          # 或 row_lines = "dashed"
 
 | 字段 | 默认 | 说明 |
 |---|---|---|
-| `page.size` | `A4` | `A4` / `A3` / `A5` / `Letter` / `Legal` |
+| `page.size` | `A4` | `A4` / `A3` / `A5` / **B5** / `Letter` / `Legal` |
 | `page.width` / `page.height` | — | 自定义尺寸（cm），覆盖 size |
 | `page.margin.top/bottom/left/right` | 母版 | 单位 cm |
+| `page.orientation` | `portrait` | `portrait` / `landscape`（横向；自动交换 size 宽高） |
+| `page.gutter` | `0` | 装订线，单位 cm（写到 `w:pgMar/@w:gutter`） |
 | `page.columns` | `1` | 栏数：`2`，或 `{ count = 2, space = "0.63cm", separator = true }`；每节独立 |
 | `numbering.format` | 无 | `decimal` / `upperRoman` / `lowerRoman` / `upperLetter` / `lowerLetter` |
 | `numbering.start` | 无 | 重启页码（1 起） |

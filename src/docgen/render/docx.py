@@ -29,6 +29,7 @@ from ..ir import (
     BlockQuote,
     Break,
     CaptionList,
+    CellBorder,
     Cite,
     Code,
     CodeBlock,
@@ -1062,6 +1063,10 @@ def _render_table(state: _RenderState, block: Table) -> None:
             cell = table.cell(row_index, column_index)
             drop_empty_runs(cell.paragraphs[0])
             nodes = _cell_nodes(block, row_index, column_index)
+            border_node = next((node for node in nodes if isinstance(node, CellBorder)), None)
+            if border_node is not None:
+                _apply_cell_border_marker(cell, border_node)
+                nodes = [node for node in nodes if not isinstance(node, CellBorder)]
             if aux_row:
                 nodes = [node for node in nodes if not isinstance(node, AuxLine)]
                 # 标记后面的空格不是内容：「[[aux]] 合计」应渲染成「合计」
@@ -1083,7 +1088,7 @@ def _render_table(state: _RenderState, block: Table) -> None:
             elif nodes:
                 # 有行内 IR 就渲染它：单元格里的粗体/代码/公式/链接都要保留
                 _render_inlines(state, cell.paragraphs[0], nodes, None)
-            elif aux_row:
+            elif aux_row or border_node is not None:
                 # 这一格只剩 [[aux]] 标记：不渲染占位文字
                 pass
             else:
@@ -1203,6 +1208,59 @@ def _render_diagonal_cell(
         second.add_run(node.lower)
 
 
+_CELL_BORDER_EDGES = {"top", "left", "bottom", "right"}
+_CELL_BORDER_STYLES = {"single", "double", "dashed", "dotted", "none"}
+
+
+def _apply_cell_border_blocks(cell: Any, blocks: list[BlockNode]) -> None:
+    """结构化表格：从单元格块里的 ``[[border:...]]`` 提取并应用。"""
+    for block in blocks:
+        if isinstance(block, Paragraph):
+            for node in block.content:
+                if isinstance(node, CellBorder):
+                    _apply_cell_border_marker(cell, node)
+
+
+def _apply_cell_border_marker(cell: Any, node: CellBorder) -> None:
+    """给单元格逐边写 ``w:tcBorders``；标记本身不渲染文字。"""
+    edges = (
+        ["top", "left", "bottom", "right"]
+        if "all" in node.edges
+        else [edge.lower() for edge in node.edges]
+    )
+    for edge in edges:
+        if edge not in _CELL_BORDER_EDGES:
+            raise DocGenError(
+                E_CONFIG,
+                f"[[border:...]] 边名不支持: {edge!r}（可用 all / top,left,bottom,right）",
+            )
+    style = node.style.strip().lower()
+    if style not in _CELL_BORDER_STYLES:
+        raise DocGenError(
+            E_CONFIG,
+            f"[[border:...]] style 不支持: {node.style!r}（可用 single/double/dashed/dotted/none）",
+        )
+    points = _line_points(node.size, "border size")
+    sz = str(max(2, min(96, round(points * 8))))
+    color = node.color.strip()
+    if color.lower() in ("", "auto"):
+        color = "auto"
+    else:
+        if not re.fullmatch(r"#?[0-9A-Fa-f]{6}", color):
+            raise DocGenError(
+                E_CONFIG, f"[[border:...]] color 需要 6 位十六进制或 auto: {node.color!r}"
+            )
+        color = color.lstrip("#").upper()
+    try:
+        space = str(int(float(node.space)))
+    except ValueError:
+        raise DocGenError(
+            E_CONFIG, f"[[border:...]] space 需要数字（磅）: {node.space!r}"
+        ) from None
+    for edge in edges:
+        set_cell_border(cell, edge, val=style, sz=sz, color=color, space=space)
+
+
 def _cell_nodes(block: Table, row: int, column: int) -> list[InlineNode]:
     """取单元格的行内 IR；没有则返回空列表（调用方回退纯文本）。"""
     if row < len(block.cell_nodes) and column < len(block.cell_nodes[row]):
@@ -1260,6 +1318,7 @@ def _render_cell_table(state: _RenderState, block: Table) -> None:
             else:
                 cell = table.cell(row_index, column_index)
             drop_empty_runs(cell.paragraphs[0])
+            _apply_cell_border_blocks(cell, cell_spec.blocks)
             _write_cell_content(state, cell, cell_spec)
             if valign:
                 set_cell_vertical_alignment(cell, valign)

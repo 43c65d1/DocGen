@@ -17,6 +17,7 @@ __all__ = [
     "BlockQuote",
     "Break",
     "CaptionList",
+    "CellBorder",
     "Cite",
     "Code",
     "CodeBlock",
@@ -126,6 +127,21 @@ class DiagonalHeader(Inline):
 
 
 @dataclass(frozen=True, slots=True)
+class CellBorder(Inline):
+    """``[[border:all]]`` / ``[[border:top,bottom style=double size=1.5pt]]``。
+
+    写在**表格单元格**里，给该单元格逐边加边框；标记本身不渲染文字。
+    ``edges`` 支持 ``all`` 或 ``top,left,bottom,right`` 组合。
+    """
+
+    edges: tuple[str, ...] = ("all",)
+    style: str = "single"
+    size: str = "0.5pt"
+    color: str = "auto"
+    space: str = "0"
+
+
+@dataclass(frozen=True, slots=True)
 class AuxLine(Inline):
     """``[[aux]]``：给**表格当前行**上方加一条辅助横线（三线表的「合计线」）。
 
@@ -164,6 +180,7 @@ InlineNode = (
     | Footnote
     | DiagonalHeader
     | AuxLine
+    | CellBorder
     | Cite
 )
 

@@ -6,6 +6,17 @@
 
 ## [Unreleased]
 
+### 新增（逐单元格边框）
+
+- 表格单元格内标记 `[[border:all]]` / `[[border:top,bottom style=double size=1.5pt color=FF0000]]`：
+  给该单元格逐边写 `w:tcBorders`，标记本身不渲染文字；
+- 边名支持 `all` 或 `top/left/bottom/right` 组合；线型
+  `single/double/dashed/dotted/none`；颜色 6 位十六进制或 `auto`；
+- 普通表格与合并单元格表格两条路径都生效；非法值报 `E5001`；
+- Word COM 实测：`all style=double size=1.5pt color=FF0000` → 上边框
+  LineStyle=Double、宽度 1.5pt、红色；指定 `top,bottom` 时左右为 None。
+- 新增 `tests/test_cell_borders.py`（8 项）；LIMITATIONS B15 全部解决并移除。
+
 ### 新增（表格单元格内边距）
 
 - `[table] cell_margin`：表格级 `w:tblCellMar`，四边统一（如 `"0.1cm"`）；

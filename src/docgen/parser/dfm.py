@@ -21,6 +21,7 @@ from ..ir import (
     BlockQuote,
     Break,
     CaptionList,
+    CellBorder,
     Cite,
     Code,
     CodeBlock,
@@ -130,6 +131,27 @@ def _inline_to_ir(tokens: list[Token]) -> list[InlineNode]:
             stack[-1].append(DiagonalHeader(upper=upper.strip(), lower=lower.strip()))
         elif tok.type == "dfm_aux":
             stack[-1].append(AuxLine())
+        elif tok.type == "dfm_border":
+            pieces = tok.content.split()
+            edges = (
+                tuple(part.strip().lower() for part in pieces[0].split(",") if part.strip())
+                if pieces
+                else ("all",)
+            )
+            attrs: dict[str, str] = {}
+            for piece in pieces[1:]:
+                key, _, value = piece.partition("=")
+                if key.strip():
+                    attrs[key.strip().lower()] = value.strip()
+            stack[-1].append(
+                CellBorder(
+                    edges=edges or ("all",),
+                    style=attrs.get("style", "single"),
+                    size=attrs.get("size", "0.5pt"),
+                    color=attrs.get("color", "auto"),
+                    space=attrs.get("space", "0"),
+                )
+            )
         elif tok.type == "dfm_cite":
             keys = tuple(part.strip() for part in tok.content.split(",") if part.strip())
             stack[-1].append(Cite(keys=keys))

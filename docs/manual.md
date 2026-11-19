@@ -213,6 +213,19 @@ alignment = "center"
 | `header_bold` | `true` | 表头加粗开关（`false` = 表头与正文同粗） |
 | `[table.text]` | 无 | 单元格文字格式（见下）：`font.*` / `line_spacing` / `space_before` / `space_after` |
 
+**逐单元格边框**：在单元格里写标记，给该格单独加边框（标记不渲染文字）：
+
+```markdown
+| 项目 | 数值 |
+| --- | --- |
+| [[border:all style=double size=1.5pt color=FF0000]] 重点 | 10 |
+| 普通 | [[border:top,bottom]] 20 |
+```
+
+边名：`all` 或 `top,left,bottom,right` 组合；`style` 支持
+`single/double/dashed/dotted/none`；`size` 如 `1.5pt`；`color` 6 位十六进制或 `auto`。
+非法边名/线型/颜色/尺寸报 `E5001`。
+
 表题写在表格**上方**且标 `kind=table` 时，题注段自动 `keepNext`，与表格同页；
 表格行默认全部 `cantSplit`（行内不跨页，`rows_keep_together = false` 可关）。
 
@@ -301,9 +314,8 @@ row_lines = true          # 或 row_lines = "dashed"
 | `[table] space_before` | 表格**前**一段的段后距 | 表格与上文隔开 |
 | `[table] space_after` | 表格**后**一段的段前距 | 表格与下文隔开 |
 
-**不支持**：行高（`trHeight`）、列宽按厘米（只有相对比例）、逐单元格边框
-（斜线除外）、单元格内多段落（GFM 单元格只有行内内容）、合并单元格的
-DFM 语法（IR 支持 `colspan/rowspan`，但解析器不产生）。
+**边界**：GFM 单元格只有行内内容（块级列表/公式块/图片不能进单元格）；
+行高、厘米列宽、逐单元格边框、合并语法均已支持。
 
 ## 8. 图片：`[image]`
 

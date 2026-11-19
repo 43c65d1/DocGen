@@ -218,6 +218,7 @@ logfile = ""
 | `[[cite:key1,key2]]` | 文献引用（顺序编码制，需文献库 `--refs` / `[bibliography] file`） |
 | `[[bibliography]]` | 参考文献表位置（不写则自动追加到文末） |
 | `[[list:figures]]` / `[[list:tables]]` | 插图清单 / 附表清单（题注自动生成，PAGEREF 页码） |
+| `[[border:all]]` / `[[border:top,bottom style=double size=1.5pt]]` | 逐单元格边框（表格单元格内，标记不渲染） |
 | `\\begin{subfigures}` … `\\begin{subfigure #fig:a}` | 子图并排 + 子题注；总图题仍用 figure caption |
 | `` `code` `` | 行内代码（Consolas + 灰底） |
 | `$x^2$` / `$$…$$` | 行内 / 块级公式 |

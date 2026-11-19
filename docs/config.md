@@ -167,6 +167,7 @@ header_repeat = true            # 跨页重复表头（默认）
 header_keep_with_body = true    # 表头与首行同页，防止「表头孤行」（默认）
 rows_keep_together = true        # 所有表格行不跨页（默认；false = 允许行内断行）
 cell_margin = "0.1cm"            # 单元格内边距（四边统一；可加 cell_margin_left 等逐边覆盖）
+col_widths = "auto"             # 相对比例 / 绝对宽度 / auto（按内容估算；可混 ["3cm","auto"]）
 decimal_align = [2]             # 数值列（1 起）：小数点/个位对齐，可多列
 ```
 

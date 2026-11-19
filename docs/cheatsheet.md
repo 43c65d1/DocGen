@@ -107,7 +107,7 @@ logfile = ""
 | `header_keep_with_body` | `true` | 表头与首行同页（防「表头孤行」） |
 | `rows_keep_together` | `true` | 所有行不跨页（`cantSplit`） |
 | `cell_margin` / `cell_margin_*` | 无 | 单元格内边距（四边统一 / 逐边覆盖） |
-| `col_widths` | 均分 | `[3, 2, 5]`（比例）/ `["3cm", "5cm"]`（绝对） |
+| `col_widths` | 均分 | `[3,2,5]` / `["3cm","5cm"]` / `"auto"`（可混 `["3cm","auto"]`） |
 | `row_height` / `header_row_height` | 无 | `"0.8cm"`；`row_height_rule = "atLeast"` / `"exact"` |
 | `cell_vertical_align` | 无 | `"center"` / `"top"` / `"bottom"` |
 | `line_style` | `single` | `double` / `dashed` / `dotted` |
@@ -219,6 +219,7 @@ logfile = ""
 | `[[bibliography]]` | 参考文献表位置（不写则自动追加到文末） |
 | `[[list:figures]]` / `[[list:tables]]` | 插图清单 / 附表清单（题注自动生成，PAGEREF 页码） |
 | `[[border:all]]` / `[[border:top,bottom style=double size=1.5pt]]` | 逐单元格边框（表格单元格内，标记不渲染） |
+| `[[row-height:1.2cm]]` | 只设置当前行行高（单元格内，标记不渲染） |
 | `\\begin{subfigures}` … `\\begin{subfigure #fig:a}` | 子图并排 + 子题注；总图题仍用 figure caption |
 | `` `code` `` | 行内代码（Consolas + 灰底） |
 | `$x^2$` / `$$…$$` | 行内 / 块级公式 |

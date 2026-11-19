@@ -6,6 +6,18 @@
 
 ## [Unreleased]
 
+### 新增（表格自动列宽 / 单行行高）
+
+- `col_widths = "auto"`：构建期按内容估算列宽（CJK 记 2、ASCII 记 1），
+  短列自动变窄；`col_widths = ["3cm", "auto"]` 支持绝对宽度与 auto 混用。
+  不交给 Word autofit，结果确定、可测试。
+- `[[row-height:1.2cm]]`：写在任意单元格里，只设置当前行行高；标记不渲染文字。
+  全局/表头仍用 `row_height` / `header_row_height`。
+- 非法混合（数字比例 + auto）、无法识别的宽度报 `E5001`。
+- Word COM 实测：auto 两列 36pt / 396pt（短列窄）；行高标记只作用于目标行
+  （row2 34pt = 1.2cm，row1 未设）。
+- 新增 `tests/test_table_auto_width.py`（5 项）。
+
 ### 新增（逐单元格边框）
 
 - 表格单元格内标记 `[[border:all]]` / `[[border:top,bottom style=double size=1.5pt color=FF0000]]`：

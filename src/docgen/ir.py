@@ -36,6 +36,7 @@ __all__ = [
     "PageBreak",
     "Paragraph",
     "Ref",
+    "RowHeight",
     "SectionBreak",
     "Styled",
     "Table",
@@ -127,6 +128,13 @@ class DiagonalHeader(Inline):
 
 
 @dataclass(frozen=True, slots=True)
+class RowHeight(Inline):
+    """``[[row-height:1.2cm]]``：给表格当前行设置行高（标记不渲染文字）。"""
+
+    height: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class CellBorder(Inline):
     """``[[border:all]]`` / ``[[border:top,bottom style=double size=1.5pt]]``。
 
@@ -181,6 +189,7 @@ InlineNode = (
     | DiagonalHeader
     | AuxLine
     | CellBorder
+    | RowHeight
     | Cite
 )
 

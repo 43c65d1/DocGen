@@ -48,6 +48,7 @@ from ..ir import (
     PageBreak,
     Paragraph,
     Ref,
+    RowHeight,
     SectionBreak,
     Styled,
     Table,
@@ -1046,7 +1047,7 @@ def _render_table(state: _RenderState, block: Table) -> None:
     if properties.get("borders", "grid") == "grid":
         table.style = "Table Grid"
 
-    widths = _column_widths(properties, columns, state)
+    widths = _column_widths(properties, columns, state, block)
     set_table_width(table, widths)
     aux_spec = _three_line_aux_spec(properties)
     aux_style = str(properties.get("line_style", "single"))
@@ -1108,6 +1109,7 @@ def _render_table(state: _RenderState, block: Table) -> None:
                 set_cell_border(cell, "top", val=aux_style, space="0", **aux_spec)
 
     _apply_row_heights(table, properties)
+    _apply_row_height_markers(table, block, properties)
     _apply_table_header_behavior(table, properties)
     _apply_table_row_splitting(table, properties)
     _apply_cell_margins(table, properties)
@@ -1302,7 +1304,7 @@ def _render_cell_table(state: _RenderState, block: Table) -> None:
     if properties.get("borders", "grid") == "grid":
         table.style = "Table Grid"
 
-    widths = _column_widths(properties, columns, state)
+    widths = _column_widths(properties, columns, state, block)
     set_table_width(table, widths)
     valign = str(properties.get("cell_vertical_align", "") or "")
     for row_index, row in enumerate(rows):
@@ -1325,6 +1327,7 @@ def _render_cell_table(state: _RenderState, block: Table) -> None:
             _apply_table_text(state, cell, properties, header=row_index == 0)
 
     _apply_row_heights(table, properties)
+    _apply_row_height_markers(table, block, properties)
     _apply_table_header_behavior(table, properties)
     _apply_table_row_splitting(table, properties)
     _apply_cell_margins(table, properties)
@@ -1414,45 +1417,145 @@ def _height_twips(value: Any, label: str) -> int | None:
         return None
 
 
-def _column_widths(properties: dict[str, Any], columns: int, state: _RenderState) -> list[int]:
-    """列宽（twips）：``[table] col_widths`` 给出相对比例；否则平均分。
+def _column_widths(
+    properties: dict[str, Any], columns: int, state: _RenderState, block: Table
+) -> list[int]:
+    """列宽（twips）：``col_widths`` 数字比例 / 绝对宽度 / ``"auto"`` 按内容估算。
 
-    总和**必须**落在正文可用宽度内（页面宽 - 左右页边距），否则表格会超出页面——
-    Word 与 LibreOffice 的表现不同，容易在渲染核对时才发现。
+    ``auto`` 的计算是**构建期**做的（CJK 按 2 个宽度单位、ASCII 1 个），
+    结果确定、可测试；不交给 Word 的 autofit（Word/WPS/LibreOffice 结果不一致）。
+    列表里可以混写绝对宽度与 ``"auto"``：绝对列固定，其余按内容权重分剩余宽度。
     """
     total = page_content_width(state.document)
-    ratios = properties.get("col_widths")
-    if (
-        isinstance(ratios, list)
-        and len(ratios) == columns
-        and all(isinstance(item, (int, float)) and item > 0 for item in ratios)
-    ):
-        weight_sum = float(sum(ratios))
-        widths = [int(total * float(item) / weight_sum) for item in ratios]
-        # 取整误差可能让总和略超，最后一列吸收掉
+    spec = properties.get("col_widths")
+    if spec == "auto":
+        return _allocate_auto_widths(total, _column_content_weights(block, columns))
+    if not isinstance(spec, list) or len(spec) != columns:
+        return [total // columns] * columns
+
+    if all(isinstance(item, (int, float)) and item > 0 for item in spec):
+        weight_sum = float(sum(spec))
+        widths = [int(total * float(item) / weight_sum) for item in spec]
         widths[-1] = max(1, widths[-1] - (sum(widths) - total))
         return widths
-    if isinstance(ratios, list) and len(ratios) == columns:
-        # 绝对宽度：[table] col_widths = ["3cm", "5cm"]
-        if not all(isinstance(item, str) for item in ratios):
+
+    has_auto = any(item == "auto" for item in spec)
+    if has_auto:
+        if any(not isinstance(item, str) for item in spec):
             raise DocGenError(
                 E_CONFIG,
-                '[table] col_widths 需全部是相对比例（数字）或全部带单位（如 "3cm"），不能混用',
+                '[table] col_widths 混合 auto 时，其余列必须是带单位的绝对宽度（如 "3cm"）',
             )
-        absolute = [_height_twips(item, "col_widths") for item in ratios]
+        fixed: list[int | None] = []
+        for item in spec:
+            if item == "auto":
+                fixed.append(None)
+            else:
+                twips = _height_twips(item, "col_widths")
+                if twips is None:
+                    raise DocGenError(
+                        E_CONFIG, f'[table] col_widths 无法识别: {item!r}（auto 或 "3cm"）'
+                    )
+                fixed.append(twips)
+        remaining = total - sum(value or 0 for value in fixed)
+        if remaining <= 0:
+            raise DocGenError(E_CONFIG, "[table] col_widths 的固定列已占满表格宽度")
+        weights = _column_content_weights(block, columns)
+        auto_weights = [weights[i] for i in range(columns) if fixed[i] is None]
+        auto_widths = _allocate_auto_widths(remaining, auto_weights)
+        iterator = iter(auto_widths)
+        widths = [next(iterator) if value is None else value for value in fixed]
+        widths[-1] = max(1, widths[-1] - (sum(widths) - total))
+        return [int(value) for value in widths]
+
+    if all(isinstance(item, str) for item in spec):
+        absolute = [_height_twips(item, "col_widths") for item in spec]
         if all(item is not None for item in absolute):
             return [int(item or 0) for item in absolute]
         raise DocGenError(
             E_CONFIG,
-            '[table] col_widths 需全部是相对比例（数字）或全部带单位（如 "3cm"），不能混用',
+            '[table] col_widths 需全部是相对比例（数字）、带单位宽度（如 "3cm"）或 "auto"',
         )
-    return [total // columns] * columns
+    raise DocGenError(
+        E_CONFIG,
+        '[table] col_widths 需全部是相对比例（数字）、带单位宽度（如 "3cm"）或 "auto"',
+    )
+
+
+def _column_content_weights(block: Table, columns: int) -> list[int]:
+    """每列内容宽度权重：最宽单元格的显示宽度（CJK=2、ASCII=1），至少 1。"""
+    weights = [1] * columns
+    for row_index in range(len(block.cell_nodes)):
+        for column_index in range(min(columns, len(block.cell_nodes[row_index]))):
+            nodes = block.cell_nodes[row_index][column_index]
+            text = "".join(_plain_text(node) for node in nodes)
+            if not text and row_index < len(block.rows):
+                row = block.rows[row_index]
+                text = row[column_index] if column_index < len(row) else ""
+            if not text and block.cells and row_index < len(block.cells):
+                cells = block.cells[row_index]
+                if column_index < len(cells):
+                    text = _cell_blocks_text(cells[column_index].blocks)
+            units = sum(2 if ord(char) > 127 else 1 for char in text)
+            weights[column_index] = max(weights[column_index], min(units, 80))
+    return weights
+
+
+def _cell_blocks_text(blocks: list[BlockNode]) -> str:
+    parts: list[str] = []
+    for block in blocks:
+        if isinstance(block, (Paragraph, Heading)):
+            parts.append("".join(_plain_text(node) for node in block.content))
+    return " ".join(parts)
+
+
+def _allocate_auto_widths(total: int, weights: list[int]) -> list[int]:
+    """按权重分配总宽度；最后一份吸收取整误差。"""
+    if not weights:
+        return []
+    safe = [max(1, weight) for weight in weights]
+    weight_sum = sum(safe)
+    widths = [max(1, int(total * weight / weight_sum)) for weight in safe]
+    widths[-1] = max(1, widths[-1] - (sum(widths) - total))
+    return widths
 
 
 def _column_alignment(block: Table, index: int) -> str:
     if index < len(block.alignments):
         return block.alignments[index]
     return ""
+
+
+def _apply_row_height_markers(table: Any, block: Table, properties: dict[str, Any]) -> None:
+    """``[[row-height:1.2cm]]``：按行覆盖全局 ``row_height``。"""
+    rule = str(properties.get("row_height_rule", "atLeast"))
+    for row_index in range(len(table.rows)):
+        height = ""
+        if block.cells and row_index < len(block.cells):
+            for cell in block.cells[row_index]:
+                for child in cell.blocks:
+                    if isinstance(child, Paragraph):
+                        for node in child.content:
+                            if isinstance(node, RowHeight) and node.height:
+                                height = node.height
+                                break
+                    if height:
+                        break
+                if height:
+                    break
+        if not height and row_index < len(block.cell_nodes):
+            for nodes in block.cell_nodes[row_index]:
+                for node in nodes:
+                    if isinstance(node, RowHeight) and node.height:
+                        height = node.height
+                        break
+                if height:
+                    break
+        if not height:
+            continue
+        twips = _height_twips(height, "row-height")
+        if twips is not None:
+            set_row_height(table.rows[row_index], twips, rule=rule)
 
 
 def _apply_row_heights(table: Any, properties: dict[str, Any]) -> None:

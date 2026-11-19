@@ -38,6 +38,7 @@ from ..ir import (
     PageBreak,
     Paragraph,
     Ref,
+    RowHeight,
     SectionBreak,
     Styled,
     Table,
@@ -131,6 +132,8 @@ def _inline_to_ir(tokens: list[Token]) -> list[InlineNode]:
             stack[-1].append(DiagonalHeader(upper=upper.strip(), lower=lower.strip()))
         elif tok.type == "dfm_aux":
             stack[-1].append(AuxLine())
+        elif tok.type == "dfm_rowheight":
+            stack[-1].append(RowHeight(height=tok.content.strip()))
         elif tok.type == "dfm_border":
             pieces = tok.content.split()
             edges = (

@@ -40,7 +40,7 @@ def rule_wiki(state: StateInline, silent: bool) -> bool:
     inner = src[state.pos + 2 : end]
     keywords = ("pagebreak", "toc", "sectionbreak", "diag", "aux", "bibliography")
     if inner not in keywords and not inner.startswith(
-        ("img:", "ref:", "fn:", "diag:", "cite:", "merge:", "list:", "border:")
+        ("img:", "ref:", "fn:", "diag:", "cite:", "merge:", "list:", "border:", "row-height:")
     ):
         return False
 
@@ -74,6 +74,9 @@ def rule_wiki(state: StateInline, silent: bool) -> bool:
     elif inner.startswith("border:"):
         token = Token("dfm_border", "", 0)
         token.content = inner[len("border:") :]
+    elif inner.startswith("row-height:"):
+        token = Token("dfm_rowheight", "", 0)
+        token.content = inner[len("row-height:") :]
     elif inner.startswith("ref:"):
         token = Token("dfm_ref", "", 0)
         token.content = inner[len("ref:") :]

@@ -6,6 +6,16 @@
 
 ## [Unreleased]
 
+### 新增（B5 / 横向 / 装订线）
+
+- `page.size` 新增 `B5`（17.6 × 25.0 cm）；
+- `page.orientation = "landscape"`：横向；按 size 自动交换宽高，同时写
+  `w:pgSz/@w:orient`；显式 `page.width/height` 时不再交换（作者给的尺寸就是最终值）；
+- `page.gutter = 0.5`：装订线（cm），写 `w:pgMar/@w:gutter`；
+- 非法方向 / 装订线值报 `E5003`（分节配置错误）。
+- Word COM 实测：B5 横向 708.65 × 498.9pt、Orientation=Landscape、Gutter 14.15pt。
+- 新增 `tests/test_section_page.py`（7 项）。
+
 ### 新增（可选 Word autofit）
 
 - `[table] autofit = true`：写 `tblLayout autofit` + `tblW auto`，列宽交给 Word 按内容算；

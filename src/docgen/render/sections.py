@@ -38,6 +38,7 @@ page_sizes: dict[str, tuple[float, float]] = {
     "A4": (21.0, 29.7),
     "A3": (29.7, 42.0),
     "A5": (14.8, 21.0),
+    "B5": (17.6, 25.0),
     "Letter": (21.59, 27.94),
     "Legal": (21.59, 35.56),
 }
@@ -136,6 +137,8 @@ class SectionController:
 
 
 def _apply_page(section: Any, spec: dict[str, Any]) -> None:
+    from .ooxml import set_section_gutter, set_section_orientation
+
     page = spec.get("page")
     page = page if isinstance(page, dict) else {}
     size = str(page.get("size", "A4"))
@@ -144,8 +147,17 @@ def _apply_page(section: Any, spec: dict[str, Any]) -> None:
         width_cm = float(page["width"])
     if "height" in page:
         height_cm = float(page["height"])
+    orientation = str(page.get("orientation", "portrait")).strip().lower()
+    if orientation not in ("portrait", "landscape"):
+        raise DocGenError(
+            E_SECTION_CONFIG,
+            f"[sections] page.orientation 不支持: {orientation!r}（portrait / landscape）",
+        )
+    if "width" not in page and "height" not in page and orientation == "landscape":
+        width_cm, height_cm = height_cm, width_cm
     section.page_width = Cm(width_cm)
     section.page_height = Cm(height_cm)
+    set_section_orientation(section, orientation)
 
     margin = page.get("margin")
     margin = margin if isinstance(margin, dict) else {}
@@ -157,6 +169,14 @@ def _apply_page(section: Any, spec: dict[str, Any]) -> None:
         section.left_margin = Cm(float(margin["left"]))
     if "right" in margin:
         section.right_margin = Cm(float(margin["right"]))
+    gutter = page.get("gutter")
+    if gutter is not None:
+        try:
+            set_section_gutter(section, int(Cm(float(gutter)).twips))
+        except (TypeError, ValueError):
+            raise DocGenError(
+                E_SECTION_CONFIG, f"[sections] page.gutter 需要数字（cm）: {gutter!r}"
+            ) from None
     _apply_columns(section, page)
 
 

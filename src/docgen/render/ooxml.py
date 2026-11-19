@@ -74,6 +74,8 @@ __all__ = [
     "set_run_shading",
     "set_run_size",
     "set_section_columns",
+    "set_section_gutter",
+    "set_section_orientation",
     "set_style_outline_level",
     "set_table_autofit",
     "set_table_borders",
@@ -939,6 +941,28 @@ def set_table_cell_margins(table: Any, margins: dict[str, int]) -> None:
             mar.append(existing)
         existing.set(qn("w:type"), "dxa")
         existing.set(qn("w:w"), str(max(0, margins[edge])))
+
+
+def set_section_orientation(section: Any, orientation: str) -> None:
+    """页面方向：``w:pgSz/@w:orient``（尺寸由调用方负责换成横向/纵向）。"""
+    from docx.oxml.ns import qn
+
+    pg_sz = section._sectPr.find(qn("w:pgSz"))
+    if pg_sz is None:
+        return
+    if orientation == "landscape":
+        pg_sz.set(qn("w:orient"), "landscape")
+    else:
+        pg_sz.attrib.pop(qn("w:orient"), None)
+
+
+def set_section_gutter(section: Any, twips: int) -> None:
+    """装订线：``w:pgMar/@w:gutter``（缇）。"""
+    from docx.oxml.ns import qn
+
+    pg_mar = section._sectPr.find(qn("w:pgMar"))
+    if pg_mar is not None:
+        pg_mar.set(qn("w:gutter"), str(max(0, twips)))
 
 
 def set_section_columns(

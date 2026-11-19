@@ -108,6 +108,7 @@ logfile = ""
 | `rows_keep_together` | `true` | 所有行不跨页（`cantSplit`） |
 | `cell_margin` / `cell_margin_*` | 无 | 单元格内边距（四边统一 / 逐边覆盖） |
 | `col_widths` | 均分 | `[3,2,5]` / `["3cm","5cm"]` / `"auto"`（可混 `["3cm","auto"]`） |
+| `autofit` | `false` | `true` = Word autofit；与 `col_widths` 互斥 |
 | `row_height` / `header_row_height` | 无 | `"0.8cm"`；`row_height_rule = "atLeast"` / `"exact"` |
 | `cell_vertical_align` | 无 | `"center"` / `"top"` / `"bottom"` |
 | `line_style` | `single` | `double` / `dashed` / `dotted` |

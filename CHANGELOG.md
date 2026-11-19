@@ -6,6 +6,15 @@
 
 ## [Unreleased]
 
+### 新增（可选 Word autofit）
+
+- `[table] autofit = true`：写 `tblLayout autofit` + `tblW auto`，列宽交给 Word 按内容算；
+- 与 `col_widths` 互斥（同时设置报 `E5001`，避免「写了不生效」）；
+- 默认 `false`，继续用构建期宽度（`col_widths` / `"auto"`），结果确定可测试；
+- 文档明确 tradeoff：Word autofit 简单但 Word/WPS/LibreOffice 结果可能不同；
+- Word COM 实测：`AllowAutoFit=True`、`PreferredWidthType=Auto`。
+- 测试：`tests/test_table_auto_width.py` 增至 7 项。
+
 ### 新增（表格自动列宽 / 单行行高）
 
 - `col_widths = "auto"`：构建期按内容估算列宽（CJK 记 2、ASCII 记 1），

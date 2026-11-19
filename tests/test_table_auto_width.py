@@ -73,3 +73,15 @@ def test_row_height_marker_only_affects_that_row(tmp_path: Path) -> None:
     heights = re.findall(r'<w:trHeight w:val="(\d+)" w:hRule="([^"]+)"/>', document)
     assert heights == [("680", "atLeast")]
     assert "row-height" not in document
+
+
+def test_word_autofit_layout(tmp_path: Path) -> None:
+    document = _document(tmp_path, "\n[table]\nautofit = true\n")
+    assert 'w:type="auto"' in document
+    assert 'w:type="autofit"' in document
+
+
+def test_autofit_rejects_explicit_col_widths(tmp_path: Path) -> None:
+    with pytest.raises(DocGenError) as caught:
+        _document(tmp_path, '\n[table]\nautofit = true\ncol_widths = "auto"\n')
+    assert caught.value.code == "E5001"

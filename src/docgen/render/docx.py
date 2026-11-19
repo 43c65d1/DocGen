@@ -92,6 +92,7 @@ from .ooxml import (
     set_row_cant_split,
     set_row_height,
     set_run_shading,
+    set_table_autofit,
     set_table_borders,
     set_table_cell_margins,
     set_table_width,
@@ -1047,8 +1048,17 @@ def _render_table(state: _RenderState, block: Table) -> None:
     if properties.get("borders", "grid") == "grid":
         table.style = "Table Grid"
 
-    widths = _column_widths(properties, columns, state, block)
-    set_table_width(table, widths)
+    autofit = _table_flag(properties, "autofit", False)
+    if autofit and properties.get("col_widths") is not None:
+        raise DocGenError(
+            E_CONFIG, "[table] autofit = true 与 col_widths 不能同时设置（列宽交给 Word）"
+        )
+    if autofit:
+        widths = None
+        set_table_autofit(table)
+    else:
+        widths = _column_widths(properties, columns, state, block)
+        set_table_width(table, widths)
     aux_spec = _three_line_aux_spec(properties)
     aux_style = str(properties.get("line_style", "single"))
     decimal_columns = _decimal_columns(properties, columns)
@@ -1079,7 +1089,7 @@ def _render_table(state: _RenderState, block: Table) -> None:
             if row_index > 0 and diagonal is None and column_index in decimal_columns:
                 # 数值列：按小数点/个位对齐（表头不参与，保持原对齐）
                 plain = "".join(node.content for node in nodes if isinstance(node, Text)).strip()
-                if plain:
+                if plain and widths is not None:
                     aligned = _render_decimal_cell(cell.paragraphs[0], plain, widths[column_index])
             if aligned:
                 pass
@@ -1101,7 +1111,10 @@ def _render_table(state: _RenderState, block: Table) -> None:
                 for run in cell.paragraphs[0].runs:
                     run.bold = True
             _apply_cell_format(
-                cell, widths[column_index], _column_alignment(block, column_index), valign
+                cell,
+                widths[column_index] if widths is not None else None,
+                _column_alignment(block, column_index),
+                valign,
             )
             _apply_table_text(state, cell, properties, header=row_index == 0)
         if aux_row:
@@ -1304,8 +1317,17 @@ def _render_cell_table(state: _RenderState, block: Table) -> None:
     if properties.get("borders", "grid") == "grid":
         table.style = "Table Grid"
 
-    widths = _column_widths(properties, columns, state, block)
-    set_table_width(table, widths)
+    autofit = _table_flag(properties, "autofit", False)
+    if autofit and properties.get("col_widths") is not None:
+        raise DocGenError(
+            E_CONFIG, "[table] autofit = true 与 col_widths 不能同时设置（列宽交给 Word）"
+        )
+    if autofit:
+        widths = None
+        set_table_autofit(table)
+    else:
+        widths = _column_widths(properties, columns, state, block)
+        set_table_width(table, widths)
     valign = str(properties.get("cell_vertical_align", "") or "")
     for row_index, row in enumerate(rows):
         for column_index, cell_spec in enumerate(row):
@@ -1573,8 +1595,9 @@ def _apply_row_heights(table: Any, properties: dict[str, Any]) -> None:
         set_row_height(row, twips, rule=rule)
 
 
-def _apply_cell_format(cell: Any, width: int, alignment: str, valign: str = "") -> None:
-    set_cell_width(cell, width)
+def _apply_cell_format(cell: Any, width: int | None, alignment: str, valign: str = "") -> None:
+    if width is not None:
+        set_cell_width(cell, width)
     if alignment:
         set_cell_alignment(cell, alignment)
     if valign:

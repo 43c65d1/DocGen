@@ -75,6 +75,7 @@ __all__ = [
     "set_run_size",
     "set_section_columns",
     "set_style_outline_level",
+    "set_table_autofit",
     "set_table_borders",
     "set_table_cell_margins",
     "set_table_cell_width",
@@ -978,6 +979,17 @@ def set_cell_alignment(cell: Any, alignment: str) -> None:
     """列对齐（GFM 分隔行）：给单元格里所有段落写 ``w:jc``。"""
     for paragraph in cell.paragraphs:
         insert_child(paragraph._p.get_or_add_pPr(), "w:jc", **{"w:val": alignment})
+
+
+def set_table_autofit(table: Any) -> None:
+    """交给 Word 自动调整列宽：``tblW auto`` + ``tblLayout autofit``。
+
+    与 :func:`set_table_width` 的 fixed 布局互斥；Word/WPS/LibreOffice 的
+    autofit 结果可能不同，需要确定性排版时用 ``col_widths``。
+    """
+    tbl_pr = table._tbl.tblPr
+    insert_child(tbl_pr, "w:tblW", **{"w:w": "0", "w:type": "auto"})
+    insert_child(tbl_pr, "w:tblLayout", **{"w:type": "autofit"})
 
 
 def set_table_width(table: Any, widths: list[int]) -> None:

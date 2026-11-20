@@ -132,6 +132,7 @@ def _extend_default_template(document: Any, config: Config | None = None) -> Non
     drop_styles_with_effects(document)
     add_toc_styles(document)
     _ensure_caption_styles(document)
+    _neutralise_heading_colours(document)
     ensure_font_table(document)
     if config is None:
         enabled: bool = True
@@ -159,6 +160,29 @@ def _drop_macro_styles(document: Any) -> list[str]:
             style.element.getparent().remove(style.element)
             removed.append(style.name)
     return removed
+
+
+def _neutralise_heading_colours(document: Any) -> None:
+    """清掉母版 ``Heading 1..9`` 的主题色：默认继承正文颜色（黑）。
+
+    python-docx 默认母版的标题是「主题蓝 365F91 / 4F81BD」，而中文学位论文与
+    正式报告的规范都是黑体或宋体加黑——**彩色标题是默认母版漏出来的**，
+    不是排版要求。这里只删颜色：字号 / 加粗 / 段距仍是可用默认值，
+    ``[styles.headingN] font.color`` 照样覆盖（config 是唯一真源）。
+
+    只在引擎默认母版路径调用；自定义母版保留作者自己的配色。
+    """
+    from docx.oxml.ns import qn
+
+    for level in range(1, 10):
+        style = _style_or_none(document, f"Heading{level}")
+        if style is None:
+            continue
+        rpr = style.element.find(qn("w:rPr"))
+        if rpr is None:
+            continue
+        for element in rpr.findall(qn("w:color")):
+            rpr.remove(element)
 
 
 def _ensure_caption_styles(document: Any) -> None:

@@ -4,7 +4,31 @@
 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循
 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+### 修复（标题默认颜色）
+
+- 默认母版（python-docx）的标题带**主题蓝** `365F91` / `4F81BD`，此前会原样漏到产物里；
+  现在清掉标题样式里的颜色，默认**继承正文颜色（黑）**——中文学位论文与正式报告的
+  标题都是黑体/宋体加黑，彩色标题不合规；
+- 只清颜色：字号（14/13/11pt）、加粗、段距仍是可用默认值，
+  `[styles.headingN] font.color` 照样覆盖；自定义母版保留作者配色；
+- Word 实测：默认文档标题 `Font.Color` 为黑色，样例标题不再显示蓝色。
+- 新增 `tests/test_heading_defaults.py`（4 项）。
+
 ## [Unreleased]
+### 新增（浮动图片 / 文字环绕）
+
+- `[[img:path wrap=square]]`：图片从「独占一行的块级对象」变成**浮动图片**
+  （`wp:anchor`），文字按环绕方式绕排；`wrap` 支持 `square`（四周型）、
+  `top-bottom`（上下型）、`behind`（衬于文字下方）、`front`（浮于文字上方）；
+- `align` 控制水平位置（相对页边距），`dist` 设四周留白、`vpos` 设相对段落的
+  垂直偏移（都带单位）；`[image] wrap / dist / vpos` 可设全局默认，标记属性优先；
+- `anchor` 子元素按 schema 顺序生成（simplePos → positionH → positionV → extent →
+  effectExtent → wrap → docPr → graphic），叠放次序逐图递增；
+- 非法 `wrap` / `dist` / `vpos` 报 `E5001`；默认（不写 `wrap`）仍是 inline，行为不变；
+- 实测：`wrap=square align=right width=2cm` → `wp:anchor` + `wp:wrapSquare`，
+  `distT=114300`、`extent cx=720000`；示例文档通过官方 WML schema 校验；
+- 已知限制：「紧密型 / 穿越型」的多边形环绕未实现（用 `square`）。
+- 新增 `tests/test_floating_images.py`（12 项）。
 
 ### 新增（浮动图片 / 文字环绕）
 

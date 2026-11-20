@@ -136,6 +136,8 @@ logfile = ""
 | `width` | 原始尺寸 | `"6cm"` |
 | `align` | 无（左） | `"center"` |
 | `space_before` / `space_after` | 无 | `"6pt"` |
+| `wrap` | 无（inline） | `"square"` / `"top-bottom"` / `"behind"` / `"front"` |
+| `dist` / `vpos` | `0.32cm` / `0` | 浮动图片四周留白、垂直偏移 |
 
 ### `[[sections]]`（数组，每项一节）
 | 字段 | 默认 | 例 |
@@ -218,6 +220,7 @@ logfile = ""
 | 标记 | 作用 |
 |---|---|
 | `[[img:path width=3cm align=center]]` | 图片（独占一行时是块级图） |
+| `[[img:path wrap=square align=right dist=0.3cm]]` | 浮动图片 + 文字环绕（`square`/`top-bottom`/`behind`/`front`） |
 | `[[pagebreak]]` | 分页 |
 | `[[sectionbreak]]` | 切到下一个 `[[sections]]` 配置的新节 |
 | `[[toc]]` | 目录（TOC 域；级别见 `[toc] levels`） |

@@ -355,11 +355,30 @@ row_lines = true          # 或 row_lines = "dashed"
 | `width` | 图片原始尺寸 | `"4cm"` / `"120px"` / `"2in"` |
 | `align` | 无（左对齐） | `left` / `center` / `right` |
 | `space_before` / `space_after` | 无 | 图片段落的段前/段后 |
+| `wrap` | 无（inline 独占一行） | `square` 四周型 / `top-bottom` 上下型 / `behind` 衬于文字下方 / `front` 浮于文字上方 |
+| `dist` | `0.32cm` | 浮动图片四周留白（带单位） |
+| `vpos` | `0` | 浮动图片相对所在段落的垂直偏移（可负，带单位） |
 
 单张图片可覆盖默认：`[[img:pics/a.png width=3cm align=center]]`。
 
 图片后**紧跟图题**时：图片段落自动 `keepNext`（不会图题跑到下一页）、
 图题段落 `keepLines`（图题不被拆开）。图题默认居中。
+
+### 浮动图片 / 文字环绕
+
+```markdown
+[[img:pics/a.png width=4cm wrap=square align=right dist=0.3cm vpos=0.5cm]]
+
+正文会绕在图片左侧，直到图片下沿。
+```
+
+- `wrap=square` 四周型（文字绕排）、`top-bottom` 上下型（图片独占一段高度）、
+  `behind` 衬于文字下方、`front` 浮于文字上方（后两种不绕排）；
+- `align` 是浮动图片的水平位置（相对页边距 `left` / `center` / `right`）；
+  `dist` 是四周留白，`vpos` 是相对所在段落的垂直偏移（都带单位）；
+- 锚点是图片所在的段落（通常只有图片），后续段落自动绕排；
+- `[image] wrap / dist / vpos` 可设全局默认，单张图片的标记属性优先；
+- 非法值报 `E5001`；**紧密型 / 穿越型**的多边形环绕未实现，四边环绕用 `square`。
 
 ### 子图：`\\begin{subfigures}`
 

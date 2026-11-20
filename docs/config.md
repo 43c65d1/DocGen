@@ -130,7 +130,22 @@ space_after = "0.5 line"
 | `[table] space_before` | 表格**前**一段的段后距 | 表格与上文隔开 |
 | `[table] space_after` | 表格**后**一段的段前距 | 表格与下文隔开（解决「表格底线贴正文」） |
 
-**图片**：`[image] space_before` / `space_after` 直接作用于图片所在的段落。
+### 图片：`[image]`
+
+```toml
+[image]
+width = "4cm"        # 默认宽度（标记 width= 优先）
+align = "center"     # 默认对齐；浮动图片时是水平位置
+space_before = "6pt"
+space_after = "6pt"
+wrap = ""            # 非空 = 浮动图片：square / top-bottom / behind / front
+dist = "0.32cm"      # 浮动图片四周留白
+vpos = "0"           # 浮动图片相对段落的垂直偏移（可为负）
+```
+
+`space_before` / `space_after` 直接作用于图片所在段落（表格没有段距属性，见上）。
+浮动图片的语义见 [manual.md](manual.md) 的「浮动图片 / 文字环绕」；单张图片用
+`[[img:... wrap= align= dist= vpos=]]` 覆盖。
 
 
 ### 表格文字：`[table.text]` / `header_bold`

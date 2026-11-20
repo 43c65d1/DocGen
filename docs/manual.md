@@ -62,10 +62,15 @@
 
 | 样式 | 字号 | 加粗 | 颜色 | 段前 | 缩进 |
 |---|---|---|---|---|---|
-| `heading1` | 14pt | 是 | 主题蓝 `365F91` | 24pt | `left 720` + `hanging 360` |
-| `heading2` | 13pt | 是 | 主题蓝 `4F81BD` | 10pt | 同上 |
-| `heading3` | 11pt（继承） | 是 | `4F81BD` | 10pt | 同上 |
-| `heading4`–`heading9` | 11pt（继承） | 4 是 / 5–6 否 | `4F81BD` / `243F60` | 10pt | 同上 |
+| `heading1` | 14pt | 是 | 黑色（继承正文） | 24pt | `left 720` + `hanging 360` |
+| `heading2` | 13pt | 是 | 黑色 | 10pt | 同上 |
+| `heading3` | 11pt（继承） | 是 | 黑色 | 10pt | 同上 |
+| `heading4`–`heading9` | 11pt（继承） | 4 是 / 5–6 否 | 黑色 | 10pt | 同上 |
+
+> **颜色默认黑色**：python-docx 默认母版的标题带主题蓝（`365F91` / `4F81BD`），
+> 那套颜色不是排版要求（中文学位论文与正式报告的标题都是黑体/宋体加黑），
+> 所以引擎会清掉标题样式里的颜色、让它继承正文颜色。需要彩色标题时显式写
+> `[styles.headingN] font.color`。
 
 可用字段：`font.name` / `font.latin` / `font.size` / `font.bold` / `font.italic` / `font.color` /
 `font.underline` / `font.strike` / `alignment` / `space_before` / `space_after`。
@@ -98,7 +103,7 @@
 
 - 标题只吃「对齐 + 段距」，**不会**继承正文的行距与首行缩进。
 - 标题的 `font.*` 同时写进 **run** 和 `Heading N` **样式定义**（否则 Word 里
-  「新敲一个标题」会回到母版主题蓝）。
+  「新敲一个标题」会回到母版默认值而不是 config 的值）。
 
 ## 3. 正文段落：`[styles.body]`、对齐与间距
 

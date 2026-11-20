@@ -30,21 +30,6 @@
 - 已知限制：「紧密型 / 穿越型」的多边形环绕未实现（用 `square`）。
 - 新增 `tests/test_floating_images.py`（12 项）。
 
-### 新增（浮动图片 / 文字环绕）
-
-- `[[img:path wrap=square]]`：图片从「独占一行的块级对象」变成**浮动图片**
-  （`wp:anchor`），文字按环绕方式绕排；`wrap` 支持 `square`（四周型）、
-  `top-bottom`（上下型）、`behind`（衬于文字下方）、`front`（浮于文字上方）；
-- `align` 控制水平位置（相对页边距），`dist` 设四周留白、`vpos` 设相对段落的
-  垂直偏移（都带单位）；`[image] wrap / dist / vpos` 可设全局默认，标记属性优先；
-- `anchor` 子元素按 schema 顺序生成（simplePos → positionH → positionV → extent →
-  effectExtent → wrap → docPr → graphic），叠放次序逐图递增；
-- 非法 `wrap` / `dist` / `vpos` 报 `E5001`；默认（不写 `wrap`）仍是 inline，行为不变；
-- 实测：`wrap=square align=right width=2cm` → `wp:anchor` + `wp:wrapSquare`，
-  `distT=114300`、`extent cx=720000`；示例文档通过官方 WML schema 校验；
-- 已知限制：「紧密型 / 穿越型」的多边形环绕未实现（用 `square`）。
-- 新增 `tests/test_floating_images.py`（12 项）。
-
 ### 新增（外文作者姓名缩写）
 
 - `[bibliography] western_initials = true`：西文作者自动转 GB/T 7714 的

@@ -366,7 +366,13 @@ hanging_chars = 2          # 悬挂缩进（字符数，默认 0）
 citation_superscript = false  # 正文引用上标（默认 false）
 author_truncate = 3        # 作者超过 N 名截断（默认 0 = 不截断）
 et_al = ""                 # 截断后缀；空 = 中文「等」/ 西文「et al.」
+western_initials = false   # true = 西文作者转「姓大写 + 名缩写」
 ```
+
+- **外文作者姓名**：`western_initials = true` 把西文作者转成 GB/T 7714 的
+  「姓前名后、姓大写、名缩写」：`John A. Hewitt` / `Hewitt, John A.` / `Hewitt J A`
+  都输出 `HEWITT J A`，可与 `author_truncate` 叠加（先缩写再截断）。中文姓名不动。
+  拼音姓名请写成 `Li, Ming`——`Li Ming` 按西文规则会被当成「名 Li、姓 Ming」。
 
 文献库是独立 TOML，每个条目一个 `[key]` 表：
 

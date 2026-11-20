@@ -179,6 +179,7 @@ logfile = ""
 | `citation_superscript` | `false` | 正文引用上标 |
 | `author_truncate` | `0` | 超过 N 名截断（`3` = 前 3 + 等/et al.） |
 | `et_al` | 自动 | 截断后缀；空 = 中文「等」/西文「et al.」 |
+| `western_initials` | `false` | `true` = 西文作者转「姓大写 + 名缩写」（`HEWITT J A`） |
 
 ### `[toc]`
 | 字段 | 默认 | 说明 |

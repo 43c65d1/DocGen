@@ -479,9 +479,13 @@ row_lines = true          # 或 row_lines = "dashed"
 | `citation_superscript` | `false` | 正文 `[[cite:...]]` 显示为**上标** |
 | `author_truncate` | `0` | `>0` 时作者超过 N 名截断；`3` = GB/T 常用「前 3 名」 |
 | `et_al` | 自动 | 截断后缀；不写时中文用「等」、西文用「et al.」 |
+| `western_initials` | `false` | `true` = 西文作者转「姓前名后 + 名缩写」；中文姓名不动 |
 
 - **作者截断**只对 `author = ["a", "b", …]` 数组生效（字符串作者无法安全拆分）；
   3 名以内不截断，4 名以上列前 N 名 + 后缀。
+- **外文姓名**：`western_initials = true` 时 `John A. Hewitt` / `Hewitt, John A.` /
+  `Hewitt J A` 都输出 `HEWITT J A`；与 `author_truncate` 可叠加（先缩写再截断）。
+  拼音姓名请写成 `Li, Ming`，`Li Ming` 会被当成「名 Li、姓 Ming」。
 - 悬挂缩进的数值按正文字号换算（2 字符 × 正文字号），WPS/旧版 Word 也能正确显示。
 - 条目按 GB/T 7714 顺序编码制格式化：`[J]` 期刊、`[M]` 专著、`[C]` 会议、
   `[D]` 学位论文、`[S]` 标准、`[EB/OL]` 电子资源；支持 `doi` 字段。

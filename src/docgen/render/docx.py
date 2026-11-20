@@ -2240,20 +2240,25 @@ def _render_link(
 
 
 def _apply_hyperlink_style(state: _RenderState, hyperlink: Any) -> None:
-    """超链接颜色/下划线：默认 Word 蓝 + 单下划线，可用 ``[styles.hyperlink]`` 覆盖。
+    """超链接颜色/下划线：默认**黑色（跟随正文）+ 无下划线**。
 
-    ``font.color = "auto"`` 表示不写颜色、跟随段落样式（正文黑）；``underline = false``
-    去掉下划线。只支持这两个键，别的一律忽略——超链接字体/字号跟随所在段落。
+    学位论文/正式报告的规范是「全文黑色文字」，Zotero 等工具插进来的蓝链、
+    下划线在印刷稿里都算差错，所以默认不写颜色（继承段落样式 = 正文颜色）、
+    也不加下划线；电子版想要 Word 惯例的蓝链可以显式配置
+    ``[styles.hyperlink] font.color = "0563C1"`` / ``underline = "single"``。
+
+    ``font.color = "auto"`` 表示不写颜色、跟随段落样式（正文黑）；``underline``
+    只支持这两个键，别的一律忽略——超链接字体/字号跟随所在段落。
     """
     properties = state.styles.get("hyperlink")
     properties = properties if isinstance(properties, dict) else {}
     font_raw = properties.get("font")
     font = font_raw if isinstance(font_raw, dict) else {}
-    raw_color = font.get("color", properties.get("color", properties.get("font.color", "0563C1")))
+    raw_color = font.get("color", properties.get("color", properties.get("font.color", "auto")))
     raw_underline = font.get(
-        "underline", properties.get("underline", properties.get("font.underline", True))
+        "underline", properties.get("underline", properties.get("font.underline", False))
     )
-    color = str(raw_color).strip() if raw_color is not None else "0563C1"
+    color = str(raw_color).strip() if raw_color is not None else "auto"
     if color.lower() in ("", "auto"):
         color = ""
     elif not re.fullmatch(r"#?[0-9A-Fa-f]{6}", color):

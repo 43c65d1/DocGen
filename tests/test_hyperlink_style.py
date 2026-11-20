@@ -33,8 +33,19 @@ def _hyperlink(tmp_path: Path, extra: str = "") -> str:
     return match.group(0)
 
 
-def test_default_link_blue_with_underline(tmp_path: Path) -> None:
+def test_default_link_is_black_without_underline(tmp_path: Path) -> None:
+    """默认跟随正文颜色（黑）且不加下划线——学位论文/正式报告的要求。"""
     hyperlink = _hyperlink(tmp_path)
+    assert "<w:color " not in hyperlink
+    assert "<w:u " not in hyperlink
+
+
+def test_blue_underline_can_be_restored(tmp_path: Path) -> None:
+    """电子版想要 Word 惯例的蓝链：显式配置即可。"""
+    hyperlink = _hyperlink(
+        tmp_path,
+        '\n[styles.hyperlink]\nfont.color = "0563C1"\nunderline = "single"\n',
+    )
     assert '<w:color w:val="0563C1"/>' in hyperlink
     assert '<w:u w:val="single"/>' in hyperlink
 
@@ -42,20 +53,19 @@ def test_default_link_blue_with_underline(tmp_path: Path) -> None:
 def test_custom_link_color(tmp_path: Path) -> None:
     hyperlink = _hyperlink(tmp_path, '\n[styles.hyperlink]\nfont.color = "000000"\n')
     assert '<w:color w:val="000000"/>' in hyperlink
-    assert '<w:u w:val="single"/>' in hyperlink
-
-
-def test_link_without_underline(tmp_path: Path) -> None:
-    hyperlink = _hyperlink(
-        tmp_path,
-        '\n[styles.hyperlink]\nfont.color = "000000"\nunderline = "none"\n',
-    )
-    assert '<w:color w:val="000000"/>' in hyperlink
     assert "<w:u " not in hyperlink
 
 
+def test_link_underline_can_be_enabled(tmp_path: Path) -> None:
+    hyperlink = _hyperlink(tmp_path, '\n[styles.hyperlink]\nunderline = "single"\n')
+    assert '<w:u w:val="single"/>' in hyperlink
+
+
 def test_link_color_auto_removes_direct_color(tmp_path: Path) -> None:
-    hyperlink = _hyperlink(tmp_path, '\n[styles.hyperlink]\nfont.color = "auto"\n')
+    hyperlink = _hyperlink(
+        tmp_path,
+        '\n[styles.hyperlink]\nfont.color = "auto"\nunderline = "single"\n',
+    )
     assert "<w:color " not in hyperlink
     assert '<w:u w:val="single"/>' in hyperlink
 

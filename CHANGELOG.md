@@ -4,6 +4,15 @@
 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循
 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+### 修复（超链接默认样式）
+
+- 超链接默认从「Word 蓝 `0563C1` + 单下划线」改为**黑色（跟随正文）+ 无下划线**：
+  学位论文与正式报告要求全文黑色文字，Zotero 等工具插进来的蓝链在印刷稿里算差错；
+- 电子版要蓝链：`[styles.hyperlink] font.color = "0563C1"`、`underline = "single"`；
+  颜色/下划线的配置语义不变（非法值仍报 `E5001`）；
+- 链接仍是真正的 `w:hyperlink` + 外部关系项，可点击、不影响打印外观。
+- `tests/test_hyperlink_style.py` 更新为 9 项（默认黑/无下划线、蓝链可恢复、颜色与下划线各自可配）。
+
 ### 修复（标题默认颜色）
 
 - 默认母版（python-docx）的标题带**主题蓝** `365F91` / `4F81BD`，此前会原样漏到产物里；

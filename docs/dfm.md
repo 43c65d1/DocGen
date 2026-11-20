@@ -80,6 +80,7 @@ print("hi")          <!-- 内部可以再出现 ``` -->
 | `\begin{code:lang}` / `\end{code:lang}` | 与 fence 等价的代码块，**内容原样保留**（内部不解析任何标记） |
 | `\begin{名字 属性}` / `\end{名字}` | 命名块容器（`caption`/`equation`/`abstract`…），内容按 DFM 继续解析、可嵌套 |
 | 表格单元格内 `[[border:all]]` / `[[border:top,bottom style=double size=1.5pt]]` | 逐单元格边框（标记不渲染文字） |
+| 表格单元格内 `[[table-width:80%]]` / `[[col-widths:3,2,5]]` | 逐表总宽 / 列宽（标记不渲染文字） |
 | `\begin{subfigures}` / `\begin{subfigure #fig:a}` | 子图容器；子图内图片 + 子题注，总图题仍用 figure caption |
 | `\begin{note}` | 图注 / 表注：写在哪渲染在哪（紧跟图题 = 整图注；子图内 = 图元注；表后 = 表注） |
 | 属性 | Pandoc 语法：`{.class #id key=value}` → `{"classes": ..., "id": ..., ...}` |

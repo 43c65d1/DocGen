@@ -192,6 +192,9 @@ decimal_align = [2]             # 数值列（1 起）：小数点/个位对齐�
   「表头单独留在页底」的排版缺陷（实测数据见 [word.md](word.md) 的「表头不能孤行」）。
 - `rows_keep_together`：所有行写 `cantSplit`，要求行内不跨页（默认开启）。
   长表格里关闭它 Word 会把一行拆到两页；表头行无论如何都不拆。
+- **逐表覆盖**：表格任意单元格里写 `[[table-width:80%]]`（或 `12cm`）设该表总宽，
+  `[[col-widths:3,2,5]]`（或 `[[col-widths:3cm,auto]]`）设该表列宽；标记不渲染文字、
+  同名取第一个。写了宽度标记的表按固定宽度渲染，`autofit` 对它不生效。
 - `autofit = true`：Word 自己按内容调列宽（`tblLayout autofit` + `tblW auto`），
   结果依赖查看器；与 `col_widths` 互斥。默认 `false` 用构建期宽度，确定性更好。
 - `cell_margin` 写 `w:tblCellMar`：四边统一；`cell_margin_top/bottom/left/right`

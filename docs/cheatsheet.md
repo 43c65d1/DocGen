@@ -228,6 +228,8 @@ logfile = ""
 | `[[list:figures]]` / `[[list:tables]]` | 插图清单 / 附表清单（题注自动生成，PAGEREF 页码） |
 | `[[border:all]]` / `[[border:top,bottom style=double size=1.5pt]]` | 逐单元格边框（表格单元格内，标记不渲染） |
 | `[[row-height:1.2cm]]` | 只设置当前行行高（单元格内，标记不渲染） |
+| `[[table-width:80%]]` | 该表总宽（`80%` 或 `12cm`；单元格内，标记不渲染） |
+| `[[col-widths:3,2,5]]` | 该表列宽（比例 / `3cm` / `auto`，语义同 `[table] col_widths`） |
 | `\\begin{subfigures}` … `\\begin{subfigure #fig:a}` | 子图并排 + 子题注；总图题仍用 figure caption |
 | `\begin{note}` … `\end{note}` | 图注 / 表注（紧跟图题 = 整图注；子图内 = 图元注；表后 = 表注） |
 | `` `code` `` | 行内代码（Consolas + 灰底） |

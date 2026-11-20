@@ -43,6 +43,7 @@ from ..ir import (
     Styled,
     Table,
     TableCell,
+    TableOption,
     Text,
     ThematicBreak,
     Toc,
@@ -134,6 +135,9 @@ def _inline_to_ir(tokens: list[Token]) -> list[InlineNode]:
             stack[-1].append(AuxLine())
         elif tok.type == "dfm_rowheight":
             stack[-1].append(RowHeight(height=tok.content.strip()))
+        elif tok.type == "dfm_tableopt":
+            name, _, value = tok.content.partition(":")
+            stack[-1].append(TableOption(name=name.strip(), value=value.strip()))
         elif tok.type == "dfm_border":
             pieces = tok.content.split()
             edges = (

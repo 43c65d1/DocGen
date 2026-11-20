@@ -6,6 +6,22 @@
 
 ## [Unreleased]
 
+### 新增（表格逐表宽度）
+
+- 表格里写 `[[table-width:80%]]` / `[[table-width:12cm]]`：只设**这张表**的总宽
+  （默认正文宽度），列宽按比例重算；
+- 表格里写 `[[col-widths:3,2,5]]` / `[[col-widths:3cm,auto]]`：只设**这张表**的列宽，
+  语义与 `[table] col_widths` 相同（比例 / 绝对宽度 / auto 混写）；
+- 标记写在任意单元格、不渲染文字、同名取第一个；普通 GFM 表与合并单元格表两条
+  渲染路径都生效；
+- 带宽度标记的表按固定宽度渲染（`[table] autofit = true` 对它不生效）；
+  非法值报 `E5001`；
+- 实测：同文档三张表分别为正文宽、80%、`col-widths 1:3`；`tblW` 与 `gridCol` 之和一致；
+  合并单元格表 50% 生效。
+- 新增 `tests/test_table_width_per_table.py`（10 项）。
+
+## [Unreleased]
+
 ### 新增（图注 / 表注）
 
 - `\begin{note}`：图注 / 表注段落，挂「Caption Note」样式（基于 `Caption`：左对齐、

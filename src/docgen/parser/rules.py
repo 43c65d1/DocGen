@@ -40,7 +40,19 @@ def rule_wiki(state: StateInline, silent: bool) -> bool:
     inner = src[state.pos + 2 : end]
     keywords = ("pagebreak", "toc", "sectionbreak", "diag", "aux", "bibliography")
     if inner not in keywords and not inner.startswith(
-        ("img:", "ref:", "fn:", "diag:", "cite:", "merge:", "list:", "border:", "row-height:")
+        (
+            "img:",
+            "ref:",
+            "fn:",
+            "diag:",
+            "cite:",
+            "merge:",
+            "list:",
+            "border:",
+            "row-height:",
+            "table-width:",
+            "col-widths:",
+        )
     ):
         return False
 
@@ -77,6 +89,10 @@ def rule_wiki(state: StateInline, silent: bool) -> bool:
     elif inner.startswith("row-height:"):
         token = Token("dfm_rowheight", "", 0)
         token.content = inner[len("row-height:") :]
+    elif inner.startswith(("table-width:", "col-widths:")):
+        # 逐表覆盖表格配置：名字与值一起交给 IR，解析/校验在渲染层
+        token = Token("dfm_tableopt", "", 0)
+        token.content = inner
     elif inner.startswith("ref:"):
         token = Token("dfm_ref", "", 0)
         token.content = inner[len("ref:") :]

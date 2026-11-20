@@ -41,6 +41,7 @@ __all__ = [
     "Styled",
     "Table",
     "TableCell",
+    "TableOption",
     "Text",
     "ThematicBreak",
     "Toc",
@@ -135,6 +136,19 @@ class RowHeight(Inline):
 
 
 @dataclass(frozen=True, slots=True)
+class TableOption(Inline):
+    """逐表覆盖 ``[table]`` 配置的标记：``[[table-width:80%]]`` / ``[[col-widths:3,2,5]]``。
+
+    写在**表格任意单元格**里，作用于整张表；同一张表写多个同名标记时取第一个。
+    标记本身不渲染文字。``name`` 为选项名（``table-width`` / ``col-widths``），
+    ``value`` 为原样的值串（解析与校验在渲染层，便于统一报 ``E5001`` 类错误）。
+    """
+
+    name: str = ""
+    value: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class CellBorder(Inline):
     """``[[border:all]]`` / ``[[border:top,bottom style=double size=1.5pt]]``。
 
@@ -190,6 +204,7 @@ InlineNode = (
     | AuxLine
     | CellBorder
     | RowHeight
+    | TableOption
     | Cite
 )
 

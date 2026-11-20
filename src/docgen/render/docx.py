@@ -53,6 +53,7 @@ from ..ir import (
     Styled,
     Table,
     TableCell,
+    TableOption,
     Text,
     ThematicBreak,
     Toc,
@@ -1121,7 +1122,7 @@ def _render_table(state: _RenderState, block: Table) -> None:
     if not block.rows:
         return
 
-    properties = _table_properties(state)
+    properties = _table_properties_for(_table_properties(state), block)
     columns = max(len(row) for row in block.rows)
     # 先按正确列数建表：python-docx 的 ``add_table(rows, cols)`` 会为每行建 cols 个 ``w:tc``
     # （``cols`` 影响的是行内单元格，不是 ``tblGrid``），再确保 ``tblGrid`` 列数与之一致
@@ -1387,7 +1388,7 @@ def _render_cell_table(state: _RenderState, block: Table) -> None:
     用 python-docx 的 ``cell.merge()`` 真正合并单元格（生成正确的
     ``w:gridSpan`` / ``w:vMerge``），而不是只写属性、留着重复的 ``w:tc``。
     """
-    properties = _table_properties(state)
+    properties = _table_properties_for(_table_properties(state), block)
     rows = block.cells
     if not rows:
         return
@@ -1502,6 +1503,114 @@ def _table_properties(state: _RenderState) -> dict[str, Any]:
     return table
 
 
+#: 逐表覆盖用的标记名（``[[table-width:80%]]`` / ``[[col-widths:3,2,5]]``）
+TABLE_OPTION_WIDTH = "table-width"
+TABLE_OPTION_COLUMNS = "col-widths"
+
+
+def _table_options(block: Table) -> dict[str, str]:
+    """收集表格里的宽度类标记（同名取第一个）。
+
+    普通 GFM 表看 ``cell_nodes``、合并单元格表看 ``cells`` 里的段落——
+    两条渲染路径都要读到标记，否则就是「写了不生效」。
+    """
+    found: dict[str, str] = {}
+
+    def collect(nodes: list[InlineNode]) -> None:
+        for node in nodes:
+            if isinstance(node, TableOption) and node.value and node.name not in found:
+                found[node.name] = node.value
+
+    if block.cells:
+        for cell_row in block.cells:
+            for cell in cell_row:
+                for child in cell.blocks:
+                    if isinstance(child, Paragraph):
+                        collect(child.content)
+        return found
+    for nodes_row in block.cell_nodes:
+        for nodes in nodes_row:
+            collect(nodes)
+    return found
+
+
+def _table_properties_for(properties: dict[str, Any], block: Table) -> dict[str, Any]:
+    """逐表覆盖 ``[table]`` 的宽度配置。
+
+    - ``[[table-width:80%]]`` / ``[[table-width:12cm]]``：该表**总宽**；
+    - ``[[col-widths:3,2,5]]`` / ``[[col-widths:3cm,auto]]``：该表**列宽**，
+      语义与 ``[table] col_widths`` 相同（比例 / 绝对宽度 / auto 混写）。
+
+    标记出现时按**固定宽度**渲染：``[table] autofit = true`` 对这种表不生效
+    （autofit 把宽度交给 Word，与显式宽度互斥）。
+    """
+    options = _table_options(block)
+    if not options:
+        return properties
+    result = dict(properties)
+    columns = options.get(TABLE_OPTION_COLUMNS)
+    if columns is not None:
+        result["col_widths"] = _parse_col_widths_marker(columns)
+    width = options.get(TABLE_OPTION_WIDTH)
+    if width is not None:
+        result["width"] = width.strip()
+    result["autofit"] = False
+    return result
+
+
+def _parse_col_widths_marker(value: str) -> list[Any]:
+    """``[[col-widths:3,2,5]]`` -> ``[3, 2, 5]``；支持 ``auto`` 与 ``3cm``。"""
+    items: list[Any] = []
+    for part in value.split(","):
+        text = part.strip()
+        if not text:
+            raise DocGenError(E_CONFIG, f"[[col-widths:...]] 有空列: {value!r}")
+        if text.lower() == "auto":
+            items.append("auto")
+            continue
+        try:
+            number = float(text)
+        except ValueError:
+            if _height_twips(text, "col-widths") is None:
+                raise DocGenError(
+                    E_CONFIG,
+                    f"[[col-widths:...]] 无法识别: {text!r}（比例数字 / auto / 带单位宽度如 3cm）",
+                ) from None
+            items.append(text)
+            continue
+        if number <= 0:
+            raise DocGenError(E_CONFIG, f"[[col-widths:...]] 必须是正数: {text!r}")
+        items.append(int(number) if number.is_integer() else number)
+    return items
+
+
+def _table_total_width(properties: dict[str, Any], state: _RenderState) -> int:
+    """表格总宽（缇）：默认正文宽度，``[[table-width:80%]]`` 可逐表覆盖。"""
+    base = page_content_width(state.document)
+    raw = properties.get("width")
+    if not raw:
+        return base
+    text = str(raw).strip()
+    if text.endswith("%"):
+        try:
+            percent = float(text[:-1])
+        except ValueError:
+            percent = -1.0
+        if percent <= 0:
+            raise DocGenError(
+                E_CONFIG,
+                f"[[table-width:...]] 无法识别: {raw!r}（写 80% 或 12cm）",
+            )
+        return max(1, round(base * percent / 100))
+    twips = _height_twips(text, "table-width")
+    if twips is None:
+        raise DocGenError(
+            E_CONFIG,
+            f"[[table-width:...]] 无法识别: {raw!r}（写 80% 或 12cm）",
+        )
+    return max(1, twips)
+
+
 #: 表格边框预设 + ``custom``（逐边配置）
 TABLE_STYLES = ("three_line", "grid", "none", "custom")
 
@@ -1530,7 +1639,7 @@ def _column_widths(
     结果确定、可测试；不交给 Word 的 autofit（Word/WPS/LibreOffice 结果不一致）。
     列表里可以混写绝对宽度与 ``"auto"``：绝对列固定，其余按内容权重分剩余宽度。
     """
-    total = page_content_width(state.document)
+    total = _table_total_width(properties, state)
     spec = properties.get("col_widths")
     if spec == "auto":
         return _allocate_auto_widths(total, _column_content_weights(block, columns))

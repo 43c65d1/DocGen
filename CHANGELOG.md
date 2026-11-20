@@ -6,6 +6,17 @@
 
 ## [Unreleased]
 
+### 新增（外文作者姓名缩写）
+
+- `[bibliography] western_initials = true`：西文作者自动转 GB/T 7714 的
+  「姓前名后、姓大写、名缩写」，`John A. Hewitt` / `Hewitt, John A.` / `Hewitt J A`
+  均输出 `HEWITT J A`；支持连字符名（`SARTRE J P`）、姓氏前缀（`VAN DER WAALS J`）、
+  后缀（`SMITH J Jr.`）；
+- 中文姓名原样保留；与 `author_truncate` / `et_al` 可叠加（先缩写再截断）；
+  `author` 为字符串时同样生效；默认关闭，行为不变；
+- 已知边界：拼音姓名 `Li Ming` 按西文规则被当成「名 Li、姓 Ming」，需写成 `Li, Ming`；
+- 新增 `tests/test_bibliography_names.py`（9 项）。
+
 ### 新增（表格逐表宽度）
 
 - 表格里写 `[[table-width:80%]]` / `[[table-width:12cm]]`：只设**这张表**的总宽
@@ -19,8 +30,6 @@
 - 实测：同文档三张表分别为正文宽、80%、`col-widths 1:3`；`tblW` 与 `gridCol` 之和一致；
   合并单元格表 50% 生效。
 - 新增 `tests/test_table_width_per_table.py`（10 项）。
-
-## [Unreleased]
 
 ### 新增（图注 / 表注）
 

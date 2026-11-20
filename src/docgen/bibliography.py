@@ -94,6 +94,7 @@ class BibliographySettings:
     hanging_chars: int = 0
     author_truncate: int = 0
     et_al: str = ""
+    western_initials: bool = False
 
 
 def _bool_setting(settings: dict[str, Any], key: str, default: bool) -> bool:
@@ -133,6 +134,7 @@ def bibliography_settings(config: Config) -> BibliographySettings:
         hanging_chars=_int_setting(raw, "hanging_chars", 0),
         author_truncate=_int_setting(raw, "author_truncate", 0),
         et_al=str(raw.get("et_al", "") or ""),
+        western_initials=_bool_setting(raw, "western_initials", False),
     )
 
 
@@ -286,6 +288,7 @@ def plan_bibliography(
             number,
             truncate=settings.author_truncate,
             et_al=settings.et_al,
+            western_initials=settings.western_initials,
         )
         entries.append(f"[{number}] {body}" if settings.entry_number else body)
     return BibliographyPlan(
@@ -409,16 +412,99 @@ def _text(value: Any) -> str:
 _CJK_RE = re.compile(r"[\u3400-\u9fff\uf900-\ufaff]")
 
 
-def _authors(value: Any, *, truncate: int = 0, et_al: str = "") -> str:
-    """作者列表 → 字符串；``truncate > 0`` 时按 GB/T「前 N 名 + 等/et al」。"""
+#: 西文姓名的后缀（不算作姓氏）
+_NAME_SUFFIXES = frozenset({"jr", "jr.", "sr", "sr.", "ii", "iii", "iv"})
+
+
+def _western_name(name: str) -> str:
+    """西文作者 → GB/T 7714「姓前名后、姓大写、名缩写」：``John A. Hewitt`` → ``HEWITT J A``。
+
+    输入兼容三种常见写法：
+
+    | 写法 | 输出 |
+    |---|---|
+    | ``Surname, Given`` | ``SURNAME I I`` |
+    | ``Given ... Surname`` | ``SURNAME I I`` |
+    | ``Surname I`` / ``Surname I.I.`` | ``SURNAME I I`` |
+
+    中文姓名（含 CJK 字符）原样返回——本函数只处理西文姓名的书写顺序与缩写。
+
+    已知边界：拼音姓名（``Li Ming``）按西文规则会被当成「名 Li、姓 Ming」，
+    要保持「姓前名后」请写成 ``Li, Ming``；van/de 之类的姓氏前缀会一起大写
+    （``VAN DER WAALS J``）。
+    """
+    text = name.strip()
+    if not text or _CJK_RE.search(text):
+        return text
+
+    tokens = text.split()
+    suffix = ""
+    if tokens and tokens[-1].lower() in _NAME_SUFFIXES:
+        suffix = tokens.pop()
+    if not tokens:
+        return text
+
+    if "," in " ".join(tokens):
+        # ``Surname, Given ...``：逗号前是姓
+        head, _, tail = " ".join(tokens).partition(",")
+        surname = head.strip()
+        given = tail.strip()
+    else:
+        last = tokens[-1]
+        if _looks_like_initials(last):
+            surname = " ".join(tokens[:-1])
+            given = last
+        else:
+            surname = last
+            given = " ".join(tokens[:-1])
+
+    if not surname:
+        return text
+    parts = [surname.upper(), _initials(given), suffix]
+    return " ".join(part for part in parts if part)
+
+
+def _looks_like_initials(token: str) -> bool:
+    """``A`` / ``J.A.`` / ``JA`` / ``J-A``：名已经缩写的写法（姓氏在它**前面**）。"""
+    letters = [char for char in token if char.isalpha()]
+    if not letters or len(letters) > 3:
+        return False
+    return all(char.isupper() for char in letters)
+
+
+def _initials(given: str) -> str:
+    """名 → 缩写：按空格 / 点 / 连字符切分，每段首字母大写，用空格连接。"""
+    letters: list[str] = []
+    for chunk in re.split(r"[\s.\-]+", given):
+        if not chunk:
+            continue
+        if chunk.isalpha() and chunk.isupper() and len(chunk) <= 3:
+            # 已经是缩写：``JA`` / ``J`` 原样拆成单个字母
+            letters.extend(chunk)
+        elif chunk[0].isalpha():
+            letters.append(chunk[0].upper())
+    return " ".join(letters)
+
+
+def _authors(
+    value: Any, *, truncate: int = 0, et_al: str = "", western_initials: bool = False
+) -> str:
+    """作者列表 → 字符串；``truncate > 0`` 时按 GB/T「前 N 名 + 等/et al」。
+
+    ``western_initials = true`` 时先把西文姓名转成「姓大写 + 名缩写」
+    （中文姓名不动），再按截断规则拼接。
+    """
     if isinstance(value, (list, tuple)):
         names = [part for part in (_text(item) for item in value) if part]
+        if western_initials:
+            names = [_western_name(name) for name in names]
         if truncate > 0 and len(names) > truncate:
             kept = names[:truncate]
             suffix = et_al or ("等" if any(_CJK_RE.search(name) for name in kept) else "et al.")
             return ", ".join(kept) + ", " + suffix
         return ", ".join(names)
-    return _text(value)
+    text = _text(value)
+    return _western_name(text) if western_initials else text
 
 
 def _join(values: list[str], sep: str = ", ") -> str:
@@ -434,12 +520,19 @@ def _tail(values: list[str], pages: str = "") -> str:
 
 
 def format_reference(
-    entry: dict[str, Any], number: int, *, truncate: int = 0, et_al: str = ""
+    entry: dict[str, Any],
+    number: int,
+    *,
+    truncate: int = 0,
+    et_al: str = "",
+    western_initials: bool = False,
 ) -> str:
     """格式化单条文献（不含序号），返回类似 ``张三. 标题[J]. 期刊, 2024, 12(3): 45-52.``。"""
     kind = _text(entry.get("type")).lower() or "misc"
     mark = TYPE_MARKS.get(kind, "")
-    authors = _authors(entry.get("author"), truncate=truncate, et_al=et_al)
+    authors = _authors(
+        entry.get("author"), truncate=truncate, et_al=et_al, western_initials=western_initials
+    )
     title = _text(entry.get("title"))
     year = _text(entry.get("year"))
     pages = _text(entry.get("pages"))

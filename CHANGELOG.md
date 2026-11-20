@@ -6,6 +6,20 @@
 
 ## [Unreleased]
 
+### 新增（图注 / 表注）
+
+- `\begin{note}`：图注 / 表注段落，挂「Caption Note」样式（基于 `Caption`：左对齐、
+  无首行缩进、字号跟随题注）；**写在哪渲染在哪**——紧跟图题是整图注，放在表格后是表注；
+- 写进 `\begin{subfigure}` 内是**图元注**：渲染到该子图单元格的第三行，与各自子图对齐；
+- 图题后面紧跟图注时题注自动 `keepNext`、图注自带 `keepLines`，图片 + 图题 + 图注
+  不会被分页拆开；表注接在表格后时仍吃 `[table] space_after`；
+- `[styles.caption_note]` 覆盖字体类属性（`font.size` / `font.color` …）与段落级属性
+  （`alignment` / `space_*`）；图注不进插图清单（清单只取题注第一段）；
+- 解包 XML 实测：图注样式 `basedOn=Caption`、`jc=left`、`sz=18`（9pt）；三条注段落均带
+  `keepLines`，图题 `keepNext` 且注紧随其后；子图表格 3 行、图元注在第三行；表注在表后。
+- 新增 `tests/test_figure_notes.py`（8 项）。
+
+
 ### 新增（B5 / 横向 / 装订线）
 
 - `page.size` 新增 `B5`（17.6 × 25.0 cm）；

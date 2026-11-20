@@ -30,6 +30,7 @@ from .ooxml import insert_child, parse_line_spacing, set_document_language, set_
 __all__ = [
     "MONO_EAST_ASIA",
     "MONO_FONT",
+    "NOTE_STYLE_NAME",
     "TEMPLATE_VERSION",
     "create_document",
     "ensure_font_table",
@@ -40,6 +41,9 @@ __all__ = [
 
 #: 母版版本：随解包入库的模板一起提交，CI 可校验
 TEMPLATE_VERSION = "0.1"
+
+#: 图注 / 表注段落（\\begin{note}）挂的 Word 样式名
+NOTE_STYLE_NAME = "Caption Note"
 
 #: 必须存在的样式槽位（手册 §14.1）：母版缺任何一个都算不完整
 REQUIRED_STYLES = (
@@ -195,6 +199,32 @@ def _neutralise_caption_style(document: Any) -> None:
                     rpr.remove(element)
         style.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
         return
+
+
+def ensure_note_style(document: Any) -> Any:
+    """确保「Caption Note」段落样式存在并返回它（幂等）。
+
+    \\begin{note} 段落挂这个样式：**基于 Caption**，所以字体/字号默认跟题注一致
+    （图注比图题还显眼是常见排版差错）；对齐与首行缩进单独设成「左对齐 + 无缩进」，
+    多行注释居中读起来很别扭。配置里的 [styles.caption_note] 仍可覆盖字体类属性。
+
+    为什么两条母版路径都要建：_extend_default_template 只跑引擎默认母版，
+    自定义母版缺这个样式时 add_paragraph(style=...) 会直接抛错。
+    """
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    for style in document.styles:
+        if style.name == NOTE_STYLE_NAME:
+            return style
+    style = document.styles.add_style(NOTE_STYLE_NAME, 1)  # 1 = paragraph style
+    base = _style_or_none(document, "Caption") or _style_or_none(document, "Normal")
+    if base is not None:
+        style.base_style = base
+    style.quick_style = True
+    style.hidden = False
+    style.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    style.paragraph_format.first_line_indent = 0
+    return style
 
 
 #: 代码块等场景的等宽字体（与 docx.py 的 DEFAULT_MONO_FONT 一致）
@@ -354,6 +384,13 @@ def apply_document_defaults(document: Any, config: Config) -> None:
         caption_style = _style_or_none(document, "Caption")
         if caption_style is not None:
             _apply_font_properties(caption_style, caption)
+
+    # 图注 / 表注：段落只带段落级属性，字体类属性没有 run 承载，必须写进样式
+    note_style = ensure_note_style(document)
+    raw_note = table.get("caption_note", {})
+    note = raw_note if isinstance(raw_note, dict) else {}
+    if note:
+        _apply_font_properties(note_style, note)
 
     for level in range(1, 10):
         style = _style_by_id(document, f"Heading{level}")

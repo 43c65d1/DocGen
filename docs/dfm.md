@@ -81,6 +81,7 @@ print("hi")          <!-- 内部可以再出现 ``` -->
 | `\begin{名字 属性}` / `\end{名字}` | 命名块容器（`caption`/`equation`/`abstract`…），内容按 DFM 继续解析、可嵌套 |
 | 表格单元格内 `[[border:all]]` / `[[border:top,bottom style=double size=1.5pt]]` | 逐单元格边框（标记不渲染文字） |
 | `\begin{subfigures}` / `\begin{subfigure #fig:a}` | 子图容器；子图内图片 + 子题注，总图题仍用 figure caption |
+| `\begin{note}` | 图注 / 表注：写在哪渲染在哪（紧跟图题 = 整图注；子图内 = 图元注；表后 = 表注） |
 | 属性 | Pandoc 语法：`{.class #id key=value}` → `{"classes": ..., "id": ..., ...}` |
 | 首尾名字 | 必须一致 → 否则 `E3002` |
 | 独占一行 | `\begin` 必须独占一行；夹在段落中间报 `E4001` |

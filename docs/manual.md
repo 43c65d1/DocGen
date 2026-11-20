@@ -373,6 +373,29 @@ row_lines = true          # 或 row_lines = "dashed"
 - 宽度：默认 n 张平分正文宽的 90%；`[[img:... width=3cm]]` 或
   `[subfigure] width = "45%"` 可覆盖。
 
+### 图注 / 表注：`\begin{note}`
+
+```markdown
+\begin{caption #fig:1}
+系统架构
+
+\begin{note}
+注：数据来源本课题组实验。
+\end{note}
+\end{caption}
+```
+
+| 写法 | 效果 |
+|---|---|
+| 紧跟图题（或写在题注块内） | **整图注**：图下注释 / 来源注 |
+| 写在 `\begin{subfigure}` 内 | **图元注**：渲染到该子图单元格的第三行，与子图一一对齐 |
+| 写在表格后面 | **表注**：接在表格下方，仍吃 `[table] space_after` |
+
+- 图注段落挂 `Caption Note` 样式（跟题注同字号、**左对齐**、无首行缩进），
+  字号/颜色/段距由 `[styles.caption_note]` 覆盖（见 [config.md](config.md)）；
+- 图题后紧跟图注时题注自动 `keepNext`、图注 `keepLines`，不会被分页拆开；
+- 图注不进插图清单：清单只取题注第一段。
+
 ## 9. 题注 / 交叉引用 / 目录 / 公式 / 脚注
 
 | 语法 | 默认效果 | 相关字段 |

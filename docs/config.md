@@ -268,6 +268,26 @@ alignment = "center"
 - **与图片同页**：图片段落自动带 `keepNext`（仅当后面紧跟图题时），图题带
   `keepLines`，所以两者不会被分页拆开（详见 [docs/word.md](word.md)）。
 
+### 图注 / 表注：`[styles.caption_note]`
+
+`\begin{note}` 段落挂 Word 的自定义段落样式 **`Caption Note`**：基于 `Caption`，
+字体/字号默认跟题注一致；对齐固定为左对齐、无首行缩进（多行注释居中读起来很别扭）。
+字体类属性写进该样式，字段与 `[styles.caption]` 同一套：
+
+```toml
+[styles.caption_note]
+font.size = "9pt"        # 图注通常比题注小一号
+font.color = "595959"
+space_before = "0pt"
+```
+
+段落级键同样生效（与题注共用读取逻辑）：`alignment` / `first_line_chars` /
+`space_*` / `line_spacing`。不写这一段时，图注与题注同字号、左对齐。
+
+- 图注段落自带 `keepLines`（整段不跨页）；图题后紧跟图注时题注自动 `keepNext`，
+  所以「图片 + 图题 + 图注」不会被分页拆开；
+- 图注**不进**插图清单：清单只取题注第一段。
+
 ### 有序列表编号
 
 每个有序列表是**独立列表**，各自从 1 开始（Markdown 里两个列表就是两个列表，

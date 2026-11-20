@@ -97,7 +97,7 @@ from .ooxml import (
     set_table_cell_margins,
     set_table_width,
 )
-from .template import create_document
+from .template import NOTE_STYLE_NAME, create_document
 
 __all__ = ["render_docx", "render_docx_bytes"]
 
@@ -774,6 +774,9 @@ def _render_named_block(
     if block.name == "subfigures":
         _render_subfigures(state, block)
         return
+    if block.name == "note":
+        _render_note(state, block, previous=previous, following=following)
+        return
     kind = caption_kind(block)
     if kind == "equation":
         # 方程：手动 number 或自动/按章编号时走三列表格；否则是普通块级公式
@@ -794,7 +797,7 @@ def _render_subfigures(state: _RenderState, block: NamedBlock) -> None:
     :func:`docgen.numbering.subfigure_numbers` 在构建期烘焙。总图题仍由后面的
     ``\\begin{caption}`` 负责，这样题注编号/插图清单/REF 都复用现有机制。
     """
-    items: list[tuple[NamedBlock, str, str, str]] = []
+    items: list[tuple[NamedBlock, str, str, str, list[NamedBlock]]] = []
     for child in block.content:
         if not isinstance(child, NamedBlock) or child.name != "subfigure":
             continue
@@ -802,7 +805,7 @@ def _render_subfigures(state: _RenderState, block: NamedBlock) -> None:
         if image_block is not None:
             caption = next((node for node in child.content if isinstance(node, Paragraph)), None)
             text = "".join(_plain_text(node) for node in caption.content) if caption else ""
-            items.append((child, image_block.src, image_block.width, text))
+            items.append((child, image_block.src, image_block.width, text, _note_children(child)))
             continue
         # 兼容「图片 + 子题注同一段」：没有空行时 markdown 会合并成一个段落
         paragraph = next(
@@ -820,13 +823,15 @@ def _render_subfigures(state: _RenderState, block: NamedBlock) -> None:
         text = "".join(
             _plain_text(inline) for inline in paragraph.content if not isinstance(inline, Image)
         ).strip()
-        items.append((child, image.src, "", text))
+        items.append((child, image.src, "", text, _note_children(child)))
     if not items:
         for child in block.content:
             _render_block(state, child)
         return
 
-    table = state.document.add_table(rows=2, cols=len(items))
+    # 有图元注时多一行放注：注在同一个表里才能与各自的子图对齐
+    rows = 3 if any(item[4] for item in items) else 2
+    table = state.document.add_table(rows=rows, cols=len(items))
     set_table_borders(
         table,
         top="none",
@@ -837,7 +842,7 @@ def _render_subfigures(state: _RenderState, block: NamedBlock) -> None:
         insideV="none",
     )
     width = _subfigure_setting(state, "width") or f"{max(20, 90 // len(items))}%"
-    for index, (child, src, image_width, text) in enumerate(items):
+    for index, (child, src, image_width, text, notes) in enumerate(items):
         top = table.cell(0, index)
         image_paragraph = top.paragraphs[0]
         set_paragraph_alignment(image_paragraph, "center")
@@ -854,12 +859,81 @@ def _render_subfigures(state: _RenderState, block: NamedBlock) -> None:
         append_text(subcaption, f"（{letter}）{text}" if text else f"（{letter}）")
         if child.label:
             set_paragraph_bookmark(subcaption, child.label, state.next_bookmark_id())
+        if notes:
+            _render_subfigure_note(state, table.cell(2, index), notes)
 
 
 def _subfigure_setting(state: _RenderState, key: str) -> str:
     settings = state.config.namespace("subfigure")
     value = settings.get(key)
     return str(value) if value else ""
+
+
+def _render_note(
+    state: _RenderState,
+    block: NamedBlock,
+    *,
+    previous: BlockNode | None = None,
+    following: BlockNode | None = None,
+) -> None:
+    """``\\begin{note}``：图注 / 表注（整图注、来源注、数据来源）。
+
+    写在哪就渲染在哪：紧跟图题就是整图注，放在表格后面就是表注，写进
+    ``\\begin{subfigure}`` 内就是图元注（那种情况由 :func:`_render_subfigure_note`
+    渲染到子图单元格里）。段落挂「Caption Note」样式（基于 Caption、左对齐），
+    ``[styles.caption_note]`` 可覆盖字体/字号/对齐/段距。
+    """
+    properties = state.styles.get("caption_note") or {}
+    first = True
+    for child in block.content:
+        if not isinstance(child, Paragraph):
+            continue
+        paragraph = state.document.add_paragraph(style=NOTE_STYLE_NAME)
+        _format_note_paragraph(paragraph, properties)
+        if first:
+            # 表格间距只能写在紧邻表格的段落上（Word 表格没有段距属性）
+            _apply_table_gap(state, paragraph, previous=previous, following=following)
+            first = False
+        _render_inlines(state, paragraph, child.content, None)
+
+
+def _format_note_paragraph(paragraph: Any, properties: dict[str, Any]) -> None:
+    """图注段落：整段不跨页 + 吃 ``[styles.caption_note]`` 的段落级键。"""
+    paragraph.paragraph_format.keep_together = True
+    _apply_paragraph_properties(paragraph, properties)
+
+
+def _is_note(block: BlockNode | None) -> bool:
+    """这个块是不是 ``\\begin{note}``。"""
+    return isinstance(block, NamedBlock) and block.name == "note"
+
+
+def _note_children(block: NamedBlock) -> list[NamedBlock]:
+    """命名块内直接内嵌的 ``\\begin{note}``（图题里写图注的写法）。"""
+    notes: list[NamedBlock] = []
+    for child in block.content:
+        if isinstance(child, NamedBlock) and child.name == "note":
+            notes.append(child)
+    return notes
+
+
+def _render_subfigure_note(state: _RenderState, cell: Any, notes: list[NamedBlock]) -> None:
+    """子图单元格里的图元注：接在子题注下面，样式与整图注一致。"""
+    properties = state.styles.get("caption_note") or {}
+    first = True
+    for note in notes:
+        for child in note.content:
+            if not isinstance(child, Paragraph):
+                continue
+            if first:
+                paragraph = cell.paragraphs[0]
+                drop_empty_runs(paragraph)
+                first = False
+            else:
+                paragraph = cell.add_paragraph()
+            paragraph.style = NOTE_STYLE_NAME
+            _format_note_paragraph(paragraph, properties)
+            _render_inlines(state, paragraph, child.content, None)
 
 
 def _render_numbered_formula(state: _RenderState, block: NamedBlock) -> None:
@@ -932,8 +1006,14 @@ def _render_caption(
     paragraph = state.document.add_paragraph(style="Caption")
     # 题注本身不能被分页拆开（两行的图题跨页读起来就是断的）
     paragraph.paragraph_format.keep_together = True
-    # 表题在上：必须和下面的表格同页（否则题注孤零零留在上一页底部）
-    if caption_kind(block) == "table" and isinstance(following, Table):
+    notes = _note_children(block)
+    # 表题在上：必须和下面的表格同页（否则题注孤零零留在上一页底部）；
+    # 图题后面紧跟图注时同理——题注与它自己的注不能被分页拆开
+    if (
+        _is_note(following)
+        or notes
+        or (caption_kind(block) == "table" and isinstance(following, Table))
+    ):
         paragraph.paragraph_format.keep_with_next = True
     # 段落级样式键（对齐/缩进/段距）也要吃 config，与正文段落同一套语义
     _apply_paragraph_properties(paragraph, state.styles.get("caption", {}))
@@ -959,6 +1039,8 @@ def _render_caption(
     text = _caption_text(block)
     if text:
         append_text(paragraph, f" {text}")
+    for note in notes:
+        _render_note(state, note)
 
 
 def set_paragraph_bookmark(paragraph: Any, name: str, bookmark_id: int) -> None:

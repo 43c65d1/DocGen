@@ -197,6 +197,12 @@ logfile = ""
 |---|---|---|
 | `width` | 自动（n 张平分 90%） | 子图图片宽度，如 `"45%"` |
 
+### `[styles.caption_note]`
+| 字段 | 默认 | 说明 |
+|---|---|---|
+| `font.size` / `font.color` … | 跟题注 | 图注 / 表注的字号、颜色 |
+| `alignment` | `left` | 图注默认左对齐、无首行缩进 |
+
 ### `[math]`
 | 字段 | 默认 | 说明 |
 |---|---|---|
@@ -223,6 +229,7 @@ logfile = ""
 | `[[border:all]]` / `[[border:top,bottom style=double size=1.5pt]]` | 逐单元格边框（表格单元格内，标记不渲染） |
 | `[[row-height:1.2cm]]` | 只设置当前行行高（单元格内，标记不渲染） |
 | `\\begin{subfigures}` … `\\begin{subfigure #fig:a}` | 子图并排 + 子题注；总图题仍用 figure caption |
+| `\begin{note}` … `\end{note}` | 图注 / 表注（紧跟图题 = 整图注；子图内 = 图元注；表后 = 表注） |
 | `` `code` `` | 行内代码（Consolas + 灰底） |
 | `$x^2$` / `$$…$$` | 行内 / 块级公式 |
 | `**粗**` `*斜*` `~~删~~` `^上^` `~下~` | 行内语义（需在 config 声明样式） |

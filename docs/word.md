@@ -48,6 +48,7 @@ first_line_chars = 200     # 首行缩进 2 字符
 |---|---|---|
 | `[styles.body]` 字体类 | `Normal` 样式 | 正文段落默认继承它，不必每个 run 重复 |
 | `[styles.caption]` 字体类 | `Caption` 样式 | 题注段落挂的是内置 `Caption` |
+| `[styles.caption_note]` 字体类 | `Caption Note` 样式 | `\begin{note}` 段落挂它，字体类属性只能写在样式上 |
 | `[styles.headingN]` 字体类 | **run** 与 `Heading N` 样式定义 | run 决定当前文字；样式定义决定 Word 样式面板与「新敲一个标题」 |
 | `[styles.<任意>]` 字体类 | run | `[文字]{.样式}` 这类行内用法 |
 

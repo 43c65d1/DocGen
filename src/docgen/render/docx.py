@@ -61,6 +61,8 @@ from ..ir import (
 from ..numbering import CAPTION_KINDS, caption_kind
 from .math import latex_to_omml, math_settings
 from .ooxml import (
+    FLOAT_DEFAULT_DIST,
+    FLOAT_WRAPS,
     allocate_list_num_id,
     append_field,
     append_omml,
@@ -83,6 +85,7 @@ from .ooxml import (
     set_cell_border,
     set_cell_vertical_alignment,
     set_cell_width,
+    set_floating_picture,
     set_list_numbering,
     set_paragraph_alignment,
     set_paragraph_border,
@@ -269,6 +272,7 @@ class _RenderState:
         "doc_settings",
         "document",
         "equation_numbers",
+        "float_height",
         "footnote_reference_maker",
         "footnotes",
         "heading_labels",
@@ -297,6 +301,7 @@ class _RenderState:
         self.sections: Any = None
         self.blocks: list[BlockNode] = []
         self.equation_numbers: dict[int, str] = {}
+        self.float_height = 251658240
         self.caption_fields: dict[str, str] = {}
         self.caption_numbers: dict[str, str] = {}
         self.caption_static = False
@@ -311,6 +316,11 @@ class _RenderState:
     def next_bookmark_id(self) -> int:
         self._bookmark_id += 1
         return self._bookmark_id
+
+    def next_float_height(self) -> int:
+        """浮动图片的叠放次序：每张图递增，多张浮动图之间顺序稳定。"""
+        self.float_height += 1
+        return self.float_height
 
     def new_list_num_id(self) -> int | None:
         """给一个有序列表分配**独立的**编号实例，让它从 1 开始。
@@ -676,20 +686,79 @@ def _render_image_block(
     学术排版的基本要求：图片与它的图题必须同页、图题紧贴图片下方。
     Word 里靠 ``w:keepNext``（段落与下一段同页）实现——原先只有标题设了它，
     图片没有，于是分页时会出现「图片在上一页、图题在下一页」。
+
+    ``wrap=``（或 ``[image] wrap``）出现时改成**浮动图片**：段落只当锚点，
+    文字按环绕方式绕排（见 :func:`docgen.render.ooxml.set_floating_picture`）。
     """
     paragraph = state.document.add_paragraph()
     width = block.width or _image_setting(state, "width")
-    align = block.align or _image_setting(state, "align")
-    if align:
-        set_paragraph_alignment(paragraph, align)
-    # 图片与正文的间距：``[image] space_before`` / ``space_after``
-    for key, edge in (("space_before", "before"), ("space_after", "after")):
-        value = _image_setting(state, key)
-        if value:
-            _apply_space(paragraph, edge, value)
-    _add_picture(state, paragraph, block.src, width=width)
+    floating = _image_float(state, block)
+    if floating is None:
+        align = block.align or _image_setting(state, "align")
+        if align:
+            set_paragraph_alignment(paragraph, align)
+        # 图片与正文的间距：``[image] space_before`` / ``space_after``
+        for key, edge in (("space_before", "before"), ("space_after", "after")):
+            value = _image_setting(state, key)
+            if value:
+                _apply_space(paragraph, edge, value)
+        _add_picture(state, paragraph, block.src, width=width)
+    else:
+        # 浮动图片：位置由锚点（positionH/positionV）决定，段距与段落对齐不再生效
+        _add_picture(state, paragraph, block.src, width=width)
+        set_floating_picture(
+            paragraph,
+            wrap=floating["wrap"],
+            align=floating["align"],
+            dist=floating["dist"],
+            offset=floating["offset"],
+            relative_height=state.next_float_height(),
+        )
     if _renders_as_caption(following):
         paragraph.paragraph_format.keep_with_next = True
+
+
+def _image_float(state: _RenderState, block: ImageBlock) -> dict[str, Any] | None:
+    """浮动图片参数：``wrap=`` 为空返回 ``None``（按 inline 渲染）。
+
+    值来自标记属性或 ``[image]`` 配置；非法值报 ``E5001``（写错不静默）。
+    """
+    wrap = (block.wrap or _image_setting(state, "wrap")).strip().lower()
+    if not wrap:
+        return None
+    if wrap not in FLOAT_WRAPS:
+        raise DocGenError(
+            E_CONFIG,
+            f"[image] wrap 不支持: {wrap!r}（可用 {' / '.join(FLOAT_WRAPS)}）",
+        )
+    align = _normalise_alignment((block.align or _image_setting(state, "align")).strip())
+    dist = _image_length(state, block.dist, "dist", FLOAT_DEFAULT_DIST, allow_negative=False)
+    offset = _image_length(state, block.vpos, "vpos", 0, allow_negative=True)
+    return {"wrap": wrap, "align": align, "dist": dist, "offset": offset}
+
+
+def _image_length(
+    state: _RenderState,
+    attribute: str,
+    key: str,
+    default: int,
+    *,
+    allow_negative: bool,
+) -> int:
+    """``dist=`` / ``vpos=``：标记属性 > ``[image] <key>`` > 默认值（EMU）。"""
+    text = (attribute or _image_setting(state, key)).strip()
+    if not text:
+        return default
+    length = length_from_text(text)
+    if length is None:
+        raise DocGenError(
+            E_CONFIG,
+            f"[image] {key} 无法识别: {text!r}（带单位，如 0.2cm）",
+        )
+    value = int(length)
+    if value < 0 and not allow_negative:
+        raise DocGenError(E_CONFIG, f"[image] {key} 不能为负数: {text!r}")
+    return value
 
 
 def _image_setting(state: _RenderState, key: str) -> str:

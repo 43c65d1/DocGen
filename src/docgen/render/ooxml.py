@@ -24,6 +24,8 @@ from ..errors import E_CONFIG, DocGenError
 
 __all__ = [
     "CHILD_ORDER",
+    "FLOAT_DEFAULT_DIST",
+    "FLOAT_WRAPS",
     "FONT_ATTRS",
     "HYPERLINK_RELATIONSHIP",
     "allocate_list_num_id",
@@ -60,6 +62,7 @@ __all__ = [
     "set_cell_width",
     "set_document_language",
     "set_even_and_odd_headers",
+    "set_floating_picture",
     "set_list_numbering",
     "set_paragraph_alignment",
     "set_paragraph_border",
@@ -1003,6 +1006,101 @@ def set_cell_alignment(cell: Any, alignment: str) -> None:
     """列对齐（GFM 分隔行）：给单元格里所有段落写 ``w:jc``。"""
     for paragraph in cell.paragraphs:
         insert_child(paragraph._p.get_or_add_pPr(), "w:jc", **{"w:val": alignment})
+
+
+#: 浮动图片支持的环绕方式（``[image] wrap`` / ``[[img:... wrap=...]]``）
+#: ``behind`` = 衬于文字下方，``front`` = 浮于文字上方（都不环绕）
+FLOAT_WRAPS: tuple[str, ...] = ("square", "top-bottom", "behind", "front")
+
+#: 浮动图片的默认四周留白（EMU；0.32cm，Word 的默认值）
+FLOAT_DEFAULT_DIST = 114300
+
+
+def set_floating_picture(
+    paragraph: Any,
+    *,
+    wrap: str,
+    align: str = "left",
+    dist: int = FLOAT_DEFAULT_DIST,
+    offset: int = 0,
+    relative_height: int = 251658240,
+) -> bool:
+    """把段落里的 ``wp:inline`` 图片改成浮动图片（``wp:anchor`` + 文字环绕）。
+
+    浮动与 inline 的区别只在 ``w:drawing`` 的根元素：``wp:anchor`` 需要
+    ``simplePos`` / ``positionH`` / ``positionV`` / 环绕元素，而且**子元素顺序是
+    schema 强制的**（simplePos → positionH → positionV → extent → effectExtent →
+    wrap* → docPr → graphic）：顺序错了 Word 会判文档损坏。
+
+    - ``wrap``：``square``（四周型）/ ``top-bottom``（上下型）/
+      ``behind``（衬于文字下方）/ ``front``（浮于文字上方）；
+    - ``align``：水平位置（``left`` / ``right`` / ``center``，相对页边距）；
+    - ``dist``：四周留白（EMU）；``offset``：相对所在段落的垂直偏移（EMU）；
+    - ``relative_height``：叠放次序（同时有多张浮动图时保持稳定顺序）。
+
+    返回是否真的转换成功（图片缺失时段落里没有 ``w:drawing``，返回 ``False``）。
+    """
+    drawing = next(iter(paragraph._p.iter(qn("w:drawing"))), None)
+    if drawing is None:
+        return False
+    inline = drawing.find(qn("wp:inline"))
+    if inline is None:
+        return False
+
+    anchor = OxmlElement("wp:anchor")
+    for name, value in (
+        ("distT", dist),
+        ("distB", dist),
+        ("distL", dist),
+        ("distR", dist),
+        ("simplePos", 0),
+        ("relativeHeight", relative_height),
+        ("behindDoc", 1 if wrap == "behind" else 0),
+        ("locked", 0),
+        ("layoutInCell", 1),
+        ("allowOverlap", 1),
+    ):
+        anchor.set(name, str(value))
+
+    simple = OxmlElement("wp:simplePos")
+    simple.set("x", "0")
+    simple.set("y", "0")
+    anchor.append(simple)
+
+    horizontal = OxmlElement("wp:positionH")
+    horizontal.set("relativeFrom", "margin")
+    align_element = OxmlElement("wp:align")
+    align_element.text = align
+    horizontal.append(align_element)
+    anchor.append(horizontal)
+
+    vertical = OxmlElement("wp:positionV")
+    vertical.set("relativeFrom", "paragraph")
+    offset_element = OxmlElement("wp:posOffset")
+    offset_element.text = str(int(offset))
+    vertical.append(offset_element)
+    anchor.append(vertical)
+
+    # inline 的子元素（extent / effectExtent / docPr / graphic）原样搬过来，保持顺序
+    for child in list(inline):
+        inline.remove(child)
+        anchor.append(child)
+
+    if wrap == "square":
+        wrap_element = OxmlElement("wp:wrapSquare")
+        wrap_element.set("wrapText", "bothSides")
+    elif wrap == "top-bottom":
+        wrap_element = OxmlElement("wp:wrapTopAndBottom")
+    else:
+        wrap_element = OxmlElement("wp:wrapNone")
+    doc_pr = anchor.find(qn("wp:docPr"))
+    if doc_pr is not None:
+        doc_pr.addprevious(wrap_element)
+    else:  # pragma: no cover - 合法 drawing 一定有 docPr
+        anchor.append(wrap_element)
+
+    drawing.replace(inline, anchor)
+    return True
 
 
 def set_table_autofit(table: Any) -> None:

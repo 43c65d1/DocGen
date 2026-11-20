@@ -257,12 +257,20 @@ class Formula(Block):
 
 @dataclass(frozen=True, slots=True)
 class ImageBlock(Block):
-    """独立一行的 ``[[img:path]]``；``width`` / ``align`` 来自属性或 config。"""
+    """独立一行的 ``[[img:path]]``；属性可来自标记或 ``[image]`` 配置。
+
+    ``wrap`` 非空时渲染成**浮动图片**（``wp:anchor``）：文字环绕方式见
+    :func:`docgen.render.ooxml.set_floating_picture`；``dist`` 是四周留白、
+    ``vpos`` 是相对所在段落的垂直偏移（两者都带单位）。
+    """
 
     src: str
     alt: str = ""
     width: str = ""
     align: str = ""
+    wrap: str = ""
+    dist: str = ""
+    vpos: str = ""
 
 
 @dataclass(frozen=True, slots=True)

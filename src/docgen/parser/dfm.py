@@ -326,6 +326,9 @@ def _paragraph_block(open_token: Token, inline_token: Token | None) -> BlockNode
             alt=image.alt,
             width=_image_attribute(children, "width"),
             align=_image_attribute(children, "align"),
+            wrap=_image_attribute(children, "wrap"),
+            dist=_image_attribute(children, "dist"),
+            vpos=_image_attribute(children, "vpos"),
             source_line=source_line,
         )
     return Paragraph(content=content, source_line=source_line)

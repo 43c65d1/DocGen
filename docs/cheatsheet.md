@@ -84,7 +84,7 @@ logfile = ""
 | `alignment` | `left` / `right` / `center` / `justify` |
 | `space_before` / `space_after` | 段前/段后 |
 | `based_on` | 继承另一段样式 |
-| `[styles.hyperlink]` | 超链接：`font.color`（自动蓝 `0563C1`；`auto` 跟随正文）、`underline`（`"none"` 去下划线） |
+| `[styles.hyperlink]` | 超链接：默认黑色（跟随正文）+ 无下划线；`font.color = "0563C1"` / `underline = "single"` 可恢复蓝链 |
 
 ### `[inline]`
 | 写法 | 例 |

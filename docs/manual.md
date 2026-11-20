@@ -153,10 +153,12 @@ alignment = "center"
 | `~下标~` / `[字]{.sub}` | `sub` | 下标（语义固定） | 同上 |
 | `[字]{.任意名}` | 该名字 | 无格式 | `[styles.任意名]` 任意字体键 |
 | `` `code` `` | 行内代码 | Consolas + 底纹 `F2F2F2` | `[code_block] font.name` / `inline_background` |
-| `[文字](url)` | 超链接 | 蓝色 `0563C1` + 下划线 | `[styles.hyperlink]` 可改颜色/去下划线（支持 `font.color` / `underline`） |
+| `[文字](url)` | 超链接 | 黑色（跟随正文）+ 无下划线 | `[styles.hyperlink]` 可改颜色/加下划线（支持 `font.color` / `underline`） |
 
-超链接默认 Word 蓝 + 单下划线；要全文纯黑：`[styles.hyperlink] font.color = "000000"`、
-`underline = "none"`（不能写 `false`——样式层把 `false` 当删除继承键）。
+超链接默认**黑色（跟随正文）+ 无下划线**（学位论文要求全文黑色文字）；电子版要
+Word 惯例的蓝链：`[styles.hyperlink] font.color = "0563C1"`、`underline = "single"`。
+
+> 关下划线请写字符串 `"none"`，不要写 `false`——样式层把 `false` 当删除继承键。
 
 **改名映射**：`[inline] sup = "sup_caret"` 让 `^x^` 去找 `[styles.sup_caret]`。
 映射目标必须声明，否则报 `E1003`（错误里会打出整条映射链）。

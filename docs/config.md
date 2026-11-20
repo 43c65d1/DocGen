@@ -83,18 +83,19 @@ caption_numbering = "chapter"   # 图 2-1 / 表 2-1（默认 continuous：图 1�
 
 ### 超链接：`[styles.hyperlink]`
 
-默认是 Word 惯例「蓝色 `0563C1` + 单下划线」；需要论文式纯黑可覆盖：
+默认是**黑色（跟随正文颜色）+ 无下划线**：学位论文与正式报告要求全文黑色文字，
+Zotero 等工具插进来的蓝链、下划线在印刷稿里都算差错。电子版想要 Word 惯例的蓝链：
 
 ```toml
 [styles.hyperlink]
-font.color = "000000"   # auto = 不写颜色，跟随正文
-underline = "none"      # 去下划线；false 会被样式层当成“删除继承键”
+font.color = "0563C1"   # 不写 / auto = 跟随正文（黑）
+underline = "single"    # 默认无下划线；"none" / "off" 也关
 ```
 
 | 键 | 默认 | 说明 |
 |---|---|---|
-| `font.color` | `0563C1` | 6 位十六进制；`auto` 表示跟随段落（正文黑） |
-| `underline` | `true` | `true` / `"single"` 开；`"none"` / `"off"` 关 |
+| `font.color` | `auto`（跟随正文，黑） | 6 位十六进制；`auto` = 不写颜色 |
+| `underline` | `false`（无下划线） | `true` / `"single"` 开；`"none"` / `"off"` 关 |
 
 > 这里不要写 `underline = false`：样式层把 `false` 统一当作“删除继承键”，
 > 该键会在展开时消失；要关下划线请写字符串 `"none"`。
